@@ -143,10 +143,11 @@
     .resBullet { background: #c93f3f; }
     .resBite   { background: #6a8a3a; }
     .resRad    { background: #80c060; }
-    .paperdollHotbar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; padding: 6px; background: rgba(0,0,0,0.4); border: 1px solid #333; }
-    .paperdollHotbar .pdSlot { aspect-ratio: 1; background: rgba(0,0,0,0.5); border: 1px solid #333; position: relative; font-family: monospace; font-size: 10px; padding: 2px; }
-    .paperdollHotbar .pdSlot .pdKey { color: #666; font-size: 9px; }
-    .paperdollHotbar .pdSlot .pdLabel { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; font-size: 8px; color: #aaa; letter-spacing: 0.5px; }
+    .rustHotbarBlock { margin-top: 4px; }
+    .paperdollHotbar { display: grid; grid-template-columns: repeat(6, 64px); justify-content: center; gap: 4px; padding: 6px; background: rgba(0,0,0,0.4); border: 1px solid #333; }
+    .paperdollHotbar .pdSlot { width: 64px; height: 64px; background: rgba(0,0,0,0.5); border: 1px solid #333; position: relative; font-family: monospace; font-size: 10px; padding: 4px; }
+    .paperdollHotbar .pdSlot .pdKey { color: #f0c060; font-size: 11px; font-weight: 700; }
+    .paperdollHotbar .pdSlot .pdLabel { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; font-size: 9px; color: #ccc; letter-spacing: 0.5px; }
     .paperdollVitals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 6px; background: rgba(0,0,0,0.4); border: 1px solid #333; }
     .paperdollVitals .vital { display: flex; align-items: center; gap: 6px; font-family: monospace; font-size: 11px; }
     .paperdollVitals .dot { width: 10px; height: 10px; border-radius: 50%; }
@@ -366,8 +367,6 @@
               <div class="resRow"><span class="resIcon resRad"></span><span id="resRad">0%</span></div>
             </div>
           </div>
-          <!-- mini hotbar replicated in panel for drag-to-hotbar -->
-          <div class="paperdollHotbar" id="paperdollHotbar"></div>
           <!-- vitals -->
           <div class="paperdollVitals">
             <span class="vital vHp"><span class="dot"></span><span id="vitHp">100</span></span>
@@ -376,7 +375,7 @@
           </div>
         </aside>
 
-        <!-- CENTER column: item info on top + inventory grid -->
+        <!-- CENTER column: item info on top + inventory grid + hotbar abajo -->
         <section class="rustCenterCol">
           <div class="rustItemInfo" id="rustItemInfo">
             <div class="iiEmpty">Selecciona un item para ver detalles</div>
@@ -384,6 +383,11 @@
           <div class="rustInvBlock">
             <div class="rustSectionLabel">INVENTARIO</div>
             <div id="rustInvGrid" class="rustInvGrid"></div>
+          </div>
+          <!-- mini hotbar abajo del inventario -->
+          <div class="rustHotbarBlock">
+            <div class="rustSectionLabel">HOTBAR</div>
+            <div class="paperdollHotbar" id="paperdollHotbar"></div>
           </div>
         </section>
 
