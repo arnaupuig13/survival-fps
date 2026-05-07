@@ -376,6 +376,16 @@ addEventListener('keydown', (e) => {
     // Hotbar selection.
     const slotIdx = parseInt(e.code.replace('Digit', ''), 10) - 1;
     handleHotbarSlot(slotIdx);
+  } else if (e.code === 'KeyL' && !e.repeat) {
+    // Dev god-mode toggle. Will be removed before public launch.
+    player.godMode = !player.godMode;
+    if (player.godMode) {
+      logLine('★★★ MODO DIOS ACTIVADO — velocidad x10, balas inf, vuelo (SPACE sube, CTRL baja)');
+      showBanner('★ MODO DIOS ★', 1500);
+    } else {
+      logLine('Modo dios desactivado');
+      showBanner('mortal', 1200);
+    }
   }
 });
 

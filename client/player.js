@@ -67,7 +67,11 @@ export const player = {
   eyeHeightCurrent: EYE_HEIGHT,
   invulnerable: true,
   invulnGraceUntil: 0,
-  mouseSensitivity: 22,         // overridden by settings; 22 ≈ 0.0022 raw rate
+  mouseSensitivity: 22,
+  // Dev god-mode toggled with the L key. Affects speed, damage immunity,
+  // ammo consumption, and gravity (lets the player fly). Removed before
+  // public launch — main.js logs the toggle so it's obvious when on.
+  godMode: false,
   yaw: () => yaw,
   pitch: () => pitch,
   get locked() { return locked; },
@@ -75,6 +79,7 @@ export const player = {
   takeDamage(dmg) {
     if (this.hp <= 0 || this.invulnerable) return;
     if (performance.now() / 1000 < this.invulnGraceUntil) return;
+    if (this.godMode) return;
     this.hp = Math.max(0, this.hp - dmg);
     this.lastHitAt = performance.now() / 1000;
   },
@@ -144,7 +149,8 @@ export function updatePlayer(dt) {
     else if (player.stamina < STAMINA_MAX) player.stamina = Math.min(STAMINA_MAX, player.stamina + STAMINA_REGEN * dt);
   }
   const crouchMul = player.crouching ? CROUCH_MULT : 1;
-  const speed = WALK_SPEED * sprint * crouchMul;
+  const godMul = player.godMode ? 10 : 1;
+  const speed = WALK_SPEED * sprint * crouchMul * godMul;
   // Smooth eye height transition for crouch.
   const targetEye = player.crouching ? CROUCH_HEIGHT : EYE_HEIGHT;
   player.eyeHeightCurrent += (targetEye - player.eyeHeightCurrent) * (1 - Math.exp(-12 * dt));
@@ -211,15 +217,24 @@ export function updatePlayer(dt) {
   player.pos.z = nz;
 
   // Vertical: gravity + jump + terrain follow.
-  player.vy -= GRAVITY * dt;
-  if (keys['Space'] && player.onGround && !player.crouching) { player.vy = JUMP_VEL; player.onGround = false; }
-  player.pos.y += player.vy * dt;
-
-  const groundY = heightAt(player.pos.x, player.pos.z) + player.eyeHeightCurrent;
-  if (player.pos.y <= groundY) {
-    player.pos.y = groundY;
+  if (player.godMode) {
+    // Free-fly: SPACE up, C/Ctrl down. Gravity disabled. Speed factor
+    // applies to vertical too so flying feels fast.
+    let dy = 0;
+    if (keys['Space']) dy += 1;
+    if (keys['ControlLeft'] || keys['ControlRight']) dy -= 1;
+    player.pos.y += dy * speed * dt;
     player.vy = 0;
-    player.onGround = true;
+  } else {
+    player.vy -= GRAVITY * dt;
+    if (keys['Space'] && player.onGround && !player.crouching) { player.vy = JUMP_VEL; player.onGround = false; }
+    player.pos.y += player.vy * dt;
+    const groundY = heightAt(player.pos.x, player.pos.z) + player.eyeHeightCurrent;
+    if (player.pos.y <= groundY) {
+      player.pos.y = groundY;
+      player.vy = 0;
+      player.onGround = true;
+    }
   }
 
   camera.position.copy(player.pos);

@@ -125,18 +125,20 @@ function tryFire() {
   if (!player.locked || player.hp <= 0) return;
   if (cooldown > 0 || reloading) return;
   const cfg = WEAPONS[active];
-  // Magazine empty → auto-reload if reserves exist, otherwise empty click.
-  if ((loaded[active] | 0) <= 0) {
-    if (inv.has(cfg.ammo, 1)) {
-      startReload();
-    } else {
-      sfx.playEmpty();
-      cooldown = 0.25;
-      mouseDown = false;
+  // God mode bypasses ammo entirely — never reload, never run dry.
+  if (!player.godMode) {
+    if ((loaded[active] | 0) <= 0) {
+      if (inv.has(cfg.ammo, 1)) {
+        startReload();
+      } else {
+        sfx.playEmpty();
+        cooldown = 0.25;
+        mouseDown = false;
+      }
+      return;
     }
-    return;
+    loaded[active] = (loaded[active] | 0) - 1;
   }
-  loaded[active] = (loaded[active] | 0) - 1;
   cooldown = cfg.cooldown;
   if (active === 'rifle') sfx.playRifle(0); else sfx.playPistol(0);
 
