@@ -22,6 +22,9 @@ import * as tools from './tools.js';
 const knife = tools; // legacy alias — older code uses knife.updateKnife / setKnifeActive
 import { updateCityLights, toggleColliderDebug } from './towns.js';
 import { updatePoi } from './poi.js';
+import * as build from './build.js';
+import { toggleMap, isMapOpen, updateMap, noteSupplyDrop } from './map.js';
+import { toggleStash, isStashOpen } from './stash.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
 import { nearestInRange } from './loot.js';
@@ -267,6 +270,7 @@ network.onSupplyDrop = (x, z) => {
   sfx.playPickup?.();
   showBanner('★ SUMINISTROS CAYERON ★', 4000);
   logLine(`★ Suministros en (${Math.round(x)}, ${Math.round(z)})`);
+  noteSupplyDrop(x, z);
   unlockAchievement('supply_dropped', 'Suministros aéreos avistados');
 };
 
@@ -331,6 +335,12 @@ playBtn.addEventListener('click', () => {
 respawnBtn.addEventListener('click', () => {
   player.respawn();
   network.respawn();
+  // Respawn at the player's bedroll if they have one placed.
+  const bed = build.getBedrollSpawn();
+  if (bed) {
+    player.pos.set(bed.x, bed.y + 1.65, bed.z);
+    logLine('Reapareciste en tu cama');
+  }
   setHP(player.hp);
   deathEl.classList.remove('show');
   resetLifeStats();
@@ -469,8 +479,42 @@ addEventListener('keydown', (e) => {
     // Quick-drink water bottle.
     if (inv.consume('water_bottle', 1)) { player.drink(); logLine('+ AGUA'); sfx.playPickup?.(); }
     else logLine('Sin agua');
+  } else if (e.code === 'KeyZ' && !e.repeat) {
+    // Toggle build mode. Default kind is wall; press again to switch to bedroll.
+    if (!build.isBuildingActive()) {
+      build.toggleBuild();
+      build.setBuildKind('wall');
+      logLine('CONSTRUIR — click izq pone pared. Z otra vez = cama. ESC sale.');
+    } else {
+      // Already in build — cycle wall → bedroll → off.
+      // Simplification: each press cycles through.
+      build.setBuildKind('bedroll');
+      logLine('CONSTRUIR — modo CAMA. Z otra vez = sale.');
+      // Toggle off on the third press by using a small flag.
+      _buildMode2 = true;
+    }
+  } else if (e.code === 'Escape' && build.isBuildingActive()) {
+    build.toggleBuild();
+    e.preventDefault();
+    return;
+  } else if (e.code === 'KeyM' && !e.repeat) {
+    if (isStashOpen()) toggleStash();
+    toggleMap();
+  } else if (e.code === 'KeyX' && !e.repeat) {
+    if (isMapOpen()) toggleMap();
+    toggleStash();
   }
 });
+let _buildMode2 = false;
+addEventListener('keydown', (e) => {
+  if (e.code === 'KeyZ' && _buildMode2 && !e.repeat && build.isBuildingActive()) {
+    // Third press of Z → exit build.
+    build.toggleBuild();
+    _buildMode2 = false;
+    logLine('Salio modo construir');
+    e.preventDefault();
+  }
+}, true);
 
 // Snapshot of the inventory state — inventory.js doesn't expose the raw
 // state object, so we shadow it via the onChange listener.
@@ -745,6 +789,8 @@ function frame(now) {
   // Pulse the Helix Lab's red emergency lights + POI smoke pillars.
   updateCityLights(dt);
   updatePoi(dt);
+  build.updateBuild(dt);
+  updateMap();
 
   // Sniper warning — show a red dot in HUD if any sci_sniper has us in
   // line of sight from > 35 m and is roughly facing us.

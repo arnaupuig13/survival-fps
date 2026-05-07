@@ -20,6 +20,8 @@ export const ITEMS = {
   wood:         { label: 'MADERA',        max: 50 },
   stone:        { label: 'PIEDRA',        max: 30 },
   campfire:     { label: 'HOGUERAS',      max: 5  },
+  wall_piece:   { label: 'PARED',         max: 30 },
+  bedroll_item: { label: 'CAMA',          max: 3  },
 };
 
 const state = {
@@ -37,6 +39,8 @@ const state = {
   wood: 0,
   stone: 0,
   campfire: 0,
+  wall_piece: 0,
+  bedroll_item: 0,
   kills:    0,
 };
 
@@ -51,6 +55,8 @@ export const RECIPES = [
   { id: 'craft_campfire',label: 'HOGUERA',        requires: { wood: 5, stone: 2 },  produces: { campfire: 1 } },
   { id: 'craft_grenade', label: 'GRANADA',        requires: { stone: 3, wood: 1 },  produces: { grenade: 1 } },
   { id: 'craft_water',   label: 'BOTELLA AGUA',   requires: { water_bottle: 0 },    produces: { water_bottle: 0 }, special: 'fillWater' },
+  { id: 'craft_wall',    label: 'PARED',          requires: { wood: 5, stone: 2 },  produces: { wall_piece: 1 } },
+  { id: 'craft_bedroll', label: 'CAMA',           requires: { wood: 4, berry: 2 },  produces: { bedroll_item: 1 } },
 ];
 
 // Try to craft. Returns the produced item label if success, else null.
