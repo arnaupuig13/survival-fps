@@ -50,10 +50,14 @@ respawnBtn.addEventListener('click', () => {
 });
 
 // Pause menu reappears when pointer lock is released (ESC).
+// Tambien chequeamos hp despues de un microtick — si moriste justo cuando
+// soltaste el lock, el game loop puede no haber actualizado deathEl.show()
+// todavia, y este handler mostraba el menu encima de la death screen.
 player.onLockChange = (locked) => {
-  if (!locked && player.hp > 0 && !deathEl.classList.contains('show')) {
-    menuEl.style.display = 'flex';
-  }
+  if (locked) return;
+  if (player.hp <= 0) return;
+  if (deathEl.classList.contains('show')) return;
+  menuEl.style.display = 'flex';
 };
 
 // =====================================================================
@@ -74,9 +78,11 @@ function frame(now) {
 
   // Death detection — usar el HP local en cada frame en vez de depender del
   // ultimo onYouHit (ese trigger se pierde si el ultimo hit lleva HP a 0
-  // exacto fuera del callback).
+  // exacto fuera del callback). Importante: ocultar el menu si el lockChange
+  // listener lo mostro antes que esta linea ejecute (race tras exitPointerLock).
   if (player.hp <= 0 && !deathEl.classList.contains('show')) {
     deathEl.classList.add('show');
+    menuEl.style.display = 'none';
     document.exitPointerLock?.();
   }
 
