@@ -26,8 +26,9 @@ import * as build from './build.js';
 import { toggleMap, isMapOpen, updateMap, noteSupplyDrop } from './map.js';
 import { toggleStash, isStashOpen } from './stash.js';
 import * as inv from './inventory.js';
+import * as inventoryUI from './inventory-ui.js';
 import * as sfx from './sounds.js';
-import { nearestInRange } from './loot.js';
+import { nearestInRange, removeCrate } from './loot.js';
 import { renderMinimap } from './minimap.js';
 import {
   lastShotWithinKillWindow, getActive as getActiveWeapon,
@@ -67,8 +68,12 @@ inv.onChange((state) => {
   setHotbarLocked(8, !state.sniper_pickup);
   // Sync armor onto the player so takeDamage applies the reduction.
   player.armorState = { vest: !!state.vest_armor, helmet: !!state.helmet_armor };
-  if (isInventoryOpen()) renderInventory(state, inv.ITEMS, { recipes: inv.RECIPES, nearFire: player.nearFire, onCraft: tryCraft });
+  // El nuevo inventory-ui se suscribe solo a inv.onChange — no necesitamos
+  // re-renderizar acá. Mantenemos esta función para los hotbar counts.
 });
+
+// Conecta el handler de crafting al panel Rust-style.
+inventoryUI.setCraftHandler(tryCraft);
 
 // Crafting handler — exposed to hud.js via the inventory render args.
 function tryCraft(recipeId) {
@@ -97,6 +102,7 @@ function saveProfile(p) {
 }
 const profile = loadProfile();
 setPlayerName(profile.name);
+inventoryUI.setName(profile.name || 'P1');
 
 // Day counter — derived from gameHour rollovers since session start. The
 // in-session day starts at 1 and increments each time the hour wraps.
@@ -310,6 +316,7 @@ nameOk?.addEventListener('click', () => {
   profile.name = v;
   saveProfile(profile);
   setPlayerName(v);
+  inventoryUI.setName(v);
   closeNameDialog();
   startGame();
 });
@@ -377,7 +384,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Tab') {
     e.preventDefault();
     toggleInventory();
-    if (isInventoryOpen()) renderInventory(_currentInvState(), inv.ITEMS);
+    if (isInventoryOpen()) inventoryUI.refresh();
     return;
   }
   // Chat open key — only when the player is in-game.
@@ -398,7 +405,16 @@ addEventListener('keydown', (e) => {
   }
   if (!player.locked || player.hp <= 0) return;
   if (e.code === 'KeyE' && nearbyCrate) {
-    network.openCrate(nearbyCrate.id);
+    if (nearbyCrate.localLoot) {
+      // Item soltado localmente — aplicamos el loot directamente sin
+      // consultar al servidor (no existe en su mundo).
+      const lines = inv.applyLoot(nearbyCrate.localLoot);
+      for (const ln of lines) logLine(`+ ${ln.text.replace(/^\+\s*/, '')}`);
+      sfx.playPickup?.();
+      removeCrate(nearbyCrate.id);
+    } else {
+      network.openCrate(nearbyCrate.id);
+    }
     nearbyCrate = null;
     hideInteract();
   } else if (e.code === 'KeyE' && nearbyBush) {
@@ -691,11 +707,12 @@ function frame(now) {
     nearbyBush = bush || null;
     nearbyLake = lake || null;
     if (c) {
-      const tier = c.tableKey === 'boss' ? 'cofre del DOCTOR'
+      const tier = c.localLoot ? 'item soltado'
+                : c.tableKey === 'boss' ? 'cofre del DOCTOR'
                 : c.tableKey === 'city' ? 'cofre del laboratorio'
                 : c.tableKey === 'animal' ? 'restos del animal'
                 : 'cofre';
-      showInteract(`abrir ${tier}`);
+      showInteract(c.localLoot ? `recoger ${tier}` : `abrir ${tier}`);
     } else if (plant) showInteract('recoger planta medicinal');
     else if (bush) showInteract('recoger bayas');
     else if (lake) showInteract('rellenar botella');

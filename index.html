@@ -108,27 +108,115 @@
     .hblabel { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 9px; letter-spacing: 1px; color: #ccc; }
     .hbcount { position: absolute; bottom: 2px; right: 4px; font-size: 11px; font-weight: 700; color: #f0c060; font-family: monospace; }
 
-    /* Inventory panel — full modal */
-    #inventoryPanel { position: fixed; inset: 0; background: rgba(0,0,0,0.78); display: flex; align-items: center; justify-content: center; z-index: 8; }
+    /* === Rust-style inventory modal ============================== */
+    #inventoryPanel { position: fixed; inset: 0; background: rgba(15,18,22,0.78); display: flex; align-items: center; justify-content: center; z-index: 8; backdrop-filter: blur(2px); }
     #inventoryPanel.hidden { display: none; }
-    .invHeader { background: rgba(20,20,20,0.95); padding: 14px 32px; font-family: system-ui; font-size: 16px; letter-spacing: 4px; color: #f0c060; border-bottom: 1px solid #444; min-width: 540px; display: flex; justify-content: space-between; align-items: center; }
-    .invHint { font-size: 10px; color: #888; letter-spacing: 1px; }
-    .invGrid { background: rgba(20,20,20,0.95); padding: 24px 32px; min-width: 540px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-    .invItem { background: rgba(0,0,0,0.5); border: 1px solid #333; padding: 12px; min-height: 56px; }
-    .invItem .iname { font-size: 11px; letter-spacing: 1.5px; color: #aaa; }
-    .invItem .icount { font-size: 22px; font-weight: 700; color: #f0c060; margin-top: 4px; }
-    .invItem.zero .icount { color: #555; }
-    .invItem.locked { opacity: 0.45; }
-    .invItem .iflag { font-size: 9px; color: #888; margin-top: 2px; letter-spacing: 1px; }
-    .recipesGrid { background: rgba(20,20,20,0.95); padding: 14px 32px; min-width: 540px; border-top: 1px solid #333; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-    .recipesGrid .recipeHeader { grid-column: span 2; font-size: 12px; letter-spacing: 3px; color: #f0c060; margin-bottom: 4px; }
-    .recipeBtn { background: rgba(0,0,0,0.45); border: 1px solid #444; padding: 8px 12px; cursor: pointer; text-align: left; font-family: system-ui; }
-    .recipeBtn:hover:not(.disabled) { background: rgba(40,30,10,0.6); border-color: #f0c060; }
-    .recipeBtn.disabled { opacity: 0.4; cursor: not-allowed; }
-    .recipeBtn .rname { color: #ddd; font-size: 12px; letter-spacing: 1px; font-weight: 700; }
-    .recipeBtn .rreq { color: #888; font-size: 10px; margin-top: 2px; }
-    .invHints { background: rgba(20,20,20,0.95); padding: 14px 32px; font-size: 11px; color: #888; line-height: 1.7; min-width: 540px; border-top: 1px solid #333; }
-    .invHints kbd { background: #333; color: #ddd; padding: 1px 6px; border-radius: 2px; }
+    .rustPanel { background: linear-gradient(180deg, rgba(40,40,42,0.96), rgba(28,28,30,0.96)); border: 1px solid #444; min-width: 1080px; min-height: 620px; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,0.7); font-family: system-ui, sans-serif; }
+    .rustToolbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 22px; background: rgba(0,0,0,0.3); border-bottom: 1px solid #555; }
+    .rustTab { color: #f0c060; font-size: 14px; font-weight: 700; letter-spacing: 6px; }
+    .rustHint { color: #888; font-size: 11px; letter-spacing: 1px; }
+    .rustContent { display: grid; grid-template-columns: 280px 1fr 290px; gap: 18px; padding: 18px 22px; flex: 1; }
+    .rustFooter { padding: 8px 22px; border-top: 1px solid #444; background: rgba(0,0,0,0.25); }
+    .rustHints { color: #777; font-size: 10px; letter-spacing: 1px; line-height: 1.6; }
+    .rustHints kbd { background: #333; color: #f0c060; padding: 1px 6px; border-radius: 2px; margin: 0 2px; font-size: 9px; }
+
+    /* Paperdoll left column */
+    .rustPaperdollCol { background: rgba(0,0,0,0.25); border: 1px solid #333; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .paperdollName { color: #f0c060; font-size: 14px; font-weight: 700; letter-spacing: 2px; text-align: center; }
+    .paperdollCanvas { position: relative; height: 360px; background: linear-gradient(180deg, rgba(30,30,32,0.5), rgba(0,0,0,0.4)); border: 1px solid #2a2a2c; }
+    .paperdollBody { position: absolute; inset: 0; }
+    .paperdollBody div { position: absolute; background: linear-gradient(180deg, #5a5a5e, #383838); border: 1px solid #2a2a2c; }
+    .pdHead  { left: 50%; top: 18px; width: 44px; height: 44px; transform: translateX(-50%); border-radius: 6px; }
+    .pdTorso { left: 50%; top: 70px; width: 72px; height: 100px; transform: translateX(-50%); border-radius: 5px; }
+    .pdArmL  { left: 22px;  top: 80px; width: 30px; height: 90px; border-radius: 5px; }
+    .pdArmR  { right: 22px; top: 80px; width: 30px; height: 90px; border-radius: 5px; }
+    .pdLegL  { left: 50%; top: 178px; width: 30px; height: 110px; transform: translateX(calc(-50% - 18px)); border-radius: 4px; }
+    .pdLegR  { left: 50%; top: 178px; width: 30px; height: 110px; transform: translateX(calc(-50% + 18px)); border-radius: 4px; }
+    .armorSlot { position: absolute; width: 50px; height: 50px; background: rgba(0,0,0,0.6); border: 1px dashed #555; transition: border 0.1s; }
+    .armorSlot.filled { border: 1px solid #4a90e0; background: rgba(20,40,80,0.5); }
+    .armorSlot.dragOver { border: 1px solid #f0c060; box-shadow: 0 0 12px rgba(240,192,96,0.5); }
+    .posHelmet { left: 8px;  top: 14px; }
+    .posVest   { left: 8px;  top: 70px; }
+    .resStack { position: absolute; left: 8px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; font-family: monospace; font-size: 11px; color: #ddd; }
+    .resRow { display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.6); padding: 3px 8px; }
+    .resIcon { width: 12px; height: 12px; display: inline-block; }
+    .resBullet { background: #c93f3f; }
+    .resBite   { background: #6a8a3a; }
+    .resRad    { background: #80c060; }
+    .paperdollHotbar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; padding: 6px; background: rgba(0,0,0,0.4); border: 1px solid #333; }
+    .paperdollHotbar .pdSlot { aspect-ratio: 1; background: rgba(0,0,0,0.5); border: 1px solid #333; position: relative; font-family: monospace; font-size: 10px; padding: 2px; }
+    .paperdollHotbar .pdSlot .pdKey { color: #666; font-size: 9px; }
+    .paperdollHotbar .pdSlot .pdLabel { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; font-size: 8px; color: #aaa; letter-spacing: 0.5px; }
+    .paperdollVitals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 6px; background: rgba(0,0,0,0.4); border: 1px solid #333; }
+    .paperdollVitals .vital { display: flex; align-items: center; gap: 6px; font-family: monospace; font-size: 11px; }
+    .paperdollVitals .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .paperdollVitals .vHp .dot  { background: #c93f3f; }
+    .paperdollVitals .vHun .dot { background: #f0c060; }
+    .paperdollVitals .vThi .dot { background: #4a90e0; }
+    .paperdollVitals span:last-child { color: #ddd; }
+
+    /* Center column */
+    .rustCenterCol { display: flex; flex-direction: column; gap: 14px; }
+    .rustItemInfo { background: rgba(0,0,0,0.3); border: 1px solid #333; padding: 14px; min-height: 110px; }
+    .iiEmpty { color: #666; font-size: 12px; text-align: center; padding: 36px 0; letter-spacing: 1px; }
+    .iiHead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .iiName { font-size: 16px; font-weight: 700; letter-spacing: 2px; }
+    .iiRarity { font-size: 10px; letter-spacing: 2px; padding: 2px 8px; border: 1px solid; }
+    .iiDesc { color: #aaa; font-size: 11px; line-height: 1.6; margin-bottom: 8px; }
+    .iiStats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 16px; font-family: monospace; font-size: 11px; }
+    .iiStats span:nth-child(odd) { color: #888; }
+    .iiStats span:nth-child(even) { color: #f0c060; text-align: right; }
+    .iiActions { margin-top: 10px; display: flex; gap: 8px; }
+    .iiActions button { background: rgba(0,0,0,0.4); border: 1px solid #555; color: #ddd; padding: 5px 14px; cursor: pointer; font-family: system-ui; font-size: 11px; letter-spacing: 1px; }
+    .iiActions button:hover { background: rgba(40,30,10,0.5); border-color: #f0c060; color: #f0c060; }
+    .rustInvBlock { flex: 1; }
+    .rustSectionLabel { color: #aaa; font-size: 11px; letter-spacing: 3px; margin-bottom: 8px; }
+    .rustInvGrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; padding: 6px; background: rgba(0,0,0,0.4); border: 1px solid #333; }
+    .invSlot { aspect-ratio: 1; background: rgba(20,22,26,0.7); border: 1px solid #2a2a2c; position: relative; cursor: pointer; transition: border 0.08s, background 0.08s; user-select: none; }
+    .invSlot:hover { border-color: #555; }
+    .invSlot.has { border-left: 3px solid #888; }
+    .invSlot.rare-common    { border-left-color: #888; }
+    .invSlot.rare-uncommon  { border-left-color: #48d068; }
+    .invSlot.rare-rare      { border-left-color: #4a90e0; }
+    .invSlot.rare-epic      { border-left-color: #a060e0; }
+    .invSlot.rare-legendary { border-left-color: #f0c040; box-shadow: 0 0 8px rgba(240,192,64,0.25); }
+    .invSlot.selected { border: 2px solid #f0c060; }
+    .invSlot.dragOver { border: 2px solid #80c0ff; background: rgba(40,80,120,0.4); }
+    .invSlot .iLabel { position: absolute; top: 4px; left: 4px; right: 4px; font-size: 9px; color: #aaa; letter-spacing: 0.5px; line-height: 1.1; pointer-events: none; }
+    .invSlot .iCount { position: absolute; bottom: 3px; right: 5px; font-size: 13px; font-weight: 700; color: #f0c060; font-family: monospace; pointer-events: none; }
+
+    /* Recipes column */
+    .rustRecipesCol { background: rgba(0,0,0,0.25); border: 1px solid #333; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .rustRecipesGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    .rustRecipeBtn { aspect-ratio: 1; background: rgba(20,22,26,0.7); border: 1px solid #2a2a2c; cursor: pointer; padding: 6px; font-size: 9px; color: #ddd; text-align: center; display: flex; flex-direction: column; justify-content: space-between; transition: border 0.08s; font-family: system-ui; letter-spacing: 0.5px; }
+    .rustRecipeBtn:hover:not(.disabled) { border-color: #f0c060; color: #f0c060; }
+    .rustRecipeBtn.disabled { opacity: 0.35; cursor: not-allowed; }
+    .rustRecipeBtn .rrName { font-weight: 700; }
+    .rustRecipeBtn .rrReq { color: #888; font-size: 8px; line-height: 1.2; }
+
+    /* Drag ghost */
+    .dragGhost { position: fixed; pointer-events: none; z-index: 100; width: 64px; height: 64px; background: rgba(40,40,42,0.95); border: 1px solid #f0c060; display: none; padding: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.6); }
+    .dragGhost.show { display: block; }
+    .dragGhost .dgLabel { font-size: 9px; color: #ddd; letter-spacing: 0.5px; }
+    .dragGhost .dgCount { position: absolute; bottom: 3px; right: 5px; font: 700 13px monospace; color: #f0c060; }
+
+    /* Drop quantity dialog */
+    .dropDialog { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 50; }
+    .dropDialog.hidden { display: none; }
+    .dropDialogPanel { background: rgba(28,28,30,0.98); border: 1px solid #555; padding: 22px 30px; min-width: 320px; }
+    .ddTitle { color: #f0c060; font-size: 13px; letter-spacing: 3px; text-align: center; font-weight: 700; }
+    #ddSlider { width: 100%; margin-top: 16px; accent-color: #f0c060; }
+    .ddNum { text-align: center; margin-top: 6px; }
+    .ddNum span { color: #f0c060; font-size: 30px; font-weight: 700; font-family: monospace; }
+    .ddBtns { margin-top: 16px; display: flex; gap: 10px; justify-content: center; }
+    .ddBtns button { padding: 6px 18px; font-size: 12px; border: 1px solid #555; background: rgba(0,0,0,0.4); color: #ddd; cursor: pointer; letter-spacing: 1px; }
+    .ddBtns button:hover { border-color: #f0c060; color: #f0c060; }
+
+    /* Context menu */
+    .ctxMenu { position: fixed; background: rgba(28,28,30,0.98); border: 1px solid #555; padding: 4px 0; z-index: 60; min-width: 140px; box-shadow: 0 6px 20px rgba(0,0,0,0.7); font-family: system-ui; }
+    .ctxMenu.hidden { display: none; }
+    .ctxMenu button { display: block; width: 100%; padding: 8px 14px; background: transparent; border: 0; color: #ddd; text-align: left; font-size: 12px; cursor: pointer; letter-spacing: 1px; }
+    .ctxMenu button:hover { background: rgba(40,30,10,0.5); color: #f0c060; }
 
     /* Reload indicator — center top */
     #reloadIndicator { position: fixed; top: 60%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #f0c060; padding: 6px 18px; font-size: 13px; letter-spacing: 3px; font-family: monospace; pointer-events: none; }
@@ -245,14 +333,89 @@
     <div class="hbslot disabled" data-slot="8"><span class="hbkey">9</span><span class="hblabel">SNIPER</span><span class="hbcount" id="hbcount8">0</span></div>
   </div>
 
-  <!-- Inventory panel — toggled with TAB. Grid of all items. -->
+  <!-- Inventory panel — Rust-style layout. Toggled with TAB. -->
   <div id="inventoryPanel" class="hidden">
-    <div class="invHeader">INVENTARIO <span class="invHint">[TAB] cerrar</span></div>
-    <div class="invGrid" id="invGrid"></div>
-    <div class="invHints">
-      <div><kbd>1</kbd>-<kbd>9</kbd> hotbar · <kbd>R</kbd> recargar · <kbd>C</kbd> agacharse · <kbd>H</kbd> usar venda</div>
-      <div><kbd>F</kbd> buggy · <kbd>E</kbd> recoger · <kbd>J</kbd> comer · <kbd>U</kbd> beber · <kbd>B</kbd> hoguera · <kbd>G</kbd> granada</div>
+    <div class="rustPanel">
+      <!-- Header bar -->
+      <div class="rustToolbar">
+        <span class="rustTab active">ELABORACIÓN</span>
+        <span class="rustHint">[TAB] cerrar</span>
+      </div>
+
+      <div class="rustContent">
+        <!-- LEFT column: paperdoll + equipment + vitals -->
+        <aside class="rustPaperdollCol">
+          <div class="paperdollName" id="paperdollName">P1</div>
+          <div class="paperdollCanvas">
+            <!-- silhouette body -->
+            <div class="paperdollBody">
+              <div class="pdHead"></div>
+              <div class="pdTorso"></div>
+              <div class="pdArmL"></div>
+              <div class="pdArmR"></div>
+              <div class="pdLegL"></div>
+              <div class="pdLegR"></div>
+            </div>
+            <!-- equipment slots positioned around the body -->
+            <div class="armorSlot posHelmet"  data-slot="helmet_armor"></div>
+            <div class="armorSlot posVest"    data-slot="vest_armor"></div>
+            <!-- resistance percentages -->
+            <div class="resStack">
+              <div class="resRow"><span class="resIcon resBullet"></span><span id="resBullet">0%</span></div>
+              <div class="resRow"><span class="resIcon resBite"></span><span id="resBite">0%</span></div>
+              <div class="resRow"><span class="resIcon resRad"></span><span id="resRad">0%</span></div>
+            </div>
+          </div>
+          <!-- mini hotbar replicated in panel for drag-to-hotbar -->
+          <div class="paperdollHotbar" id="paperdollHotbar"></div>
+          <!-- vitals -->
+          <div class="paperdollVitals">
+            <span class="vital vHp"><span class="dot"></span><span id="vitHp">100</span></span>
+            <span class="vital vHun"><span class="dot"></span><span id="vitHun">100</span></span>
+            <span class="vital vThi"><span class="dot"></span><span id="vitThi">100</span></span>
+          </div>
+        </aside>
+
+        <!-- CENTER column: item info on top + inventory grid -->
+        <section class="rustCenterCol">
+          <div class="rustItemInfo" id="rustItemInfo">
+            <div class="iiEmpty">Selecciona un item para ver detalles</div>
+          </div>
+          <div class="rustInvBlock">
+            <div class="rustSectionLabel">INVENTARIO</div>
+            <div id="rustInvGrid" class="rustInvGrid"></div>
+          </div>
+        </section>
+
+        <!-- RIGHT column: quick craft recipes -->
+        <aside class="rustRecipesCol">
+          <div class="rustSectionLabel">ELABORACIÓN RÁPIDA</div>
+          <div id="rustCraftList" class="rustRecipesGrid"></div>
+        </aside>
+      </div>
+
+      <div class="rustFooter">
+        <div class="rustHints">
+          <kbd>1</kbd>-<kbd>9</kbd> hotbar · <kbd>R</kbd> recargar · <kbd>C</kbd> agacharse · <kbd>H</kbd> venda · <kbd>J</kbd> comer · <kbd>U</kbd> beber · <kbd>F</kbd> buggy · <kbd>G</kbd> granada · <kbd>B</kbd> hoguera
+        </div>
+      </div>
     </div>
+    <!-- Floating drag ghost -->
+    <div id="dragGhost" class="dragGhost"></div>
+    <!-- Drop quantity dialog -->
+    <div id="dropDialog" class="dropDialog hidden">
+      <div class="dropDialogPanel">
+        <div class="ddTitle" id="ddTitle">SOLTAR ITEM</div>
+        <input id="ddSlider" type="range" min="1" max="1" value="1" />
+        <div class="ddNum"><span id="ddCount">1</span></div>
+        <div class="ddBtns">
+          <button id="ddCancel">CANCELAR</button>
+          <button id="ddOk">SOLTAR</button>
+        </div>
+      </div>
+    </div>
+    <!-- Right-click context menu -->
+    <div id="ctxMenu" class="ctxMenu hidden"></div>
   </div>
 
   <!-- Reload indicator (only visible while reloading) -->
