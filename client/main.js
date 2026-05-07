@@ -18,6 +18,7 @@ import {
   setCompass,
 } from './hud.js';
 import * as knife from './knife.js';
+import { updateCityLights } from './towns.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
 import { nearestInRange } from './loot.js';
@@ -631,6 +632,9 @@ function frame(now) {
 
   // Effects: tracers, decals, gore particles.
   updateEffects(dt);
+
+  // Pulse the Helix Lab's red emergency lights.
+  updateCityLights(dt);
 
   // Sniper warning — show a red dot in HUD if any sci_sniper has us in
   // line of sight from > 35 m and is roughly facing us.

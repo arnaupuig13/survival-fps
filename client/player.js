@@ -157,17 +157,49 @@ export function updatePlayer(dt) {
   if (nz >  WORLD_HALF - 0.5) nz =  WORLD_HALF - 0.5;
   if (nz < -WORLD_HALF + 0.5) nz = -WORLD_HALF + 0.5;
 
-  // Obstacle collision — separate axes so we can slide along walls.
+  // Obstacle collision — circle (trees, rocks, props) AND box (building
+  // walls) variants. Box collision uses closest-point pushout, which lets
+  // the player slide naturally along a wall and walk through doorways.
   for (const o of obstacles) {
-    // Try X-only move
+    if (o.type === 'box') {
+      // Closest-point on box (in box-local space) to player center.
+      const cosI = Math.cos(-(o.ry || 0));
+      const sinI = Math.sin(-(o.ry || 0));
+      const dx = nx - o.cx, dz = nz - o.cz;
+      const lx = cosI * dx - sinI * dz;
+      const lz = sinI * dx + cosI * dz;
+      const ccx = Math.max(-o.hw, Math.min(o.hw, lx));
+      const ccz = Math.max(-o.hh, Math.min(o.hh, lz));
+      const dpx = lx - ccx, dpz = lz - ccz;
+      const dist = Math.hypot(dpx, dpz);
+      if (dist < PLAYER_RADIUS) {
+        let nlx, nlz;
+        if (dist < 0.0001) {
+          // Player is inside the box — push out toward the nearest face.
+          const dL = lx + o.hw, dR = o.hw - lx;
+          const dB = lz + o.hh, dF = o.hh - lz;
+          const m = Math.min(dL, dR, dB, dF);
+          if (m === dL)      { nlx = -o.hw - PLAYER_RADIUS; nlz = lz; }
+          else if (m === dR) { nlx =  o.hw + PLAYER_RADIUS; nlz = lz; }
+          else if (m === dB) { nlx = lx; nlz = -o.hh - PLAYER_RADIUS; }
+          else               { nlx = lx; nlz =  o.hh + PLAYER_RADIUS; }
+        } else {
+          nlx = ccx + (dpx / dist) * PLAYER_RADIUS;
+          nlz = ccz + (dpz / dist) * PLAYER_RADIUS;
+        }
+        const cosF = Math.cos(o.ry || 0), sinF = Math.sin(o.ry || 0);
+        nx = o.cx + cosF * nlx - sinF * nlz;
+        nz = o.cz + sinF * nlx + cosF * nlz;
+      }
+      continue;
+    }
+    // Circle collider — try axes separately so the player slides on impact.
     let dx = nx - o.x, dz = player.pos.z - o.z;
     let r = o.r + PLAYER_RADIUS;
     if (dx * dx + dz * dz < r * r) {
-      // Push back in X.
       const d = Math.sqrt(dx * dx + dz * dz) || 0.0001;
       nx = o.x + (dx / d) * r;
     }
-    // Try Z-only move
     dx = nx - o.x; dz = nz - o.z;
     if (dx * dx + dz * dz < r * r) {
       const d = Math.sqrt(dx * dx + dz * dz) || 0.0001;

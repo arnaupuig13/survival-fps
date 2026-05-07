@@ -109,20 +109,21 @@ const ETYPES = {
 // =====================================================================
 
 function genTownBuildings(centerX, centerZ, count, seed) {
-  // Deterministic PRNG so all clients agree on the layout.
   let s = seed;
   const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
   const buildings = [];
-  // Grid jitter: place on a 12 m grid then jitter ±2 m per axis.
+  // Bigger cell for cities (>=12 buildings) so the compound feels spacious.
+  const isCity = count >= 12;
+  const cell = isCity ? 13 : 12;
   const cols = Math.ceil(Math.sqrt(count));
-  const cell = 12;
   for (let i = 0; i < count; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
     const ox = (col - (cols - 1) / 2) * cell + (rng() - 0.5) * 4;
     const oz = (row - (cols - 1) / 2) * cell + (rng() - 0.5) * 4;
-    const w = 5.5 + rng() * 2.5;
-    const h = 5.5 + rng() * 2.5;
+    // Cities have slightly bigger lab buildings (8-11 m) vs town cabins (5-8 m).
+    const w = isCity ? 7.5 + rng() * 3.0 : 5.5 + rng() * 2.5;
+    const h = isCity ? 7.5 + rng() * 3.0 : 5.5 + rng() * 2.5;
     const ry = (rng() < 0.25) ? Math.PI / 2 : 0;
     buildings.push({ dx: ox, dz: oz, w, h, ry });
   }
@@ -138,7 +139,7 @@ const TOWNS = [
   { id: 'southridge', cx:  140, cz: -160, type: 'town', buildings: genTownBuildings( 140, -160, 6, 44), label: 'Southridge' },
   // The science city — bigger, in the middle-but-offset, with scientists
   // protecting valuable loot. Boss spawns when 50%+ scientists are dead.
-  { id: 'helix-lab', cx:  0,   cz: -90,  type: 'city', buildings: genTownBuildings(  0,  -90, 12, 77), label: 'Helix Lab' },
+  { id: 'helix-lab', cx:  0,   cz: -100, type: 'city', buildings: genTownBuildings(  0, -100, 22, 77), label: 'Helix Lab' },
 ];
 
 // Compute world-space center of each building so spawn / wake checks

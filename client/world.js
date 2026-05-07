@@ -24,7 +24,7 @@ const TOWN_CLEARINGS = [
   { cx:  155, cz:  150, r: 32 },  // Eastfield
   { cx: -160, cz: -130, r: 32 },  // Pinecreek
   { cx:  140, cz: -160, r: 32 },  // Southridge
-  { cx:    0, cz:  -90, r: 50 },  // Helix Lab — bigger
+  { cx:    0, cz: -100, r: 80 },  // Helix Lab — walled compound
 ];
 
 // =====================================================================
