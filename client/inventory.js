@@ -8,14 +8,16 @@ export const ITEMS = {
   bullet_p:     { label: 'BALAS PISTOLA', max: 99 },
   bullet_r:     { label: 'BALAS RIFLE',   max: 99 },
   bandage:      { label: 'VENDAJES',      max: 9  },
+  grenade:      { label: 'GRANADAS',      max: 6  },
   rifle_pickup: { label: 'RIFLE',         max: 1, oneTime: true },
 };
 
 const state = {
-  bullet_p: 12,           // start with a small stash so the menu doesn't feel sterile
+  bullet_p: 12,
   bullet_r: 0,
   bandage:  1,
-  rifle_pickup: 0,        // rifle locked until first city-tier loot
+  grenade:  2,            // start with a couple so the player can try slot 4
+  rifle_pickup: 0,
   kills:    0,
 };
 

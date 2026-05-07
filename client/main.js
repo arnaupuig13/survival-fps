@@ -2,6 +2,8 @@
 // inventory, loot, sounds. Single game loop.
 
 import { renderer, scene, camera, setTimeOfDay } from './three-setup.js';
+import * as THREE from 'three';
+import { heightAt } from './world.js';
 import './world.js';                 // builds terrain + trees + rocks
 import { player, updatePlayer } from './player.js';
 import { network } from './network.js';
@@ -43,12 +45,12 @@ const respawnBtn = document.getElementById('respawnBtn');
 // HUD subscribes to inventory updates so ammo/kill counts always match state.
 inv.onChange(setInventory);
 inv.onChange((state) => {
-  // Hotbar slot counts: pistol bullets, rifle bullets, bandages.
+  // Hotbar slot counts.
   setHotbarCount(0, state.bullet_p);
   setHotbarCount(1, state.bullet_r);
   setHotbarCount(2, state.bandage);
-  setHotbarLocked(1, !state.rifle_pickup);    // rifle locked until looted
-  // If the inventory panel is currently open, keep it in sync.
+  setHotbarCount(3, state.grenade);
+  setHotbarLocked(1, !state.rifle_pickup);
   if (isInventoryOpen()) renderInventory(state, inv.ITEMS);
 });
 
@@ -73,6 +75,81 @@ setPlayerName(profile.name);
 // in-session day starts at 1 and increments each time the hour wraps.
 let inSessionDay = 1;
 let _lastClockHour = 0;
+
+// =====================================================================
+// Chat — T opens an input, Enter sends, Escape cancels. Pointer lock is
+// released while the input is focused so the user can type.
+// =====================================================================
+const chatInputWrap = document.getElementById('chatInputWrap');
+const chatInput     = document.getElementById('chatInput');
+const chatLog       = document.getElementById('chatLog');
+let _chatOpen = false;
+function openChat() {
+  if (_chatOpen) return;
+  _chatOpen = true;
+  document.exitPointerLock?.();
+  chatInputWrap.classList.remove('hidden');
+  chatInput.value = '';
+  setTimeout(() => chatInput.focus(), 30);
+}
+function closeChat(send = false) {
+  if (!_chatOpen) return;
+  _chatOpen = false;
+  const text = chatInput.value.trim();
+  chatInputWrap.classList.add('hidden');
+  if (send && text) network.chat(text);
+  // Re-engage pointer lock when chat closes.
+  setTimeout(() => renderer.domElement.requestPointerLock?.(), 50);
+}
+chatInput?.addEventListener('keydown', (e) => {
+  if (e.code === 'Enter') { e.preventDefault(); closeChat(true); }
+  else if (e.code === 'Escape') { e.preventDefault(); closeChat(false); }
+});
+function appendChatLog(name, text) {
+  const div = document.createElement('div');
+  div.className = 'cline';
+  div.innerHTML = `<span class="cname">${escapeHTML(name)}</span>${escapeHTML(text)}`;
+  chatLog.prepend(div);
+  setTimeout(() => { div.style.transition = 'opacity 0.6s'; div.style.opacity = '0'; }, 5500);
+  setTimeout(() => div.remove(), 6200);
+  while (chatLog.children.length > 6) chatLog.lastChild.remove();
+}
+function escapeHTML(s) { return String(s).replace(/[&<>"']/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[m]); }
+
+// =====================================================================
+// ADS — right-click holds to aim down sights. Reduces FOV (zoom) and
+// shows a scope vignette. Released → back to base.
+// =====================================================================
+const BASE_FOV = camera.fov;
+const ADS_FOV  = 45;
+let _ads = false;
+const scopeVignette = document.getElementById('scopeVignette');
+addEventListener('mousedown', (e) => { if (e.button === 2) setADS(true); });
+addEventListener('mouseup',   (e) => { if (e.button === 2) setADS(false); });
+function setADS(on) {
+  _ads = on;
+  if (scopeVignette) scopeVignette.classList.toggle('show', on);
+}
+
+// =====================================================================
+// Grenade rendering — server-driven mesh + boom particles.
+// =====================================================================
+const grenadeMeshes = new Map(); // id → mesh
+function spawnGrenadeMesh(g) {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0x404044, roughness: 0.55, metalness: 0.5 }),
+  );
+  m.position.set(g.x, g.y, g.z);
+  scene.add(m);
+  grenadeMeshes.set(g.id, { mesh: m, x: g.x, y: g.y, z: g.z, vx: g.vx, vy: g.vy, vz: g.vz, fuse: g.fuse });
+}
+function destroyGrenadeMesh(id) {
+  const e = grenadeMeshes.get(id); if (!e) return;
+  scene.remove(e.mesh);
+  e.mesh.geometry.dispose(); e.mesh.material.dispose();
+  grenadeMeshes.delete(id);
+}
 
 // =====================================================================
 // Network wiring.
@@ -142,6 +219,28 @@ network.onLootGranted = (loot) => {
   sfx.playPickup();
 };
 let isNightServer = false;
+network.onChat = (id, name, text) => {
+  appendChatLog(name, text);
+};
+network.onGrenade = (g) => spawnGrenadeMesh(g);
+network.onGrenadeBoom = (msg) => {
+  destroyGrenadeMesh(msg.id);
+  spawnGoreBurst(msg.x, msg.y, msg.z, 26);
+  // Also a quick screen-flash + sting.
+  flashDamage();
+  sfx.playKill?.();
+};
+network.onWave = (state) => {
+  if (state === 'start') {
+    sfx.setMusicMode?.('combat');
+    showBanner('⚠ OLEADA INMINENTE ⚠');
+    logLine('⚠ Inicia oleada de hostiles');
+  } else {
+    sfx.setMusicMode?.(isNightServer ? 'night' : 'day');
+    logLine('Oleada terminó');
+  }
+};
+
 network.onTimeUpdate = (h, isNight) => {
   serverHour = h;
   serverHourSetAt = performance.now();
@@ -184,6 +283,8 @@ function startGame() {
   sfx.ensureAudio();          // first user gesture unlocks AudioContext
   sfx.startMusic?.();         // start the ambient drone
   player.startGame();
+  // Push name to server so peers see it.
+  if (profile.name) network.setName(profile.name);
   menuEl.style.display = 'none';
   renderer.domElement.requestPointerLock?.();
   logLine(`Bienvenido ${profile.name || 'P1'}. Total bajas: ${profile.totalKills | 0}.`);
@@ -219,12 +320,29 @@ player.onLockChange = (locked) => {
 let nearbyCrate = null;
 
 addEventListener('keydown', (e) => {
-  // TAB inventory works even outside game (helps the user explore the
-  // hotbar before pressing JUGAR). Block default tab focus changes.
+  // Chat is a typing context — don't intercept other game keys while it's open.
+  if (_chatOpen) return;
+  // TAB inventory works even outside game.
   if (e.code === 'Tab') {
     e.preventDefault();
     toggleInventory();
     if (isInventoryOpen()) renderInventory(_currentInvState(), inv.ITEMS);
+    return;
+  }
+  // Chat open key — only when the player is in-game.
+  if (e.code === 'KeyT' && player.locked && !e.repeat) {
+    e.preventDefault();
+    openChat();
+    return;
+  }
+  // Throw grenade — G. Throw direction = camera forward + a bit of arc.
+  if (e.code === 'KeyG' && player.locked && !e.repeat) {
+    if (inv.consume?.('grenade', 1)) {
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      network.throwGrenade(dir.x, dir.y + 0.2, dir.z);
+      sfx.playEmpty?.();
+    }
     return;
   }
   if (!player.locked || player.hp <= 0) return;
@@ -368,6 +486,25 @@ function frame(now) {
   const inCombat = (performance.now() / 1000 - (player.lastHitAt || 0)) < 4;
   if (inCombat && !_combatMusic) { _combatMusic = true; sfx.setMusicMode?.('combat'); }
   else if (!inCombat && _combatMusic) { _combatMusic = false; sfx.setMusicMode?.(isNightServer ? 'night' : 'day'); }
+
+  // ADS FOV lerp.
+  const targetFov = _ads ? ADS_FOV : BASE_FOV;
+  camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-15 * dt));
+  camera.updateProjectionMatrix();
+
+  // Grenade meshes — local physics interp until detonation. Server is
+  // authoritative for damage; this is just visual smoothing between the
+  // spawn and boom messages.
+  for (const g of grenadeMeshes.values()) {
+    g.fuse -= dt;
+    g.vy -= 22 * dt;
+    g.x += g.vx * dt;
+    g.y += g.vy * dt;
+    g.z += g.vz * dt;
+    const ground = heightAt(g.x, g.z) + 0.18;
+    if (g.y < ground) { g.y = ground; g.vy = -g.vy * 0.35; g.vx *= 0.7; g.vz *= 0.7; }
+    g.mesh.position.set(g.x, g.y, g.z);
+  }
 
   // Mini-map.
   renderMinimap();

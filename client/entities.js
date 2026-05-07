@@ -165,7 +165,7 @@ function makeBossMesh() {
   return g;
 }
 
-function makePeerMesh() {
+function makePeerMesh(name = '') {
   const g = new THREE.Group();
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0x375a78, roughness: 0.7 });
   const skinMat = new THREE.MeshStandardMaterial({ color: 0xc89878, roughness: 0.6 });
@@ -178,7 +178,66 @@ function makePeerMesh() {
   const legL = new THREE.Mesh(legGeom, bodyMat); legL.position.set(-0.16, 0.4, 0); g.add(legL);
   const legR = new THREE.Mesh(legGeom, bodyMat); legR.position.set( 0.16, 0.4, 0); g.add(legR);
   g.userData.legs = [legL, legR];
+  // Floating name label sprite above the head.
+  if (name) g.add(makePeerLabel(name));
   return g;
+}
+
+// Canvas-textured sprite name tag. White text + dark outline so it reads
+// against any sky / building background.
+function makePeerLabel(name) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(0, 0, 256, 64);
+  ctx.font = 'bold 28px system-ui';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillText(name, 128, 33);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(name, 128, 32);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sprite.scale.set(2.0, 0.5, 1);
+  sprite.position.y = 2.4;
+  sprite.userData.isLabel = true;
+  return sprite;
+}
+
+// Speech bubble sprite — short-lived bigger label with chat text.
+function makeSpeechBubble(text) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 384; canvas.height = 80;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.78)';
+  ctx.fillRect(0, 0, 384, 80);
+  ctx.font = 'bold 22px system-ui';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff0c0';
+  // Word-wrap simple — split if too long.
+  const lines = wrapText(ctx, text, 360);
+  const base = 40 - (lines.length - 1) * 12;
+  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], 192, base + i * 24);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sprite.scale.set(3.5, 0.75, 1);
+  sprite.position.y = 3.0;
+  return sprite;
+}
+function wrapText(ctx, text, maxWidth) {
+  const words = text.split(/\s+/);
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxWidth) { lines.push(line); line = w; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+  return lines.slice(0, 3); // cap 3 lines
 }
 
 // Deer — taller quadruped with antlers. Lighter fur, blue calm eyes.
@@ -303,11 +362,45 @@ export function wakeEnemy(id) {
 
 export function spawnPeer(info) {
   if (peers.has(info.id)) return;
-  const mesh = makePeerMesh();
+  const mesh = makePeerMesh(info.name || `P${info.id}`);
   mesh.position.set(info.x, heightAt(info.x, info.z), info.z);
   mesh.rotation.y = info.ry || 0;
   scene.add(mesh);
-  peers.set(info.id, { mesh, target: { x: info.x, z: info.z, ry: info.ry || 0 }, walkPhase: 0, lastX: info.x, lastZ: info.z });
+  peers.set(info.id, {
+    mesh, target: { x: info.x, z: info.z, ry: info.ry || 0 },
+    walkPhase: 0, lastX: info.x, lastZ: info.z,
+    name: info.name || `P${info.id}`,
+    bubble: null, bubbleExpiresAt: 0,
+  });
+}
+
+// Update or replace the floating name label for a peer.
+export function setPeerName(id, name) {
+  const p = peers.get(id); if (!p) return;
+  p.name = name;
+  // Find and remove old label, add new one.
+  for (const child of [...p.mesh.children]) {
+    if (child.userData?.isLabel) {
+      p.mesh.remove(child);
+      child.material.map.dispose();
+      child.material.dispose();
+    }
+  }
+  p.mesh.add(makePeerLabel(name));
+}
+
+// Show a speech bubble above a peer for `durationMs`. Replaces an existing
+// bubble if one is already showing.
+export function showPeerBubble(id, text, durationMs = 4000) {
+  const p = peers.get(id); if (!p) return;
+  if (p.bubble) {
+    p.mesh.remove(p.bubble);
+    p.bubble.material.map.dispose();
+    p.bubble.material.dispose();
+  }
+  p.bubble = makeSpeechBubble(text);
+  p.mesh.add(p.bubble);
+  p.bubbleExpiresAt = performance.now() + durationMs;
 }
 export function removePeer(id) {
   const p = peers.get(id); if (!p) return;
@@ -370,6 +463,13 @@ export function updateEntities(dt) {
       const swing = Math.sin(p.walkPhase) * 0.5;
       const legs = m.userData.legs;
       if (legs) { legs[0].rotation.x = swing; legs[1].rotation.x = -swing; }
+    }
+    // Bubble timeout — remove when expired.
+    if (p.bubble && performance.now() > p.bubbleExpiresAt) {
+      m.remove(p.bubble);
+      p.bubble.material.map.dispose();
+      p.bubble.material.dispose();
+      p.bubble = null;
     }
   }
 }

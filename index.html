@@ -113,6 +113,19 @@
     #reloadIndicator { position: fixed; top: 60%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #f0c060; padding: 6px 18px; font-size: 13px; letter-spacing: 3px; font-family: monospace; pointer-events: none; }
     #reloadIndicator.hidden { display: none; }
 
+    /* Chat input + log */
+    #chatInputWrap { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); padding: 8px 14px; border: 1px solid #444; display: flex; align-items: center; gap: 8px; z-index: 9; }
+    #chatInputWrap.hidden { display: none; }
+    .chatLabel { color: #f0c060; font-size: 11px; letter-spacing: 2px; font-family: monospace; }
+    #chatInput { background: transparent; border: none; outline: none; color: #ddd; font-size: 14px; min-width: 320px; }
+    #chatLog { position: fixed; left: 16px; bottom: 110px; max-width: 360px; pointer-events: none; }
+    #chatLog .cline { background: rgba(0,0,0,0.55); color: #ddd; padding: 4px 10px; font-size: 13px; margin-bottom: 2px; }
+    #chatLog .cname { color: #f0c060; font-weight: 700; margin-right: 6px; }
+
+    /* Scope vignette — radial gradient that darkens corners + crosshair circle. */
+    #scopeVignette { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.18s; background: radial-gradient(circle at center, transparent 18%, rgba(0,0,0,0.4) 30%, rgba(0,0,0,0.95) 65%); z-index: 5; }
+    #scopeVignette.show { opacity: 1; }
+
     /* Name dialog */
     #nameDialog { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 12; }
     #nameDialog.hidden { display: none; }
@@ -168,7 +181,7 @@
     <div class="hbslot" data-slot="0"><span class="hbkey">1</span><span class="hblabel">PISTOLA</span><span class="hbcount" id="hbcount0">12</span></div>
     <div class="hbslot" data-slot="1"><span class="hbkey">2</span><span class="hblabel">RIFLE</span><span class="hbcount" id="hbcount1">0</span></div>
     <div class="hbslot" data-slot="2"><span class="hbkey">3</span><span class="hblabel">VENDA</span><span class="hbcount" id="hbcount2">1</span></div>
-    <div class="hbslot empty" data-slot="3"><span class="hbkey">4</span></div>
+    <div class="hbslot" data-slot="3"><span class="hbkey">4</span><span class="hblabel">GRANADA</span><span class="hbcount" id="hbcount3">2</span></div>
     <div class="hbslot empty" data-slot="4"><span class="hbkey">5</span></div>
     <div class="hbslot empty" data-slot="5"><span class="hbkey">6</span></div>
     <div class="hbslot empty" data-slot="6"><span class="hbkey">7</span></div>
@@ -188,6 +201,18 @@
 
   <!-- Reload indicator (only visible while reloading) -->
   <div id="reloadIndicator" class="hidden">RECARGANDO...</div>
+
+  <!-- Chat input (T to open, Enter to send, Escape to cancel) -->
+  <div id="chatInputWrap" class="hidden">
+    <span class="chatLabel">DECIR:</span>
+    <input id="chatInput" type="text" maxlength="140" autocomplete="off" />
+  </div>
+
+  <!-- Chat log (last few messages, fades out) -->
+  <div id="chatLog"></div>
+
+  <!-- ADS scope vignette (hidden by default) -->
+  <div id="scopeVignette"></div>
 
   <!-- Nickname dialog — first-run prompt before JUGAR. -->
   <div id="nameDialog" class="hidden">

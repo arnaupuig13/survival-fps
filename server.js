@@ -196,14 +196,18 @@ function rollLoot(tableKey) {
 }
 
 // =====================================================================
-// World state — players, enemies, crates. Authoritative.
+// World state — players, enemies, crates, grenades. Authoritative.
 // =====================================================================
 const players = new Map();   // id → player
 const enemies = new Map();   // id → enemy
 const crates = new Map();    // id → { id, x, z, townType, taken }
+const grenades = new Map();  // id → { id, ownerId, x,y,z, vx,vy,vz, fuse }
 let nextPlayerId = 1;
 let nextEnemyId = 1;
 let nextCrateId = 1;
+let nextGrenadeId = 1;
+const GRENADE_DAMAGE = 70;
+const GRENADE_RADIUS = 6;
 
 // Build crates at boot — one inside every building of every town. The
 // crate's table key matches the town type ('town' or 'city'), so cities
@@ -479,9 +483,107 @@ const AI_DT = 1 / AI_HZ;
 let ambientSpawnAccum = 0;
 let streamCheckAccum = 0;
 
+// =====================================================================
+// Wave system — every WAVE_INTERVAL seconds (with jitter), the server
+// announces an inbound wave and bursts a horde of hostiles around each
+// connected player. Banner broadcast lets clients sting + warn.
+// =====================================================================
+const WAVE_INTERVAL_MIN = 240; // 4 min
+const WAVE_INTERVAL_MAX = 360; // 6 min
+let waveCountdown = 90;        // first wave after 90 s of activity
+let waveActive = false;
+let waveEndsAt = 0;
+
+function announceWave() {
+  waveActive = true;
+  waveEndsAt = Date.now() + 90 * 1000;
+  broadcast({ type: 'banner', text: '⚠ OLEADA INMINENTE ⚠' });
+  broadcast({ type: 'wave', state: 'start' });
+  // Burst spawn 10-14 hostiles around each player.
+  for (const p of players.values()) {
+    const count = 10 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < count; i++) {
+      // 50% wolves at night, 30% runners, 15% zombies, 5% tanks.
+      const r = Math.random();
+      let etype = 'zombie';
+      const night = isNightHour(gameHour);
+      if (night) {
+        if (r > 0.95) etype = 'tank';
+        else if (r > 0.50) etype = 'wolf';
+        else if (r > 0.20) etype = 'runner';
+      } else {
+        if (r > 0.95) etype = 'tank';
+        else if (r > 0.80) etype = 'wolf';
+        else if (r > 0.50) etype = 'runner';
+      }
+      const angle = Math.random() * Math.PI * 2;
+      const r2 = 35 + Math.random() * 35;
+      const x = p.x + Math.cos(angle) * r2;
+      const z = p.z + Math.sin(angle) * r2;
+      if (Math.abs(x) > WORLD_HALF || Math.abs(z) > WORLD_HALF) continue;
+      const e = makeEnemy({ etype, x, z, ambient: true });
+      broadcast({ type: 'eSpawn', e: ePub(e) });
+    }
+  }
+}
+
 setInterval(() => {
   // Advance day/night clock. 1 tick = 0.1 s real → DAY_LENGTH s = full day.
   gameHour = (gameHour + (24 / DAY_LENGTH) * AI_DT) % 24;
+
+  // Wave countdown.
+  if (players.size > 0) {
+    waveCountdown -= AI_DT;
+    if (waveCountdown <= 0) {
+      announceWave();
+      waveCountdown = WAVE_INTERVAL_MIN + Math.random() * (WAVE_INTERVAL_MAX - WAVE_INTERVAL_MIN);
+    }
+    if (waveActive && Date.now() > waveEndsAt) {
+      waveActive = false;
+      broadcast({ type: 'wave', state: 'end' });
+    }
+  }
+
+  // Grenade physics + detonation.
+  for (const g of grenades.values()) {
+    g.fuse -= AI_DT;
+    g.vy -= 22 * AI_DT;
+    g.x += g.vx * AI_DT;
+    g.y += g.vy * AI_DT;
+    g.z += g.vz * AI_DT;
+    const groundY = heightAt(g.x, g.z) + 0.15;
+    if (g.y < groundY) {
+      g.y = groundY;
+      g.vy = -g.vy * 0.35;       // weak bounce
+      g.vx *= 0.7; g.vz *= 0.7;  // ground friction
+    }
+    if (g.fuse <= 0) {
+      // Detonate. Damage every enemy in radius. Damage scales with proximity.
+      for (const e of enemies.values()) {
+        if (e.sleeping) continue;
+        const dx = e.x - g.x, dz = e.z - g.z;
+        const d = Math.hypot(dx, dz);
+        if (d > GRENADE_RADIUS) continue;
+        const dmg = Math.round(GRENADE_DAMAGE * (1 - d / GRENADE_RADIUS));
+        e.hp -= dmg;
+        broadcast({ type: 'eHit', id: e.id, hp: Math.max(0, e.hp) });
+        if (e.hp <= 0) killEnemy(e, g.ownerId);
+      }
+      // Damage players in radius (other than owner — friendly-fire light).
+      for (const p of players.values()) {
+        if (p.id === g.ownerId) continue;
+        if (p.hp <= 0) continue;
+        const dx = p.x - g.x, dz = p.z - g.z;
+        const d = Math.hypot(dx, dz);
+        if (d > GRENADE_RADIUS) continue;
+        const dmg = Math.round(GRENADE_DAMAGE * 0.6 * (1 - d / GRENADE_RADIUS));
+        p.hp = Math.max(0, p.hp - dmg);
+        sendTo(p, { type: 'youHit', dmg, by: g.ownerId, sx: g.x, sy: g.y, sz: g.z, source: 'grenade' });
+      }
+      broadcast({ type: 'grenadeBoom', id: g.id, x: g.x, y: g.y, z: g.z });
+      grenades.delete(g.id);
+    }
+  }
 
   // Broadcast hour every ~1 s (clients lerp).
   lastTimeBroadcast += AI_DT;
@@ -692,6 +794,25 @@ wss.on('connection', (ws) => {
       player.x = 0; player.z = 0;
       player.y = heightAt(0, 0);
       sendTo(player, { type: 'respawned', x: player.x, y: player.y, z: player.z });
+    } else if (msg.type === 'name') {
+      const name = String(msg.name || '').slice(0, 14).replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || `P${id}`;
+      player.name = name;
+      broadcast({ type: 'peerName', id, name });
+    } else if (msg.type === 'chat') {
+      const text = String(msg.text || '').slice(0, 140);
+      if (text) broadcast({ type: 'chat', id, name: player.name, text });
+    } else if (msg.type === 'grenade') {
+      // Client throws a grenade. Server tracks position + timer + radius
+      // damage at detonation, broadcasts spawn for visualization.
+      const gid = nextGrenadeId++;
+      const g = {
+        id: gid, ownerId: id,
+        x: player.x, y: player.y + 1.0, z: player.z,
+        vx: msg.dx * 16, vy: msg.dy * 16 + 4, vz: msg.dz * 16,
+        fuse: 2.4,
+      };
+      grenades.set(gid, g);
+      broadcast({ type: 'grenadeSpawn', g: { id: gid, x: g.x, y: g.y, z: g.z, vx: g.vx, vy: g.vy, vz: g.vz, fuse: g.fuse } });
     } else if (msg.type === 'openCrate') {
       // Player wants to open crate `id`. We accept if it exists, isn't
       // taken yet, and the player is reasonably close (within 3.5 m of

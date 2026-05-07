@@ -3,7 +3,7 @@
 
 import {
   spawnEnemy, removeEnemy, wakeEnemy, triggerEnemyAttack,
-  spawnPeer, removePeer, peers, enemies,
+  spawnPeer, removePeer, peers, enemies, setPeerName, showPeerBubble,
 } from './entities.js';
 import { setTownLayouts } from './towns.js';
 import { spawnCrate, removeCrate } from './loot.js';
@@ -30,6 +30,10 @@ class NetworkClient {
     this.onEnemyDead = null;
     this.onLootGranted = null;
     this.onTimeUpdate = null;
+    this.onChat = null;
+    this.onGrenade = null;
+    this.onGrenadeBoom = null;
+    this.onWave = null;
     this._sendAccum = 0;
   }
 
@@ -118,6 +122,17 @@ class NetworkClient {
       this.onLootGranted?.(msg.loot, msg.crateId);
     } else if (msg.type === 'banner') {
       this.onBanner?.(msg.text);
+    } else if (msg.type === 'peerName') {
+      setPeerName(msg.id, msg.name);
+    } else if (msg.type === 'chat') {
+      this.onChat?.(msg.id, msg.name, msg.text);
+      if (msg.id !== this.selfId) showPeerBubble(msg.id, msg.text);
+    } else if (msg.type === 'grenadeSpawn') {
+      this.onGrenade?.(msg.g);
+    } else if (msg.type === 'grenadeBoom') {
+      this.onGrenadeBoom?.(msg);
+    } else if (msg.type === 'wave') {
+      this.onWave?.(msg.state);
     } else if (msg.type === 'fire') {
       // TODO: muzzle flash from peer position.
     } else if (msg.type === 'respawned') {
@@ -150,6 +165,9 @@ class NetworkClient {
 
   openCrate(id) { this._send({ type: 'openCrate', id }); }
   respawn() { this._send({ type: 'respawn' }); }
+  setName(name) { this._send({ type: 'name', name }); }
+  chat(text) { this._send({ type: 'chat', text }); }
+  throwGrenade(dx, dy, dz) { this._send({ type: 'grenade', dx, dy, dz }); }
 
   _send(msg) {
     if (!this.connected || !this.ws || this.ws.readyState !== 1) return;
