@@ -33,13 +33,13 @@ const MATS = {
 };
 
 // =====================================================================
-// Build a single building. Returns { group, colliders }.
+// Build a single building. Returns { group, collider }.
 //
 // The building is a hollow box: 4 walls + roof + floor sill. One wall has
 // a door-shaped hole (subtractive — we use 2 wall slabs flanking the gap,
 // plus a lintel above).
 // =====================================================================
-function buildBuilding(b, type, isLootBuilding) {
+function buildBuilding(b, type) {
   const g = new THREE.Group();
   const mats = (type === 'city')
     ? { wall: MATS.cityWall, trim: MATS.cityTrim, roof: MATS.cityRoof, glass: MATS.cityGlass }
@@ -120,20 +120,8 @@ function buildBuilding(b, type, isLootBuilding) {
     g.add(roof);
   }
 
-  // Loot crate inside if this is the looted building.
-  if (isLootBuilding) {
-    const crate = new THREE.Mesh(
-      new THREE.BoxGeometry(0.9, 0.65, 0.65), MATS.lootCrate,
-    );
-    crate.position.set(0, 0.32, -halfH * 0.4);
-    g.add(crate);
-    // Glowing trim band so it reads from the doorway.
-    const band = new THREE.Mesh(
-      new THREE.BoxGeometry(0.92, 0.08, 0.67), MATS.lootBand,
-    );
-    band.position.set(0, 0.5, -halfH * 0.4);
-    g.add(band);
-  }
+  // (Loot crates are spawned by the server now and managed by loot.js so
+  // they can be opened, looted and removed across all clients.)
 
   // Apply rotation, then world position.
   g.rotation.y = b.ry || 0;
@@ -198,14 +186,8 @@ export function setTownLayouts(towns) {
       b.wx = t.cx + b.dx;
       b.wz = t.cz + b.dz;
     }
-    // Pick one random building per town to hold the loot crate. Deterministic
-    // by town id + cx so all clients agree.
-    const seedSeed = (t.cx | 0) * 73856093 ^ (t.cz | 0) * 19349663;
-    const lootIdx = Math.abs(seedSeed) % t.buildings.length;
-
     for (let i = 0; i < t.buildings.length; i++) {
-      const b = t.buildings[i];
-      const { group, collider } = buildBuilding(b, t.type, i === lootIdx);
+      const { group, collider } = buildBuilding(t.buildings[i], t.type);
       scene.add(group);
       obstacles.push(collider);
     }

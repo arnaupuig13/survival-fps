@@ -7,10 +7,14 @@ import { camera, scene } from './three-setup.js';
 import { enemies } from './entities.js';
 import { network } from './network.js';
 import { player } from './player.js';
+import * as inv from './inventory.js';
+import * as sfx from './sounds.js';
 
+// Each weapon names the inventory key it consumes per shot. The rifle
+// requires `rifle_pickup > 0` to be selectable (locked behind a city loot).
 const WEAPONS = {
-  pistol: { dmg: 4,  cooldown: 0.5,  range: 50,  auto: false, name: 'PISTOLA' },
-  rifle:  { dmg: 6,  cooldown: 0.12, range: 100, auto: true,  name: 'RIFLE'   },
+  pistol: { dmg: 4,  cooldown: 0.5,  range: 50,  auto: false, name: 'PISTOLA', ammo: 'bullet_p' },
+  rifle:  { dmg: 6,  cooldown: 0.12, range: 100, auto: true,  name: 'RIFLE',   ammo: 'bullet_r', requires: 'rifle_pickup' },
 };
 
 // =====================================================================
@@ -61,7 +65,11 @@ scene.add(camera); // make sure camera is in scene so its children render
 // =====================================================================
 addEventListener('keydown', (e) => {
   if (e.code === 'Digit1') { active = 'pistol'; updateGunVisual(); }
-  if (e.code === 'Digit2') { active = 'rifle'; updateGunVisual(); }
+  if (e.code === 'Digit2') {
+    // Rifle has to be looted before you can switch to it.
+    if (!inv.has('rifle_pickup', 1)) return;
+    active = 'rifle'; updateGunVisual();
+  }
 });
 addEventListener('mousedown', (e) => { if (e.button === 0) { mouseDown = true; tryFire(); } });
 addEventListener('mouseup',   (e) => { if (e.button === 0)   mouseDown = false; });
@@ -79,7 +87,15 @@ function tryFire() {
   if (!player.locked || player.hp <= 0) return;
   if (cooldown > 0) return;
   const cfg = WEAPONS[active];
+  // Out of ammo → empty click + lock the trigger so we don't spam.
+  if (!inv.consume(cfg.ammo, 1)) {
+    sfx.playEmpty();
+    cooldown = 0.25;
+    mouseDown = false;
+    return;
+  }
   cooldown = cfg.cooldown;
+  if (active === 'rifle') sfx.playRifle(0); else sfx.playPistol(0);
 
   // Build raycast from camera center, transformed into world space.
   camera.getWorldPosition(_origin);

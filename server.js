@@ -143,12 +143,74 @@ for (const t of TOWNS) {
 }
 
 // =====================================================================
-// World state — players, enemies. Authoritative.
+// Loot tables — what kinds of items each crate type drops. Counts are
+// [min, max] inclusive; rolled per-item when the crate is opened.
+// Items the client knows: bullet_p (pistol), bullet_r (rifle), bandage,
+// rifle_pickup (unlocks the rifle weapon).
+// =====================================================================
+const LOOT_TABLES = {
+  town: [
+    { item: 'bullet_p', range: [5, 10] },
+    { item: 'bullet_r', range: [0, 4] },
+    { item: 'bandage',  range: [0, 1] },
+  ],
+  city: [
+    { item: 'bullet_p',    range: [8, 14] },
+    { item: 'bullet_r',    range: [6, 12] },
+    { item: 'bandage',     range: [1, 3] },
+    { item: 'rifle_pickup', chance: 0.45 }, // ~45% per city crate
+  ],
+  boss: [
+    { item: 'bullet_r', range: [25, 40] },
+    { item: 'bullet_p', range: [15, 25] },
+    { item: 'bandage',  range: [3, 6] },
+    { item: 'rifle_pickup', chance: 1 },
+  ],
+};
+
+function rollLoot(tableKey) {
+  const out = {};
+  const table = LOOT_TABLES[tableKey] || [];
+  for (const row of table) {
+    if (row.chance != null) {
+      if (Math.random() < row.chance) out[row.item] = (out[row.item] || 0) + 1;
+    } else {
+      const [a, b] = row.range;
+      const n = a + Math.floor(Math.random() * (b - a + 1));
+      if (n > 0) out[row.item] = (out[row.item] || 0) + n;
+    }
+  }
+  return out;
+}
+
+// =====================================================================
+// World state — players, enemies, crates. Authoritative.
 // =====================================================================
 const players = new Map();   // id → player
 const enemies = new Map();   // id → enemy
+const crates = new Map();    // id → { id, x, z, townType, taken }
 let nextPlayerId = 1;
 let nextEnemyId = 1;
+let nextCrateId = 1;
+
+// Build crates at boot — one inside every building of every town. The
+// crate's table key matches the town type ('town' or 'city'), so cities
+// drop more loot.
+function spawnTownCrates() {
+  for (const t of TOWNS) {
+    for (const b of t.buildings) {
+      const id = nextCrateId++;
+      crates.set(id, {
+        id, x: b.wx, z: b.wz,
+        y: heightAt(b.wx, b.wz),
+        tableKey: t.type, // 'town' or 'city'
+        townId: t.id,
+        taken: false,
+      });
+    }
+  }
+}
+spawnTownCrates();
 
 // Per-town streaming state.
 const townState = new Map(); // townId → { spawned, enemyIds: Set, scientistsDead, bossSpawned }
@@ -205,6 +267,14 @@ function killEnemy(e, byId = null) {
     if (ts) ts.enemyIds.delete(e.id);
   }
   broadcast({ type: 'eDead', id: e.id, by: byId, isBoss: !!e.isBoss });
+
+  // Boss drop — server pushes a privileged crate at the boss's feet that
+  // anyone can open. Same crate flow as town crates.
+  if (e.isBoss) {
+    const id = nextCrateId++;
+    crates.set(id, { id, x: e.x, z: e.z, y: e.y, tableKey: 'boss', townId: 'helix-lab', taken: false });
+    broadcast({ type: 'crateSpawn', c: cPub(crates.get(id)) });
+  }
 }
 
 function ePub(e) {
@@ -216,6 +286,9 @@ function ePub(e) {
   };
 }
 function pPub(p) { return { id: p.id, x: p.x, y: p.y, z: p.z, ry: p.ry, hp: p.hp, name: p.name }; }
+function cPub(c) {
+  return { id: c.id, x: +c.x.toFixed(2), y: +c.y.toFixed(2), z: +c.z.toFixed(2), tableKey: c.tableKey, townId: c.townId };
+}
 
 // =====================================================================
 // Town streaming — spawn / despawn enemies inside each town's buildings.
@@ -435,6 +508,7 @@ wss.on('connection', (ws) => {
       id: t.id, cx: t.cx, cz: t.cz, type: t.type, label: t.label,
       buildings: t.buildings.map(b => ({ dx: b.dx, dz: b.dz, w: b.w, h: b.h, ry: b.ry })),
     })),
+    crates: [...crates.values()].filter(c => !c.taken).map(cPub),
   }));
   broadcast({ type: 'peerJoin', p: pPub(player) }, id);
 
@@ -467,6 +541,18 @@ wss.on('connection', (ws) => {
       player.x = 0; player.z = 0;
       player.y = heightAt(0, 0);
       sendTo(player, { type: 'respawned', x: player.x, y: player.y, z: player.z });
+    } else if (msg.type === 'openCrate') {
+      // Player wants to open crate `id`. We accept if it exists, isn't
+      // taken yet, and the player is reasonably close (within 3.5 m of
+      // the crate position). Anti-cheat is best-effort, not strict.
+      const c = crates.get(msg.id);
+      if (!c || c.taken) return;
+      const dx = player.x - c.x, dz = player.z - c.z;
+      if (dx * dx + dz * dz > 5 * 5) return;
+      c.taken = true;
+      const loot = rollLoot(c.tableKey);
+      sendTo(player, { type: 'lootGranted', crateId: c.id, loot });
+      broadcast({ type: 'crateTaken', id: c.id, by: id });
     }
   });
 

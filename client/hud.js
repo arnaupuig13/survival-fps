@@ -1,10 +1,33 @@
-// HUD — HP bar, FPS counter, online counter, event log, damage flash, banner.
+// HUD — HP bar, ammo, kill counter, FPS counter, online counter, event log,
+// damage flash, banner, interact prompt.
 
 const hpFill = document.getElementById('hpFill');
 const fpsEl = document.getElementById('fps');
 const onlineEl = document.getElementById('online');
 const logEl = document.getElementById('log');
 const dmgFlash = document.getElementById('dmgFlash');
+const ammoP = document.getElementById('ammoP');
+const ammoR = document.getElementById('ammoR');
+const invBandage = document.getElementById('invBandage');
+const killCount = document.getElementById('killCount');
+const interactPrompt = document.getElementById('interactPrompt');
+const interactText = document.getElementById('interactText');
+
+export function setInventory(state) {
+  if (ammoP) ammoP.textContent = state.bullet_p | 0;
+  if (ammoR) ammoR.textContent = state.bullet_r | 0;
+  if (invBandage) invBandage.textContent = state.bandage | 0;
+  if (killCount) killCount.textContent = state.kills | 0;
+}
+
+export function showInteract(text) {
+  if (!interactPrompt) return;
+  interactText.textContent = text;
+  interactPrompt.classList.add('show');
+}
+export function hideInteract() {
+  if (interactPrompt) interactPrompt.classList.remove('show');
+}
 
 // Lazy-create the banner element (used for boss spawn / death announcements).
 let bannerEl = null;

@@ -6,6 +6,7 @@ import {
   spawnPeer, removePeer, peers, enemies,
 } from './entities.js';
 import { setTownLayouts } from './towns.js';
+import { spawnCrate, removeCrate } from './loot.js';
 
 const SEND_HZ = 10;
 
@@ -27,6 +28,7 @@ class NetworkClient {
     this.onPeerCount = null;
     this.onBanner = null;
     this.onEnemyDead = null;
+    this.onLootGranted = null;
     this._sendAccum = 0;
   }
 
@@ -46,9 +48,9 @@ class NetworkClient {
       this.selfId = msg.you;
       if (msg.towns) setTownLayouts(msg.towns);
       for (const peer of msg.peers) spawnPeer(peer);
-      // v1.1 sends `enemies`; older clients sent `zombies` — accept either.
       const initial = msg.enemies || msg.zombies || [];
       for (const en of initial) spawnEnemy(en);
+      for (const c of (msg.crates || [])) spawnCrate(c);
       this.onPeerCount?.(peers.size + 1);
     } else if (msg.type === 'peerJoin') {
       spawnPeer(msg.p);
@@ -95,6 +97,12 @@ class NetworkClient {
       }
     } else if (msg.type === 'youHit') {
       this.onYouHit?.(msg.dmg, { x: msg.sx, y: msg.sy, z: msg.sz }, msg.source || 'enemy');
+    } else if (msg.type === 'crateSpawn') {
+      spawnCrate(msg.c);
+    } else if (msg.type === 'crateTaken') {
+      removeCrate(msg.id);
+    } else if (msg.type === 'lootGranted') {
+      this.onLootGranted?.(msg.loot, msg.crateId);
     } else if (msg.type === 'banner') {
       this.onBanner?.(msg.text);
     } else if (msg.type === 'fire') {
@@ -127,6 +135,7 @@ class NetworkClient {
     });
   }
 
+  openCrate(id) { this._send({ type: 'openCrate', id }); }
   respawn() { this._send({ type: 'respawn' }); }
 
   _send(msg) {
