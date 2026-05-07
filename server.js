@@ -89,6 +89,9 @@ const ETYPES = {
   sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 22, range: 12,  cd: 1.5, aggro: 30, ranged: true,  weapon: 'shotgun' },
   sci_sniper:   { hp: 16,  speed: 1.0, dmg: 32, range: 60,  cd: 2.4, aggro: 60, ranged: true,  weapon: 'sniper'  },
   boss:         { hp: 240, speed: 1.7, dmg: 16, range: 32,  cd: 0.55, aggro: 50, ranged: true, weapon: 'ak', isBoss: true },
+  // Passive animals — wander, flee when a player gets close. Killable for loot.
+  deer:         { hp: 12,  speed: 5.0, dmg: 0,  range: 0,   cd: 0,    aggro: 0,  ranged: false, passive: true, fleeRange: 22 },
+  rabbit:       { hp: 4,   speed: 6.0, dmg: 0,  range: 0,   cd: 0,    aggro: 0,  ranged: false, passive: true, fleeRange: 14 },
 };
 
 // =====================================================================
@@ -171,6 +174,10 @@ const LOOT_TABLES = {
     { item: 'bandage',  range: [3, 6] },
     { item: 'rifle_pickup', chance: 1 },
   ],
+  // Animal kill — small heal pickup, no ammo.
+  animal: [
+    { item: 'bandage', range: [1, 1] },
+  ],
 };
 
 function rollLoot(tableKey) {
@@ -250,7 +257,24 @@ function makeEnemy(opts) {
   return e;
 }
 
+// Passive animal kill drops a tiny loot bundle on the ground (just one
+// bandage from a deer, 50% chance from a rabbit). Same crate flow.
+function dropAnimalLoot(e) {
+  if (e.etype !== 'deer' && e.etype !== 'rabbit') return;
+  const drop = e.etype === 'deer' || Math.random() < 0.5;
+  if (!drop) return;
+  const id = nextCrateId++;
+  // We use a custom mini table — just bandage. Server cPub+open flow already
+  // handles it without changes (LOOT_TABLES.animal).
+  crates.set(id, { id, x: e.x, z: e.z, y: e.y, tableKey: 'animal', townId: null, taken: false });
+  broadcast({ type: 'crateSpawn', c: cPub(crates.get(id)) });
+}
+
 function killEnemy(e, byId = null) {
+  // Animal drops are handled before scientist/boss bookkeeping.
+  if (e.etype === 'deer' || e.etype === 'rabbit') {
+    dropAnimalLoot(e);
+  }
   // Any of the three scientist variants count toward the boss spawn.
   const isScientist = e.etype === 'scientist' || e.etype === 'sci_shotgun' || e.etype === 'sci_sniper';
   if (e.townId === 'helix-lab' && isScientist) {
@@ -404,6 +428,33 @@ function spawnAmbientHostile(minDist = 38, maxDist = 80) {
 // Backwards-compatible alias for any callsite still using the v1.2 name.
 const spawnAmbientZombie = spawnAmbientHostile;
 
+// Passive animal spawn — far from player + outside towns. Used by the
+// dedicated animal ticker so they don't compete with hostile spawn cap.
+let animalSpawnAccum = 0;
+function spawnAmbientAnimal() {
+  if (players.size === 0) return null;
+  for (let tries = 0; tries < 20; tries++) {
+    const list = [...players.values()];
+    const anchor = list[Math.floor(Math.random() * list.length)];
+    const angle = Math.random() * Math.PI * 2;
+    const r = 30 + Math.random() * 70;
+    const x = anchor.x + Math.cos(angle) * r;
+    const z = anchor.z + Math.sin(angle) * r;
+    if (Math.abs(x) > WORLD_HALF || Math.abs(z) > WORLD_HALF) continue;
+    let insideTown = false;
+    for (const t of TOWNS) {
+      const dx = t.cx - x, dz = t.cz - z;
+      if (dx * dx + dz * dz < 60 * 60) { insideTown = true; break; }
+    }
+    if (insideTown) continue;
+    const etype = Math.random() < 0.55 ? 'rabbit' : 'deer';
+    const e = makeEnemy({ etype, x, z, ambient: true });
+    broadcast({ type: 'eSpawn', e: ePub(e) });
+    return e;
+  }
+  return null;
+}
+
 // =====================================================================
 // Day / night cycle. The game hour wraps every DAY_LENGTH seconds. Night
 // hours are 20..6 inclusive (10 hours of darkness, 14 of light).
@@ -460,6 +511,17 @@ setInterval(() => {
     }
   }
 
+  // Animal ambient — separate, slower spawner. Capped to ~6 alive at once.
+  animalSpawnAccum += AI_DT;
+  if (animalSpawnAccum >= 12 && players.size > 0) {
+    let animalCount = 0;
+    for (const e of enemies.values()) if (e.etype === 'deer' || e.etype === 'rabbit') animalCount++;
+    if (animalCount < 6) {
+      animalSpawnAccum = 0;
+      spawnAmbientAnimal();
+    }
+  }
+
   // Per-enemy AI.
   for (const e of enemies.values()) {
     if (e.attackCd > 0) e.attackCd -= AI_DT;
@@ -482,6 +544,33 @@ setInterval(() => {
         e.sleeping = false;
         broadcast({ type: 'eWake', id: e.id });
       }
+      continue;
+    }
+
+    // Passive animals — wander when alone, flee from any player within
+    // fleeRange. No attack. Wander uses a slowly turning heading per entity.
+    if (cfg.passive) {
+      if (e._wander == null) e._wander = { heading: Math.random() * Math.PI * 2, t: 0 };
+      e._wander.t -= AI_DT;
+      if (e._wander.t <= 0) {
+        e._wander.t = 2 + Math.random() * 3;
+        e._wander.heading += (Math.random() - 0.5) * 1.4;
+      }
+      let speed = cfg.speed * 0.25; // amble
+      // Flee if a player is too close.
+      if (d < cfg.fleeRange) {
+        const fdx = e.x - nearest.x, fdz = e.z - nearest.z;
+        const fd = Math.sqrt(fdx * fdx + fdz * fdz) || 0.001;
+        e._wander.heading = Math.atan2(fdx, fdz);
+        speed = cfg.speed; // sprint away
+      }
+      e.x += Math.sin(e._wander.heading) * speed * AI_DT;
+      e.z += Math.cos(e._wander.heading) * speed * AI_DT;
+      // Clamp inside world.
+      e.x = Math.max(-WORLD_HALF + 2, Math.min(WORLD_HALF - 2, e.x));
+      e.z = Math.max(-WORLD_HALF + 2, Math.min(WORLD_HALF - 2, e.z));
+      e.y = heightAt(e.x, e.z);
+      e.ry = e._wander.heading;
       continue;
     }
 

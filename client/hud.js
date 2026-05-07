@@ -12,6 +12,26 @@ const invBandage = document.getElementById('invBandage');
 const killCount = document.getElementById('killCount');
 const interactPrompt = document.getElementById('interactPrompt');
 const interactText = document.getElementById('interactText');
+const staminaFill = document.getElementById('staminaFill');
+const hitMarkerEl = document.getElementById('hitMarker');
+
+export function setStamina(s) {
+  if (staminaFill) staminaFill.style.width = `${Math.max(0, Math.min(100, s))}%`;
+}
+
+let _markerTimer = 0;
+export function flashHitMarker(isKill = false) {
+  if (!hitMarkerEl) return;
+  hitMarkerEl.classList.toggle('kill', !!isKill);
+  hitMarkerEl.style.transition = 'none';
+  hitMarkerEl.style.opacity = '1';
+  // Force reflow for transition restart.
+  void hitMarkerEl.offsetWidth;
+  hitMarkerEl.style.transition = 'opacity 0.45s';
+  hitMarkerEl.style.opacity = '0';
+  clearTimeout(_markerTimer);
+  _markerTimer = setTimeout(() => hitMarkerEl.classList.remove('kill'), 450);
+}
 
 export function setInventory(state) {
   if (ammoP) ammoP.textContent = state.bullet_p | 0;

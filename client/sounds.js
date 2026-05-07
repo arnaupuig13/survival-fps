@@ -236,3 +236,93 @@ export function playEmpty() {
   osc.connect(og).connect(masterGain);
   osc.start(t0); osc.stop(t0 + 0.05);
 }
+
+// Kill chime — quick high tone signaling a confirmed kill.
+export function playKill() {
+  if (!ensureAudio()) return;
+  const t0 = ctx.currentTime;
+  for (const [freq, when] of [[760, 0], [1000, 0.06], [1300, 0.12]]) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t0 + when);
+    const og = ctx.createGain(); og.gain.value = 0;
+    envelope(og, 0.001, 0.04, 0.0001, 0.06);
+    og.gain.setValueAtTime(0.35, t0 + when + 0.001);
+    osc.connect(og).connect(masterGain);
+    osc.start(t0 + when); osc.stop(t0 + when + 0.13);
+  }
+}
+
+// =====================================================================
+// Ambient music — two looping detuned oscillators at a low gain. Tone +
+// filter shift between modes (day / night / combat). startMusic() once
+// after the first user gesture; setMusicMode('night' | 'day' | 'combat')
+// later to swap palettes.
+// =====================================================================
+let musicNodes = null;
+
+function makeMusicVoice(freq, type, gainTo) {
+  const osc = ctx.createOscillator();
+  osc.type = type;
+  osc.frequency.value = freq;
+  const g = ctx.createGain();
+  g.gain.value = 0;
+  osc.connect(g).connect(gainTo);
+  osc.start();
+  return { osc, gain: g };
+}
+
+export function startMusic() {
+  if (!ensureAudio()) return;
+  if (musicNodes) return;
+  // Sub-master gain so we can master-fade the whole layer without
+  // touching the global mix.
+  const bus = ctx.createGain();
+  bus.gain.value = 0.18;
+  bus.connect(masterGain);
+  // Three detuned voices.
+  const v1 = makeMusicVoice(110, 'sine',     bus);     // root
+  const v2 = makeMusicVoice(165, 'triangle', bus);     // 5th
+  const v3 = makeMusicVoice(220, 'sine',     bus);     // octave
+  // A low-pass that we shift around to color the mix.
+  const filt = ctx.createBiquadFilter();
+  filt.type = 'lowpass';
+  filt.frequency.value = 800;
+  filt.Q.value = 0.7;
+  bus.disconnect();
+  bus.connect(filt).connect(masterGain);
+  musicNodes = { bus, voices: [v1, v2, v3], filt };
+  // Default day mode.
+  setMusicMode('day');
+  // Slow ramp-in so it doesn't slam.
+  const t0 = ctx.currentTime;
+  v1.gain.gain.linearRampToValueAtTime(0.7, t0 + 4);
+  v2.gain.gain.linearRampToValueAtTime(0.4, t0 + 4);
+  v3.gain.gain.linearRampToValueAtTime(0.3, t0 + 4);
+}
+
+export function setMusicMode(mode) {
+  if (!musicNodes) return;
+  const t = ctx.currentTime;
+  const { voices, filt, bus } = musicNodes;
+  const [v1, v2, v3] = voices;
+  if (mode === 'night') {
+    v1.osc.frequency.linearRampToValueAtTime(98,  t + 1.5);   // slightly flatter root
+    v2.osc.frequency.linearRampToValueAtTime(155, t + 1.5);
+    v3.osc.frequency.linearRampToValueAtTime(196, t + 1.5);
+    filt.frequency.linearRampToValueAtTime(420, t + 2);       // darker
+    bus.gain.linearRampToValueAtTime(0.22, t + 2);
+  } else if (mode === 'combat') {
+    v1.osc.frequency.linearRampToValueAtTime(110, t + 0.5);
+    v2.osc.frequency.linearRampToValueAtTime(146, t + 0.5);   // dissonant 4th
+    v3.osc.frequency.linearRampToValueAtTime(220, t + 0.5);
+    filt.frequency.linearRampToValueAtTime(1500, t + 1);
+    bus.gain.linearRampToValueAtTime(0.30, t + 1);
+  } else { // day
+    v1.osc.frequency.linearRampToValueAtTime(110, t + 1.5);
+    v2.osc.frequency.linearRampToValueAtTime(165, t + 1.5);
+    v3.osc.frequency.linearRampToValueAtTime(220, t + 1.5);
+    filt.frequency.linearRampToValueAtTime(800, t + 2);
+    bus.gain.linearRampToValueAtTime(0.18, t + 2);
+  }
+}

@@ -12,6 +12,10 @@ const SPRINT_MULT = 1.7;
 const JUMP_VEL = 6.0;
 const GRAVITY = 22;
 const PLAYER_RADIUS = 0.4;
+const STAMINA_MAX = 100;
+const STAMINA_DRAIN = 18;        // /s while sprinting
+const STAMINA_REGEN = 14;        // /s while not sprinting
+const STAMINA_REGEN_DELAY = 0.8; // s after stopping sprint before regen kicks in
 
 export const keys = Object.create(null);
 addEventListener('keydown', (e) => { keys[e.code] = true; });
@@ -49,6 +53,8 @@ export const player = {
   vy: 0,
   onGround: false,
   hp: 100,
+  stamina: STAMINA_MAX,
+  staminaCooldown: 0,           // counts down after sprinting; regen blocked while > 0
   invulnerable: true,           // flipped by main.js when JUGAR is pressed
   invulnGraceUntil: 0,          // post-respawn grace window
   yaw: () => yaw,
@@ -63,6 +69,8 @@ export const player = {
   },
   respawn() {
     this.hp = 100;
+    this.stamina = STAMINA_MAX;
+    this.staminaCooldown = 0;
     this.pos.set(0, heightAt(0, 0) + EYE_HEIGHT, 0);
     this.vy = 0;
     this.invulnGraceUntil = performance.now() / 1000 + 6;
@@ -110,7 +118,18 @@ export function updatePlayer(dt) {
   if (keys['KeyA']) _move.sub(_right);
   if (_move.lengthSq() > 0) _move.normalize();
 
-  const sprint = (keys['ShiftLeft'] || keys['ShiftRight']) ? SPRINT_MULT : 1;
+  // Stamina-gated sprint: holding shift drains stamina; if it hits 0 the
+  // sprint multiplier drops to 1 until enough has regenerated.
+  const sprintHeld = (keys['ShiftLeft'] || keys['ShiftRight']) && (keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD']);
+  let sprint = 1;
+  if (sprintHeld && player.stamina > 1) {
+    sprint = SPRINT_MULT;
+    player.stamina = Math.max(0, player.stamina - STAMINA_DRAIN * dt);
+    player.staminaCooldown = STAMINA_REGEN_DELAY;
+  } else {
+    if (player.staminaCooldown > 0) player.staminaCooldown -= dt;
+    else if (player.stamina < STAMINA_MAX) player.stamina = Math.min(STAMINA_MAX, player.stamina + STAMINA_REGEN * dt);
+  }
   const speed = WALK_SPEED * sprint;
   let nx = player.pos.x + _move.x * speed * dt;
   let nz = player.pos.z + _move.z * speed * dt;

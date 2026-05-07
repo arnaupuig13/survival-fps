@@ -10,11 +10,13 @@ import { updateWeapons } from './weapons.js';
 import {
   setHP, setOnlineCount, flashDamage, logLine, tickFps, showBanner,
   setInventory, showInteract, hideInteract,
-  setClock, showDamageArrow,
+  setClock, showDamageArrow, setStamina, flashHitMarker,
 } from './hud.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
 import { nearestInRange } from './loot.js';
+import { renderMinimap } from './minimap.js';
+import { lastShotWithinKillWindow } from './weapons.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -71,6 +73,12 @@ network.onEnemyDead = (id, msg) => {
   // Town despawns broadcast eDead too — ignore those for the kill counter.
   if (msg.despawn) return;
   inv.bumpKills();
+  // If we were the one who shot this enemy a moment ago, upgrade the
+  // hit marker to red and chime.
+  if (lastShotWithinKillWindow(id)) {
+    flashHitMarker(true);
+    sfx.playKill();
+  }
   if (msg.isBoss) {
     logLine('★ EL DOCTOR HA CAIDO — loot legendario disponible');
     sfx.playPickup();
@@ -81,9 +89,15 @@ network.onLootGranted = (loot) => {
   for (const l of lines) logLine(l);
   sfx.playPickup();
 };
+let isNightServer = false;
 network.onTimeUpdate = (h, isNight) => {
   serverHour = h;
   serverHourSetAt = performance.now();
+  // Update music mode if night flipped (debounced inside setMusicMode).
+  if (isNight !== isNightServer) {
+    isNightServer = isNight;
+    sfx.setMusicMode?.(isNight ? 'night' : 'day');
+  }
 };
 
 // =====================================================================
@@ -91,6 +105,7 @@ network.onTimeUpdate = (h, isNight) => {
 // =====================================================================
 playBtn.addEventListener('click', () => {
   sfx.ensureAudio();          // first user gesture unlocks AudioContext
+  sfx.startMusic?.();         // start the ambient drone
   player.startGame();
   menuEl.style.display = 'none';
   renderer.domElement.requestPointerLock?.();
@@ -192,8 +207,21 @@ function frame(now) {
   setTimeOfDay(h);
   setClock(h);
 
+  // Stamina HUD bar.
+  setStamina(player.stamina ?? 100);
+
+  // Combat music mode — flip to combat when player has been hit recently.
+  // Falls back to day/night otherwise.
+  const inCombat = (performance.now() / 1000 - (player.lastHitAt || 0)) < 4;
+  if (inCombat && !_combatMusic) { _combatMusic = true; sfx.setMusicMode?.('combat'); }
+  else if (!inCombat && _combatMusic) { _combatMusic = false; sfx.setMusicMode?.(isNightServer ? 'night' : 'day'); }
+
+  // Mini-map.
+  renderMinimap();
+
   tickFps(dt);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
+let _combatMusic = false;
 requestAnimationFrame(frame);

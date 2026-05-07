@@ -181,12 +181,78 @@ function makePeerMesh() {
   return g;
 }
 
+// Deer — taller quadruped with antlers. Lighter fur, blue calm eyes.
+function makeDeerMesh() {
+  const g = new THREE.Group();
+  const furMat   = new THREE.MeshStandardMaterial({ color: 0x9a6e3a, roughness: 0.95 });
+  const bellyMat = new THREE.MeshStandardMaterial({ color: 0xcaa278, roughness: 0.95 });
+  const antlerMat= new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.85 });
+  const noseMat  = new THREE.MeshStandardMaterial({ color: 0x111111 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 1.15), furMat);
+  body.position.y = 0.95; g.add(body);
+  const belly = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.18, 0.95), bellyMat);
+  belly.position.set(0, 0.7, 0); g.add(belly);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.36, 0.36), furMat);
+  head.position.set(0, 1.4, 0.62); g.add(head);
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.22), bellyMat);
+  snout.position.set(0, 1.32, 0.85); g.add(snout);
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.04), noseMat);
+  nose.position.set(0, 1.32, 0.97); g.add(nose);
+  // Antlers — two forked spikes.
+  for (const sx of [-1, 1]) {
+    const main = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.32, 0.05), antlerMat);
+    main.position.set(sx * 0.1, 1.7, 0.6); main.rotation.z = sx * 0.2; g.add(main);
+    const fork = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.18, 0.05), antlerMat);
+    fork.position.set(sx * 0.18, 1.78, 0.55); fork.rotation.z = sx * 0.7; g.add(fork);
+  }
+  // Long thin legs.
+  const legGeom = new THREE.BoxGeometry(0.1, 0.85, 0.1);
+  const fL = new THREE.Mesh(legGeom, furMat); fL.position.set(-0.18, 0.42,  0.4); g.add(fL);
+  const fR = new THREE.Mesh(legGeom, furMat); fR.position.set( 0.18, 0.42,  0.4); g.add(fR);
+  const bL = new THREE.Mesh(legGeom, furMat); bL.position.set(-0.18, 0.42, -0.4); g.add(bL);
+  const bR = new THREE.Mesh(legGeom, furMat); bR.position.set( 0.18, 0.42, -0.4); g.add(bR);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.05), bellyMat);
+  tail.position.set(0, 1.05, -0.6); g.add(tail);
+  g.userData.legs = [fL, fR, bL, bR];
+  return g;
+}
+
+// Rabbit — small low quadruped, tall ears, white tail.
+function makeRabbitMesh() {
+  const g = new THREE.Group();
+  const furMat = new THREE.MeshStandardMaterial({ color: 0x8a7a5a, roughness: 0.95 });
+  const tailMat= new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.95 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.24, 0.45), furMat);
+  body.position.y = 0.22; g.add(body);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), furMat);
+  head.position.set(0, 0.34, 0.28); g.add(head);
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.05), furMat);
+    ear.position.set(sx * 0.07, 0.55, 0.27); g.add(ear);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 5, 4), eyeMat);
+    eye.position.set(sx * 0.07, 0.36, 0.4); g.add(eye);
+  }
+  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.08, 5, 4), tailMat);
+  tail.position.set(0, 0.24, -0.28); g.add(tail);
+  // Stubby legs.
+  const legGeom = new THREE.BoxGeometry(0.08, 0.14, 0.08);
+  const fL = new THREE.Mesh(legGeom, furMat); fL.position.set(-0.08, 0.07,  0.15); g.add(fL);
+  const fR = new THREE.Mesh(legGeom, furMat); fR.position.set( 0.08, 0.07,  0.15); g.add(fR);
+  const bL = new THREE.Mesh(legGeom, furMat); bL.position.set(-0.08, 0.07, -0.15); g.add(bL);
+  const bR = new THREE.Mesh(legGeom, furMat); bR.position.set( 0.08, 0.07, -0.15); g.add(bR);
+  g.userData.legs = [fL, fR, bL, bR];
+  return g;
+}
+
 function meshFor(etype) {
   if (etype === 'scientist')   return makeScientistMesh('rifle');
   if (etype === 'sci_shotgun') return makeScientistMesh('shotgun');
   if (etype === 'sci_sniper')  return makeScientistMesh('sniper');
   if (etype === 'boss')        return makeBossMesh();
   if (etype === 'wolf')        return makeWolfMesh();
+  if (etype === 'deer')        return makeDeerMesh();
+  if (etype === 'rabbit')      return makeRabbitMesh();
   if (etype === 'runner')      return makeZombieMesh('runner');
   if (etype === 'tank')        return makeZombieMesh('tank');
   return makeZombieMesh('zombie');

@@ -121,20 +121,29 @@ function tryFire() {
 
   network.shoot(_origin, _dir, hitId, cfg.dmg);
 
-  // Local muzzle flash + recoil pulse.
+  // Local muzzle flash + hit marker. Kill upgrade happens from main.js
+  // when the server confirms the entity died within a short window.
   muzzle.intensity = 6;
   flashHitMarker(hitId !== null);
+  if (hitId !== null) lastShotInfo = { hitId, t: performance.now() };
 }
 
-function flashHitMarker(hit) {
-  const el = document.getElementById('hitMarker');
-  if (!el) return;
-  el.style.transition = 'none';
-  el.style.opacity = hit ? '1' : '0.3';
-  // Force reflow so the next transition kicks in.
-  void el.offsetWidth;
-  el.style.transition = 'opacity 0.4s';
-  el.style.opacity = '0';
+// Exported so main.js can detect a kill arriving shortly after a hit and
+// upgrade the marker to red.
+let lastShotInfo = { hitId: null, t: 0 };
+export function lastShotWithinKillWindow(enemyId) {
+  if (lastShotInfo.hitId !== enemyId) return false;
+  return (performance.now() - lastShotInfo.t) < 350;
+}
+
+// Renamed: flashHitMarker now lives in hud.js. Kept the local function as
+// a thin wrapper so existing call sites keep working without touching the
+// fire path. `kill` is set later by main.js when an eDead arrives within
+// ~250 ms of a shot.
+import { flashHitMarker as hudFlashHitMarker } from './hud.js';
+function flashHitMarker(hit, isKill = false) {
+  if (!hit && !isKill) return;
+  hudFlashHitMarker(isKill);
 }
 
 // =====================================================================
