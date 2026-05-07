@@ -63,6 +63,11 @@ export const player = {
   hp: 100,
   stamina: STAMINA_MAX,
   staminaCooldown: 0,
+  // Survival stats — drain over time, damage you when they hit 0.
+  hunger: 100,
+  thirst: 100,
+  warmth: 100,
+  nearFire: false,        // set by main.js each frame; affects warmth + cooking
   crouching: false,
   eyeHeightCurrent: EYE_HEIGHT,
   invulnerable: true,
@@ -99,12 +104,44 @@ export const player = {
     this.invulnGraceUntil = performance.now() / 1000 + 4;
   },
   // HP regen — sumar lentamente si no fuiste hit en los ultimos 5s.
+  // HP regen también requiere comer y beber: si hunger o thirst en 0, no regen.
   regen(dt) {
-    if (this.hp <= 0 || this.hp >= 100) return;
-    const now = performance.now() / 1000;
-    if (now - (this.lastHitAt || 0) < 5) return;
-    this.hp = Math.min(100, this.hp + 4 * dt); // ~4 HP/s
+    if (this.hp > 0 && this.hp < 100) {
+      const now = performance.now() / 1000;
+      if (now - (this.lastHitAt || 0) >= 5 && this.hunger > 10 && this.thirst > 10) {
+        this.hp = Math.min(100, this.hp + 4 * dt);
+      }
+    }
   },
+  // Drain hambre / sed / calor con el tiempo. Si llegan a 0, el player sufre
+  // damage continuo hasta que coma / beba / se caliente. Llamado desde main loop.
+  tickSurvival(dt, isNight) {
+    if (this.invulnerable || this.godMode || this.hp <= 0) return;
+    // Hunger and thirst tick down slowly. Realistic rates: ~0.6 / s would
+    // empty a stat in ~3 minutes. We use 0.5 to keep early game forgiving.
+    this.hunger = Math.max(0, this.hunger - 0.5 * dt);
+    this.thirst = Math.max(0, this.thirst - 0.7 * dt);   // sed más rápida
+    // Warmth depends on the time of day + proximity to fire.
+    if (this.nearFire) {
+      this.warmth = Math.min(100, this.warmth + 12 * dt);
+    } else if (isNight) {
+      this.warmth = Math.max(0, this.warmth - 1.2 * dt);
+    } else {
+      // Sun keeps you warm during the day.
+      this.warmth = Math.min(100, this.warmth + 0.6 * dt);
+    }
+    // Damage when stats reach 0 — slow to give the player a chance to fix it.
+    if (this.hunger <= 0) this.hp = Math.max(0, this.hp - 1.0 * dt);
+    if (this.thirst <= 0) this.hp = Math.max(0, this.hp - 1.5 * dt);
+    if (this.warmth <= 0) this.hp = Math.max(0, this.hp - 0.8 * dt);
+  },
+  eat(item) {
+    if (item === 'berry')        { this.hunger = Math.min(100, this.hunger + 12); this.thirst = Math.min(100, this.thirst + 6); return true; }
+    if (item === 'meat_raw')     { this.hunger = Math.min(100, this.hunger + 18); this.hp = Math.max(1, this.hp - 5); return true; } // upset stomach
+    if (item === 'meat_cooked')  { this.hunger = Math.min(100, this.hunger + 35); return true; }
+    return false;
+  },
+  drink() { this.thirst = Math.min(100, this.thirst + 40); },
   lastHitAt: 0,
 };
 

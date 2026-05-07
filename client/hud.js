@@ -19,6 +19,15 @@ export function setStamina(s) {
   if (staminaFill) staminaFill.style.width = `${Math.max(0, Math.min(100, s))}%`;
 }
 
+const hungerFill = document.getElementById('hungerFill');
+const thirstFill = document.getElementById('thirstFill');
+const warmthFill = document.getElementById('warmthFill');
+export function setSurvival(hunger, thirst, warmth) {
+  if (hungerFill) hungerFill.style.width = `${Math.max(0, Math.min(100, hunger))}%`;
+  if (thirstFill) thirstFill.style.width = `${Math.max(0, Math.min(100, thirst))}%`;
+  if (warmthFill) warmthFill.style.width = `${Math.max(0, Math.min(100, warmth))}%`;
+}
+
 let _markerTimer = 0;
 export function flashHitMarker(isKill = false) {
   if (!hitMarkerEl) return;
@@ -175,7 +184,7 @@ export function setCompass(yawRad) {
   compassStrip.style.transform = `translateX(${offsetX}px)`;
 }
 
-export function renderInventory(state, itemMeta) {
+export function renderInventory(state, itemMeta, opts = {}) {
   if (!invGrid) return;
   invGrid.innerHTML = '';
   for (const [key, meta] of Object.entries(itemMeta)) {
@@ -193,6 +202,31 @@ export function renderInventory(state, itemMeta) {
     }
     invGrid.appendChild(div);
   }
+  // Recipes panel — appended below the inventory grid in the same modal.
+  if (!opts.recipes) return;
+  const recipeWrap = document.createElement('div');
+  recipeWrap.className = 'recipesGrid';
+  recipeWrap.innerHTML = '<div class="recipeHeader">CRAFTING</div>';
+  for (const r of opts.recipes) {
+    const can = canAffordRecipe(state, r) && (!r.needsFire || opts.nearFire);
+    const reqText = Object.entries(r.requires).map(([k, v]) => `${v}× ${itemMeta[k]?.label || k}`).join(' + ') || '—';
+    const btn = document.createElement('button');
+    btn.className = 'recipeBtn' + (can ? '' : ' disabled');
+    btn.disabled = !can;
+    btn.innerHTML = `<div class="rname">${r.label}</div><div class="rreq">${reqText}${r.needsFire ? ' · cerca de fuego' : ''}</div>`;
+    btn.addEventListener('click', () => {
+      opts.onCraft?.(r.id);
+    });
+    recipeWrap.appendChild(btn);
+  }
+  invGrid.parentNode.insertBefore(recipeWrap, invGrid.nextSibling);
+}
+
+function canAffordRecipe(state, r) {
+  for (const [k, v] of Object.entries(r.requires)) {
+    if ((state[k] | 0) < v) return false;
+  }
+  return true;
 }
 
 // Directional damage arrow — angle is in radians measured from camera

@@ -175,9 +175,10 @@ const LOOT_TABLES = {
     { item: 'bandage',  range: [3, 6] },
     { item: 'rifle_pickup', chance: 1 },
   ],
-  // Animal kill — small heal pickup, no ammo.
+  // Animal kill — raw meat for cooking, small chance of bandage.
   animal: [
-    { item: 'bandage', range: [1, 1] },
+    { item: 'meat_raw', range: [1, 2] },
+    { item: 'bandage',  chance: 0.3 },
   ],
 };
 

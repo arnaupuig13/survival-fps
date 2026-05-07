@@ -31,6 +31,14 @@
     #hpFill { height: 100%; background: linear-gradient(90deg, #c93f3f, #f08a8a); transition: width 0.18s; }
     #staminaBar { width: 100%; height: 8px; background: rgba(0,0,0,0.55); border: 1px solid #333; margin-top: 3px; }
     #staminaFill { height: 100%; background: linear-gradient(90deg, #4a8030, #80c060); transition: width 0.12s; }
+    #survivalRow { margin-top: 6px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .survBar { font-family: monospace; }
+    .survLabel { font-size: 9px; letter-spacing: 1.2px; color: #888; }
+    .survTrack { width: 100%; height: 6px; background: rgba(0,0,0,0.55); border: 1px solid #333; margin-top: 2px; }
+    .survFill { height: 100%; transition: width 0.18s; }
+    .survFill.survHunger { background: linear-gradient(90deg, #b0801a, #f0c060); }
+    .survFill.survThirst { background: linear-gradient(90deg, #2a6090, #4ab0e0); }
+    .survFill.survWarmth { background: linear-gradient(90deg, #8a3010, #f08040); }
     /* Mini-map */
     #minimap { position: fixed; right: 12px; top: 86px; background: rgba(0,0,0,0.55); border: 1px solid #444; border-radius: 50%; }
     #ammoRow { display: flex; gap: 14px; margin-top: 8px; font-family: monospace; font-size: 13px; color: #ddd; }
@@ -110,6 +118,13 @@
     .invItem.zero .icount { color: #555; }
     .invItem.locked { opacity: 0.45; }
     .invItem .iflag { font-size: 9px; color: #888; margin-top: 2px; letter-spacing: 1px; }
+    .recipesGrid { background: rgba(20,20,20,0.95); padding: 14px 32px; min-width: 540px; border-top: 1px solid #333; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .recipesGrid .recipeHeader { grid-column: span 2; font-size: 12px; letter-spacing: 3px; color: #f0c060; margin-bottom: 4px; }
+    .recipeBtn { background: rgba(0,0,0,0.45); border: 1px solid #444; padding: 8px 12px; cursor: pointer; text-align: left; font-family: system-ui; }
+    .recipeBtn:hover:not(.disabled) { background: rgba(40,30,10,0.6); border-color: #f0c060; }
+    .recipeBtn.disabled { opacity: 0.4; cursor: not-allowed; }
+    .recipeBtn .rname { color: #ddd; font-size: 12px; letter-spacing: 1px; font-weight: 700; }
+    .recipeBtn .rreq { color: #888; font-size: 10px; margin-top: 2px; }
     .invHints { background: rgba(20,20,20,0.95); padding: 14px 32px; font-size: 11px; color: #888; line-height: 1.7; min-width: 540px; border-top: 1px solid #333; }
     .invHints kbd { background: #333; color: #ddd; padding: 1px 6px; border-radius: 2px; }
 
@@ -185,6 +200,11 @@
     <div id="hpLabel">VIDA</div>
     <div id="hpBar"><div id="hpFill" style="width:100%"></div></div>
     <div id="staminaBar"><div id="staminaFill" style="width:100%"></div></div>
+    <div id="survivalRow">
+      <div class="survBar"><span class="survLabel">HAMBRE</span><div class="survTrack"><div class="survFill survHunger" id="hungerFill" style="width:100%"></div></div></div>
+      <div class="survBar"><span class="survLabel">SED</span><div class="survTrack"><div class="survFill survThirst" id="thirstFill" style="width:100%"></div></div></div>
+      <div class="survBar"><span class="survLabel">CALOR</span><div class="survTrack"><div class="survFill survWarmth" id="warmthFill" style="width:100%"></div></div></div>
+    </div>
     <div id="ammoRow">
       <span class="ammoCell"><span class="ammoLabel">PISTOLA</span><span id="ammoP">0</span></span>
       <span class="ammoCell"><span class="ammoLabel">RIFLE</span><span id="ammoR">0</span></span>
@@ -228,7 +248,7 @@
     <div class="invGrid" id="invGrid"></div>
     <div class="invHints">
       <div><kbd>1</kbd>-<kbd>9</kbd> hotbar · <kbd>R</kbd> recargar · <kbd>C</kbd> agacharse · <kbd>H</kbd> usar venda</div>
-      <div><kbd>F</kbd> subir/bajar buggy · <kbd>E</kbd> abrir cofre · <kbd>SHIFT</kbd> correr</div>
+      <div><kbd>F</kbd> buggy · <kbd>E</kbd> recoger · <kbd>J</kbd> comer · <kbd>U</kbd> beber · <kbd>B</kbd> hoguera · <kbd>G</kbd> granada</div>
     </div>
   </div>
 

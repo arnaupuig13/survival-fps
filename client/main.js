@@ -15,8 +15,9 @@ import {
   setClock, showDamageArrow, setStamina, flashHitMarker,
   setDay, setPlayerName, setHotbarActive, setHotbarCount, setHotbarLocked,
   setActiveWeapon, showReload, toggleInventory, isInventoryOpen, renderInventory,
-  setCompass,
+  setCompass, setSurvival,
 } from './hud.js';
+import * as survival from './survival.js';
 import * as knife from './knife.js';
 import { updateCityLights, toggleColliderDebug } from './towns.js';
 import * as inv from './inventory.js';
@@ -54,8 +55,19 @@ inv.onChange((state) => {
   setHotbarCount(2, state.bandage);
   setHotbarCount(3, state.grenade);
   setHotbarLocked(1, !state.rifle_pickup);
-  if (isInventoryOpen()) renderInventory(state, inv.ITEMS);
+  if (isInventoryOpen()) renderInventory(state, inv.ITEMS, { recipes: inv.RECIPES, nearFire: player.nearFire, onCraft: tryCraft });
 });
+
+// Crafting handler — exposed to hud.js via the inventory render args.
+function tryCraft(recipeId) {
+  const result = inv.craft(recipeId, { nearFire: player.nearFire, nearWater: false });
+  if (result == null) {
+    logLine('No se puede craftear (faltan materiales o necesitás fuego)');
+  } else {
+    logLine(`+ ${result}`);
+    sfx.playPickup?.();
+  }
+}
 
 // =====================================================================
 // Persistence — total kills, days survived, nickname.
@@ -320,6 +332,7 @@ player.onLockChange = (locked) => {
 // Interaction keys: E (open crate), H (heal with bandage).
 // =====================================================================
 let nearbyCrate = null;
+let nearbyBush = null;
 
 // Player.js applies player.mouseSensitivity if present (default 0.0022).
 // We just need the field to exist so applySettings can override it.
@@ -360,6 +373,15 @@ addEventListener('keydown', (e) => {
     network.openCrate(nearbyCrate.id);
     nearbyCrate = null;
     hideInteract();
+  } else if (e.code === 'KeyE' && nearbyBush) {
+    const got = survival.harvestBush(nearbyBush);
+    if (got > 0) {
+      inv.add('berry', got);
+      logLine('+1 BAYA');
+      sfx.playPickup?.();
+    }
+    nearbyBush = null;
+    hideInteract();
   } else if (e.code === 'KeyH') {
     if (inv.useBandage(player)) {
       logLine('+30 HP (vendaje usado)');
@@ -390,6 +412,27 @@ addEventListener('keydown', (e) => {
     // Dev: visualize obstacle colliders as wireframes (yellow box, blue circle).
     const on = toggleColliderDebug();
     logLine(on ? 'Colliders ON (debug)' : 'Colliders OFF');
+  } else if (e.code === 'KeyB' && !e.repeat) {
+    // Place a campfire at the player's feet — needs 1 campfire item.
+    if (inv.consume('campfire', 1)) {
+      survival.placeFire(player.pos.x, player.pos.z);
+      logLine('Hoguera colocada');
+      sfx.playPickup?.();
+    } else {
+      logLine('Necesitas una hoguera (crafteable con 5 madera + 2 piedra)');
+    }
+  } else if (e.code === 'KeyJ' && !e.repeat) {
+    // Quick-eat: prefer cooked meat → berry → raw meat.
+    let ate = null;
+    if (inv.consume('meat_cooked', 1)) { player.eat('meat_cooked'); ate = 'CARNE COCIDA'; }
+    else if (inv.consume('berry', 1))  { player.eat('berry'); ate = 'BAYAS'; }
+    else if (inv.consume('meat_raw', 1)) { player.eat('meat_raw'); ate = 'CARNE CRUDA (-5 HP)'; }
+    if (ate) { logLine(`+ ${ate}`); sfx.playPickup?.(); }
+    else logLine('Sin comida');
+  } else if (e.code === 'KeyU' && !e.repeat) {
+    // Quick-drink water bottle.
+    if (inv.consume('water_bottle', 1)) { player.drink(); logLine('+ AGUA'); sfx.playPickup?.(); }
+    else logLine('Sin agua');
   }
 });
 
@@ -525,8 +568,13 @@ function frame(now) {
   updateWeapons(dt);
   knife.updateKnife(dt);
   network.update(dt);
+  // Survival systems — fire flicker + nearFire flag for the player tick.
+  survival.updateSurvival(dt);
+  player.nearFire = survival.isNearAnyFire(player.pos.x, player.pos.z);
+  player.tickSurvival(dt, isNightServer);
   player.regen(dt);
   setHP(player.hp);
+  setSurvival(player.hunger, player.thirst, player.warmth);
   setCompass(player.yaw());
 
   // Death detection — see hp <= 0 even if onYouHit didn't fire on this tick.
@@ -570,10 +618,11 @@ function frame(now) {
     }
   }
 
-  // Interaction prompt — prefer crate prompt; fall back to vehicle prompt.
+  // Interaction prompt — crate > bush > vehicle.
   if (player.locked && player.hp > 0) {
     const c = nearestInRange(player.pos);
-    const vp = vehicle.nearbyVehiclePrompt(player.pos);
+    const bush = c ? null : survival.nearestBushInRange(player.pos);
+    const vp = (c || bush) ? null : vehicle.nearbyVehiclePrompt(player.pos);
     if (c && c !== nearbyCrate) {
       nearbyCrate = c;
       const tier = c.tableKey === 'boss' ? 'cofre del DOCTOR'
@@ -581,13 +630,18 @@ function frame(now) {
                 : c.tableKey === 'animal' ? 'restos del animal'
                 : 'cofre';
       showInteract(`abrir ${tier}`);
-    } else if (!c && nearbyCrate) {
+      nearbyBush = null;
+    } else if (!c && bush && bush !== nearbyBush) {
+      nearbyBush = bush;
       nearbyCrate = null;
+      showInteract('recoger bayas');
+    } else if (!c && !bush && (nearbyCrate || nearbyBush)) {
+      nearbyCrate = null;
+      nearbyBush = null;
       hideInteract();
-    } else if (!c && !nearbyCrate && vp) {
+    } else if (!c && !bush && !nearbyCrate && !nearbyBush && vp) {
       showInteract(vp.replace('[F]', '').trim());
-      // Use the prompt label but the [F] action is wired in the keydown handler above.
-    } else if (!c && !nearbyCrate && !vp) {
+    } else if (!c && !bush && !nearbyCrate && !nearbyBush && !vp) {
       hideInteract();
     }
   }

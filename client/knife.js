@@ -8,6 +8,9 @@ import { network } from './network.js';
 import { player } from './player.js';
 import { spawnDamageNumber } from './effects.js';
 import * as sfx from './sounds.js';
+import { obstacles, heightAt } from './world.js';
+import { scene as worldScene } from './three-setup.js';
+import * as inv from './inventory.js';
 
 const KNIFE_RANGE = 2.0;
 const KNIFE_DMG = 8;
@@ -64,14 +67,41 @@ function trySwing() {
     e.mesh.traverse(c => { if (c.isMesh) { candidates.push(c); eMap.set(c, id); } });
   }
   const hits = ray.intersectObjects(candidates, false);
-  if (hits.length === 0) return;
-  let obj = hits[0].object;
-  while (obj && !eMap.has(obj)) obj = obj.parent;
-  if (!obj) return;
-  const hitId = eMap.get(obj);
-  network.shoot(_origin, _dir, hitId, KNIFE_DMG);
-  spawnDamageNumber(hits[0].point.x, hits[0].point.y - 0.5, hits[0].point.z, KNIFE_DMG, false);
-  sfx.playHit?.();
+  if (hits.length > 0) {
+    let obj = hits[0].object;
+    while (obj && !eMap.has(obj)) obj = obj.parent;
+    if (obj) {
+      const hitId = eMap.get(obj);
+      network.shoot(_origin, _dir, hitId, KNIFE_DMG);
+      spawnDamageNumber(hits[0].point.x, hits[0].point.y - 0.5, hits[0].point.z, KNIFE_DMG, false);
+      sfx.playHit?.();
+      return;
+    }
+  }
+  // No enemy hit — try harvest: trees → wood, rocks → stone. Ray against
+  // the whole scene; classify by mesh material color heuristic.
+  const wRay = new THREE.Raycaster(_origin.clone(), _dir.clone(), 0.2, KNIFE_RANGE);
+  const sceneHits = wRay.intersectObjects(worldScene.children, true);
+  if (sceneHits.length === 0) return;
+  const sh = sceneHits[0];
+  // Detect by material color — trees use trunk/leaf, rocks use 0x6a6a6a.
+  let kind = null;
+  let m = sh.object;
+  while (m && !kind) {
+    const c = m.material?.color?.getHex?.();
+    if (c === 0x6a6a6a) kind = 'stone';
+    else if (c === 0x4a3018 || c === 0x386428) kind = 'wood';
+    m = m.parent;
+  }
+  if (kind === 'wood') {
+    inv.add('wood', 1);
+    spawnDamageNumber(sh.point.x, sh.point.y, sh.point.z, '+MADERA', false);
+    sfx.playHit?.();
+  } else if (kind === 'stone') {
+    inv.add('stone', 1);
+    spawnDamageNumber(sh.point.x, sh.point.y, sh.point.z, '+PIEDRA', false);
+    sfx.playHit?.();
+  }
 }
 
 export function updateKnife(dt) {
