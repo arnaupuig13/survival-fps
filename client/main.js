@@ -18,7 +18,7 @@ import {
   setCompass,
 } from './hud.js';
 import * as knife from './knife.js';
-import { updateCityLights } from './towns.js';
+import { updateCityLights, toggleColliderDebug } from './towns.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
 import { nearestInRange } from './loot.js';
@@ -380,12 +380,16 @@ addEventListener('keydown', (e) => {
     // Dev god-mode toggle. Will be removed before public launch.
     player.godMode = !player.godMode;
     if (player.godMode) {
-      logLine('★★★ MODO DIOS ACTIVADO — velocidad x10, balas inf, vuelo (SPACE sube, CTRL baja)');
+      logLine('★★★ MODO DIOS ACTIVADO — velocidad x10, balas inf, vuelo (SPACE sube, CTRL baja). Tecla K para ver colliders.');
       showBanner('★ MODO DIOS ★', 1500);
     } else {
       logLine('Modo dios desactivado');
       showBanner('mortal', 1200);
     }
+  } else if (e.code === 'KeyK' && !e.repeat) {
+    // Dev: visualize obstacle colliders as wireframes (yellow box, blue circle).
+    const on = toggleColliderDebug();
+    logLine(on ? 'Colliders ON (debug)' : 'Colliders OFF');
   }
 });
 

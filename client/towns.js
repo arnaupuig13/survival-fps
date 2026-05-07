@@ -14,8 +14,8 @@ import { heightAt, obstacles } from './world.js';
 
 const WALL_THICK = 0.25;
 const WALL_HEIGHT = 3.0;
-const DOOR_WIDTH = 1.6;
-const DOOR_HEIGHT = 2.2;
+const DOOR_WIDTH = 2.6;          // wider so the player + closest-point pushout has clear room
+const DOOR_HEIGHT = 2.4;
 
 // Cached materials so we don't allocate one per wall.
 const MATS = {
@@ -399,6 +399,40 @@ function buildCityFortifications(town) {
   cityAlertLights.push(...g.children.filter(c => c.userData?.isAlertLight));
 
   return { group: g, colliders };
+}
+
+// =====================================================================
+// Collider debug visualizer (tecla K). Renders every obstacle as a
+// wireframe so we can confirm doorway gaps line up with the meshes.
+// =====================================================================
+let _debugGroup = null;
+export function toggleColliderDebug() {
+  if (_debugGroup) {
+    scene.remove(_debugGroup);
+    _debugGroup.traverse(o => { if (o.geometry) o.geometry.dispose?.(); if (o.material) o.material.dispose?.(); });
+    _debugGroup = null;
+    return false;
+  }
+  _debugGroup = new THREE.Group();
+  const boxMat = new THREE.LineBasicMaterial({ color: 0xffea00 });
+  const circleMat = new THREE.LineBasicMaterial({ color: 0x40c0ff });
+  for (const o of obstacles) {
+    if (o.type === 'box') {
+      const geom = new THREE.BoxGeometry(o.hw * 2, 0.6, o.hh * 2);
+      const wire = new THREE.LineSegments(new THREE.EdgesGeometry(geom), boxMat);
+      wire.position.set(o.cx, heightAt(o.cx, o.cz) + 0.3, o.cz);
+      wire.rotation.y = o.ry || 0;
+      _debugGroup.add(wire);
+    } else {
+      const geom = new THREE.RingGeometry((o.r || 0.5) - 0.05, (o.r || 0.5) + 0.05, 16);
+      geom.rotateX(-Math.PI / 2);
+      const ring = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ color: 0x40c0ff, side: THREE.DoubleSide }));
+      ring.position.set(o.x, heightAt(o.x, o.z) + 0.05, o.z);
+      _debugGroup.add(ring);
+    }
+  }
+  scene.add(_debugGroup);
+  return true;
 }
 
 // Pulse all alert lights on a sine wave so the city looks alive at night.

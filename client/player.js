@@ -163,6 +163,18 @@ export function updatePlayer(dt) {
   if (nz >  WORLD_HALF - 0.5) nz =  WORLD_HALF - 0.5;
   if (nz < -WORLD_HALF + 0.5) nz = -WORLD_HALF + 0.5;
 
+  // God mode bypasses obstacle collision entirely so the user can fly
+  // through walls during dev testing.
+  if (player.godMode) {
+    player.pos.x = nx;
+    player.pos.z = nz;
+    player.vy -= GRAVITY * dt;
+    if (keys['Space']) { player.pos.y += speed * dt; }
+    if (keys['ControlLeft'] || keys['ControlRight']) { player.pos.y -= speed * dt; }
+    player.vy = 0;
+    camera.position.copy(player.pos);
+    return;
+  }
   // Obstacle collision — circle (trees, rocks, props) AND box (building
   // walls) variants. Box collision uses closest-point pushout, which lets
   // the player slide naturally along a wall and walk through doorways.
