@@ -1,38 +1,106 @@
-// Server-driven entities: peers (other players) and zombies.
-// Each lives in a Map keyed by server id. Position lerps toward a target
-// updated by network snapshots. Mesh Y is snapped to the local heightmap so
-// nothing falls through the floor or buries underground (the v0 bug).
+// Server-driven entities: peers (other players) and enemies (zombie / runner /
+// tank / scientist / boss). All live in Maps keyed by server id; positions
+// lerp toward a target updated by network snapshots. Mesh Y is snapped to
+// the local heightmap every frame so nothing falls through or buries.
 
 import * as THREE from 'three';
 import { scene } from './three-setup.js';
 import { heightAt } from './world.js';
 
 // =====================================================================
-// Mesh factories — kept simple, low-poly. Stylised enough to read.
+// Mesh factories — low-poly stylised. Different silhouettes per etype so
+// the player can read the threat at a glance.
 // =====================================================================
-function makeZombieMesh() {
+function makeZombieMesh(variant = 'zombie') {
   const g = new THREE.Group();
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0x6f8a55, roughness: 0.85 });
-  const clothMat = new THREE.MeshStandardMaterial({ color: 0x303a25, roughness: 0.9 });
-  // Body (torso)
+  let skin = 0x6f8a55, cloth = 0x303a25, scale = 1;
+  if (variant === 'runner') { skin = 0x8a8055; cloth = 0x55452a; scale = 0.95; }
+  if (variant === 'tank')   { skin = 0x4a5a3a; cloth = 0x222a18; scale = 1.25; }
+  const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.85 });
+  const clothMat = new THREE.MeshStandardMaterial({ color: cloth, roughness: 0.9 });
+
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.4), clothMat);
-  torso.position.y = 1.05;
-  g.add(torso);
-  // Head
+  torso.position.y = 1.05; g.add(torso);
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.45, 0.4), skinMat);
-  head.position.y = 1.75;
-  g.add(head);
-  // Arms — pointing forward (zombie pose)
+  head.position.y = 1.75; g.add(head);
   const armGeom = new THREE.BoxGeometry(0.18, 0.85, 0.18);
-  const armL = new THREE.Mesh(armGeom, skinMat); armL.position.set(-0.45, 1.1, 0.2); armL.rotation.x = -Math.PI / 3;
-  const armR = new THREE.Mesh(armGeom, skinMat); armR.position.set( 0.45, 1.1, 0.2); armR.rotation.x = -Math.PI / 3;
-  g.add(armL); g.add(armR);
-  // Legs
+  const armL = new THREE.Mesh(armGeom, skinMat); armL.position.set(-0.45, 1.1, 0.2); armL.rotation.x = -Math.PI / 3; g.add(armL);
+  const armR = new THREE.Mesh(armGeom, skinMat); armR.position.set( 0.45, 1.1, 0.2); armR.rotation.x = -Math.PI / 3; g.add(armR);
   const legGeom = new THREE.BoxGeometry(0.22, 0.85, 0.22);
   const legL = new THREE.Mesh(legGeom, clothMat); legL.position.set(-0.18, 0.42, 0); g.add(legL);
   const legR = new THREE.Mesh(legGeom, clothMat); legR.position.set( 0.18, 0.42, 0); g.add(legR);
-  g.userData.legs = [legL, legR];
-  g.userData.arms = [armL, armR];
+  g.userData.legs = [legL, legR]; g.userData.arms = [armL, armR];
+  g.scale.setScalar(scale);
+  return g;
+}
+
+function makeScientistMesh() {
+  const g = new THREE.Group();
+  const coatMat   = new THREE.MeshStandardMaterial({ color: 0xeeeeec, roughness: 0.55 });
+  const trimMat   = new THREE.MeshStandardMaterial({ color: 0xbdbdbd, roughness: 0.5 });
+  const skinMat   = new THREE.MeshStandardMaterial({ color: 0xd9b896, roughness: 0.6 });
+  const goggleMat = new THREE.MeshStandardMaterial({ color: 0x222226, roughness: 0.3, metalness: 0.7 });
+  const rifleMat  = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.4, metalness: 0.7 });
+
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.65, 1.05, 0.35), coatMat);
+  torso.position.y = 1.0; g.add(torso);
+  // Coat hem (a wider plate at the bottom, suggests open lab coat).
+  const hem = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.18, 0.4), trimMat);
+  hem.position.y = 0.46; g.add(hem);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.42, 0.38), skinMat);
+  head.position.y = 1.7; g.add(head);
+  // Goggles stripe across the eyes.
+  const goggles = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.05), goggleMat);
+  goggles.position.set(0, 1.74, 0.18); g.add(goggles);
+  // Rifle held forward at chest height.
+  const rifle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.10, 0.6), rifleMat);
+  rifle.position.set(0.18, 1.05, 0.32); g.add(rifle);
+  // Arms.
+  const armGeom = new THREE.BoxGeometry(0.16, 0.8, 0.16);
+  const armL = new THREE.Mesh(armGeom, coatMat); armL.position.set(-0.38, 1.05, 0); g.add(armL);
+  const armR = new THREE.Mesh(armGeom, coatMat); armR.position.set( 0.38, 1.05, 0.18); armR.rotation.x = -Math.PI / 6; g.add(armR);
+  // Pant legs.
+  const legGeom = new THREE.BoxGeometry(0.2, 0.8, 0.2);
+  const pantMat = new THREE.MeshStandardMaterial({ color: 0x303138, roughness: 0.85 });
+  const legL = new THREE.Mesh(legGeom, pantMat); legL.position.set(-0.16, 0.4, 0); g.add(legL);
+  const legR = new THREE.Mesh(legGeom, pantMat); legR.position.set( 0.16, 0.4, 0); g.add(legR);
+  g.userData.legs = [legL, legR]; g.userData.rifle = rifle;
+  return g;
+}
+
+function makeBossMesh() {
+  const g = new THREE.Group();
+  const armorMat = new THREE.MeshStandardMaterial({ color: 0x8a2030, roughness: 0.5, metalness: 0.4, emissive: 0x300810, emissiveIntensity: 0.5 });
+  const trimMat  = new THREE.MeshStandardMaterial({ color: 0x222226, roughness: 0.4, metalness: 0.7 });
+  const visorMat = new THREE.MeshStandardMaterial({ color: 0xff5050, roughness: 0.1, metalness: 0.85, emissive: 0xff2020, emissiveIntensity: 0.9 });
+  const akMat    = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.45, metalness: 0.85 });
+
+  // Bigger torso.
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.4, 0.6), armorMat);
+  torso.position.y = 1.3; g.add(torso);
+  // Shoulder pauldrons.
+  for (const sx of [-1, 1]) {
+    const pauldron = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.3, 0.55), trimMat);
+    pauldron.position.set(sx * 0.65, 1.85, 0); g.add(pauldron);
+  }
+  // Bigger head with red visor strip.
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), trimMat);
+  head.position.y = 2.25; g.add(head);
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.13, 0.06), visorMat);
+  visor.position.set(0, 2.32, 0.27); g.add(visor);
+  // AK held at hip.
+  const ak = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.85), akMat);
+  ak.position.set(0.32, 1.2, 0.5); g.add(ak);
+  // Legs (armored).
+  const legGeom = new THREE.BoxGeometry(0.32, 1.0, 0.32);
+  const legL = new THREE.Mesh(legGeom, armorMat); legL.position.set(-0.25, 0.5, 0); g.add(legL);
+  const legR = new THREE.Mesh(legGeom, armorMat); legR.position.set( 0.25, 0.5, 0); g.add(legR);
+  // Glowing point light so he reads even at night.
+  const aura = new THREE.PointLight(0xff4040, 0.7, 8);
+  aura.position.set(0, 1.6, 0); g.add(aura);
+
+  g.userData.legs = [legL, legR]; g.userData.weapon = ak;
+  g.scale.setScalar(1.05);
   return g;
 }
 
@@ -52,32 +120,55 @@ function makePeerMesh() {
   return g;
 }
 
-// =====================================================================
-// Per-entity state
-// =====================================================================
-export const peers = new Map();    // id → { mesh, target {x,y,z,ry}, walkPhase }
-export const zombies = new Map();  // id → { mesh, target {x,y,z,ry,hp}, walkPhase, attackT }
+function meshFor(etype) {
+  if (etype === 'scientist') return makeScientistMesh();
+  if (etype === 'boss')      return makeBossMesh();
+  if (etype === 'runner')    return makeZombieMesh('runner');
+  if (etype === 'tank')      return makeZombieMesh('tank');
+  return makeZombieMesh('zombie');
+}
 
-export function spawnZombie(info) {
-  if (zombies.has(info.id)) return;
-  const mesh = makeZombieMesh();
-  // Place using local heightmap immediately — eliminates the v0 buried-zombie bug.
-  mesh.position.set(info.x, heightAt(info.x, info.z), info.z);
+// =====================================================================
+// State
+// =====================================================================
+export const peers = new Map();
+export const enemies = new Map();
+
+export function spawnEnemy(info) {
+  if (enemies.has(info.id)) return;
+  const mesh = meshFor(info.etype || 'zombie');
+  const groundY = heightAt(info.x, info.z);
+  mesh.position.set(info.x, groundY, info.z);
   mesh.rotation.y = info.ry || 0;
+  if (info.sleeping) {
+    // Sleeping: lying face-up on the ground.
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.y = groundY + 0.4;
+  }
   scene.add(mesh);
-  zombies.set(info.id, {
-    mesh,
+  enemies.set(info.id, {
+    mesh, etype: info.etype || 'zombie',
+    sleeping: !!info.sleeping,
+    isBoss: !!info.isBoss,
     target: { x: info.x, z: info.z, ry: info.ry || 0, hp: info.hp ?? 10 },
-    walkPhase: 0,
-    attackT: -1,
+    walkPhase: 0, attackT: -1,
     lastX: info.x, lastZ: info.z,
   });
 }
-export function removeZombie(id) {
-  const z = zombies.get(id); if (!z) return;
-  scene.remove(z.mesh);
-  z.mesh.traverse(c => { if (c.geometry) c.geometry.dispose?.(); });
-  zombies.delete(id);
+
+export function removeEnemy(id) {
+  const e = enemies.get(id); if (!e) return;
+  scene.remove(e.mesh);
+  e.mesh.traverse(c => { if (c.geometry) c.geometry.dispose?.(); });
+  enemies.delete(id);
+}
+
+export function wakeEnemy(id) {
+  const e = enemies.get(id); if (!e) return;
+  if (!e.sleeping) return;
+  e.sleeping = false;
+  e.mesh.rotation.x = 0;
+  // Y will be re-snapped to terrain on the next update tick.
 }
 
 export function spawnPeer(info) {
@@ -86,12 +177,7 @@ export function spawnPeer(info) {
   mesh.position.set(info.x, heightAt(info.x, info.z), info.z);
   mesh.rotation.y = info.ry || 0;
   scene.add(mesh);
-  peers.set(info.id, {
-    mesh,
-    target: { x: info.x, z: info.z, ry: info.ry || 0 },
-    walkPhase: 0,
-    lastX: info.x, lastZ: info.z,
-  });
+  peers.set(info.id, { mesh, target: { x: info.x, z: info.z, ry: info.ry || 0 }, walkPhase: 0, lastX: info.x, lastZ: info.z });
 }
 export function removePeer(id) {
   const p = peers.get(id); if (!p) return;
@@ -101,43 +187,40 @@ export function removePeer(id) {
 }
 
 // =====================================================================
-// Update — lerp positions, snap Y to terrain, animate walk + attack lunge.
+// Per-frame update.
 // =====================================================================
 export function updateEntities(dt) {
   const lerp = 1 - Math.exp(-15 * dt);
 
-  for (const z of zombies.values()) {
-    const m = z.mesh;
-    m.position.x += (z.target.x - m.position.x) * lerp;
-    m.position.z += (z.target.z - m.position.z) * lerp;
-    let dr = z.target.ry - m.rotation.y;
+  for (const e of enemies.values()) {
+    const m = e.mesh;
+    if (e.sleeping) {
+      // Don't lerp/animate sleeping enemies — they're a corpse pose.
+      const groundY = heightAt(m.position.x, m.position.z);
+      m.position.y = groundY + 0.4;
+      continue;
+    }
+    m.position.x += (e.target.x - m.position.x) * lerp;
+    m.position.z += (e.target.z - m.position.z) * lerp;
+    let dr = e.target.ry - m.rotation.y;
     while (dr > Math.PI) dr -= Math.PI * 2;
     while (dr < -Math.PI) dr += Math.PI * 2;
     m.rotation.y += dr * lerp;
-    // Snap Y to local heightmap — never trust server Y; client owns terrain.
     m.position.y = heightAt(m.position.x, m.position.z);
-    // Walk-cycle: oscillate legs based on horizontal speed.
-    const speed = Math.hypot(m.position.x - z.lastX, m.position.z - z.lastZ) / Math.max(dt, 0.0001);
-    z.lastX = m.position.x; z.lastZ = m.position.z;
+
+    const speed = Math.hypot(m.position.x - e.lastX, m.position.z - e.lastZ) / Math.max(dt, 0.0001);
+    e.lastX = m.position.x; e.lastZ = m.position.z;
     if (speed > 0.2) {
-      z.walkPhase += dt * 6;
-      const swing = Math.sin(z.walkPhase) * 0.5;
-      z.mesh.userData.legs[0].rotation.x =  swing;
-      z.mesh.userData.legs[1].rotation.x = -swing;
+      e.walkPhase += dt * 6;
+      const swing = Math.sin(e.walkPhase) * 0.5;
+      const legs = m.userData.legs;
+      if (legs) { legs[0].rotation.x = swing; legs[1].rotation.x = -swing; }
     }
-    // Attack lunge (forward dip + arm raise).
-    if (z.attackT >= 0) {
-      z.attackT += dt;
-      const t = z.attackT / 0.4;
-      if (t > 1) {
-        z.attackT = -1;
-        z.mesh.userData.arms[0].rotation.x = -Math.PI / 3;
-        z.mesh.userData.arms[1].rotation.x = -Math.PI / 3;
-      } else {
-        const lunge = Math.sin(t * Math.PI) * 0.5;
-        z.mesh.userData.arms[0].rotation.x = -Math.PI / 3 - lunge;
-        z.mesh.userData.arms[1].rotation.x = -Math.PI / 3 - lunge;
-      }
+
+    if (e.attackT >= 0) {
+      e.attackT += dt;
+      const t = e.attackT / 0.4;
+      if (t > 1) { e.attackT = -1; }
     }
   }
 
@@ -155,14 +238,19 @@ export function updateEntities(dt) {
     if (speed > 0.2) {
       p.walkPhase += dt * 6;
       const swing = Math.sin(p.walkPhase) * 0.5;
-      p.mesh.userData.legs[0].rotation.x =  swing;
-      p.mesh.userData.legs[1].rotation.x = -swing;
+      const legs = m.userData.legs;
+      if (legs) { legs[0].rotation.x = swing; legs[1].rotation.x = -swing; }
     }
   }
 }
 
-// Trigger the lunge animation for zombie `id` (called from network on zAttack).
-export function triggerZombieAttack(id) {
-  const z = zombies.get(id);
-  if (z) z.attackT = 0;
+export function triggerEnemyAttack(id) {
+  const e = enemies.get(id);
+  if (e) e.attackT = 0;
 }
+
+// Backward-compat aliases (kept while migrating callers).
+export const zombies = enemies;
+export const spawnZombie = spawnEnemy;
+export const removeZombie = removeEnemy;
+export const triggerZombieAttack = triggerEnemyAttack;

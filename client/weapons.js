@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { camera, scene } from './three-setup.js';
-import { zombies } from './entities.js';
+import { enemies } from './entities.js';
 import { network } from './network.js';
 import { player } from './player.js';
 
@@ -87,20 +87,20 @@ function tryFire() {
   ray.set(_origin, _dir);
   ray.far = cfg.range;
 
-  // Build candidate list: every zombie's mesh subtree.
+  // Build candidate list: every enemy's mesh subtree.
   const candidates = [];
-  const zMap = new Map();
-  for (const [id, z] of zombies) {
-    z.mesh.traverse(c => { if (c.isMesh) { candidates.push(c); zMap.set(c, id); } });
+  const eMap = new Map();
+  for (const [id, e] of enemies) {
+    e.mesh.traverse(c => { if (c.isMesh) { candidates.push(c); eMap.set(c, id); } });
   }
 
   const hits = ray.intersectObjects(candidates, false);
   let hitId = null;
   if (hits.length > 0) {
-    // Walk up to find which zombie the hit object belongs to.
+    // Walk up to find which enemy the hit object belongs to.
     let obj = hits[0].object;
-    while (obj && !zMap.has(obj)) obj = obj.parent;
-    if (obj) hitId = zMap.get(obj);
+    while (obj && !eMap.has(obj)) obj = obj.parent;
+    if (obj) hitId = eMap.get(obj);
   }
 
   network.shoot(_origin, _dir, hitId, cfg.dmg);

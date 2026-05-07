@@ -3,15 +3,29 @@
 // heightAt() and the noise primitive must be byte-identical to server.js.
 // If they drift, server-side AI walks a different terrain than the client
 // renders, and zombies clip into walls or float in the air.
+//
+// World is now 400x400 m (WORLD_HALF=200). Towns claim a clearing radius so
+// trees and rocks don't spawn inside them — buildings need open ground.
 
 import * as THREE from 'three';
 import { scene } from './three-setup.js';
 
-export const WORLD_HALF = 100;
+export const WORLD_HALF = 200;
 const WORLD_SEED = 1337;
-const TERRAIN_RES = 64;          // 64x64 grid → 65 vertices a side. Plenty for 200 m.
-const TREE_COUNT = 80;
-const ROCK_COUNT = 25;
+const TERRAIN_RES = 96;          // 96x96 grid → 97 vertices a side. Good for 400 m.
+const TREE_COUNT = 220;
+const ROCK_COUNT = 60;
+
+// Town clearings — kept in sync with server's TOWN_LOCATIONS centers. World
+// gen avoids spawning trees / rocks within `radius` metres of each. Buildings
+// + sleeping zombies will be placed here later by towns.js.
+const TOWN_CLEARINGS = [
+  { cx: -150, cz:  140, r: 32 },  // Westhaven
+  { cx:  155, cz:  150, r: 32 },  // Eastfield
+  { cx: -160, cz: -130, r: 32 },  // Pinecreek
+  { cx:  140, cz: -160, r: 32 },  // Southridge
+  { cx:    0, cz:  -90, r: 50 },  // Helix Lab — bigger
+];
 
 // =====================================================================
 // Heightmap — must mirror server.heightAt(). Two octaves of value noise.
@@ -38,8 +52,16 @@ export function heightAt(x, z) {
   return octave(28, 2.4) + octave(7, 0.6) - 1.5;
 }
 
+function inAnyClearing(x, z) {
+  for (const t of TOWN_CLEARINGS) {
+    const dx = x - t.cx, dz = z - t.cz;
+    if (dx * dx + dz * dz < t.r * t.r) return true;
+  }
+  return false;
+}
+
 // =====================================================================
-// Terrain mesh — PlaneGeometry deformed by heightAt() at every vertex.
+// Terrain mesh.
 // =====================================================================
 function buildTerrain() {
   const size = WORLD_HALF * 2;
@@ -53,14 +75,12 @@ function buildTerrain() {
   pos.needsUpdate = true;
   geom.computeVertexNormals();
 
-  // Vertex colors — green for grass, brown on slopes/peaks. Simple and reads well.
   const colors = new Float32Array(pos.count * 3);
   const grass = new THREE.Color(0x4a7a3a);
   const dirt  = new THREE.Color(0x6a5234);
   const tmp = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i);
-    // Higher = browner. Mix from grass at y=0 to dirt at y=2.
     const t = THREE.MathUtils.clamp((y + 1.5) / 3.5, 0, 1);
     tmp.copy(grass).lerp(dirt, t);
     colors[i * 3]     = tmp.r;
@@ -71,12 +91,11 @@ function buildTerrain() {
 
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.receiveShadow = false;
   return mesh;
 }
 
 // =====================================================================
-// Trees — instanced for performance. Single trunk + canopy mesh per instance.
+// Trees (instanced via simple grouping — small enough to not need InstancedMesh).
 // =====================================================================
 function buildTrees() {
   const group = new THREE.Group();
@@ -86,28 +105,29 @@ function buildTrees() {
   const leafGeom  = new THREE.ConeGeometry(1.4, 3.2, 7);
 
   const trees = [];
-  // Deterministic PRNG so all clients see same tree layout.
   let s = WORLD_SEED;
   const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
 
-  for (let i = 0; i < TREE_COUNT; i++) {
+  let tries = 0;
+  while (trees.length < TREE_COUNT && tries < TREE_COUNT * 20) {
+    tries++;
     const x = (rng() * 2 - 1) * (WORLD_HALF - 6);
     const z = (rng() * 2 - 1) * (WORLD_HALF - 6);
-    // Avoid spawning on top of the player spawn (origin).
-    if (x * x + z * z < 36) { i--; continue; }
+    if (x * x + z * z < 36) continue;        // skip player spawn
+    if (inAnyClearing(x, z)) continue;       // skip town footprints
     const y = heightAt(x, z);
     const trunk = new THREE.Mesh(trunkGeom, trunkMat);
     trunk.position.set(x, y + 1.3, z);
     const leaf = new THREE.Mesh(leafGeom, leafMat);
     leaf.position.set(x, y + 3.8, z);
     group.add(trunk); group.add(leaf);
-    trees.push({ x, z, r: 0.55 }); // for player collision
+    trees.push({ x, z, r: 0.55 });
   }
   return { group, colliders: trees };
 }
 
 // =====================================================================
-// Rocks — same idea, big gray clusters scattered.
+// Rocks.
 // =====================================================================
 function buildRocks() {
   const group = new THREE.Group();
@@ -118,10 +138,13 @@ function buildRocks() {
   let s = WORLD_SEED + 9999;
   const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
 
-  for (let i = 0; i < ROCK_COUNT; i++) {
+  let tries = 0;
+  while (rocks.length < ROCK_COUNT && tries < ROCK_COUNT * 20) {
+    tries++;
     const x = (rng() * 2 - 1) * (WORLD_HALF - 6);
     const z = (rng() * 2 - 1) * (WORLD_HALF - 6);
-    if (x * x + z * z < 36) { i--; continue; }
+    if (x * x + z * z < 36) continue;
+    if (inAnyClearing(x, z)) continue;
     const y = heightAt(x, z);
     const sc = 0.7 + rng() * 0.9;
     const rock = new THREE.Mesh(geom, mat);
@@ -135,13 +158,13 @@ function buildRocks() {
 }
 
 // =====================================================================
-// World boundary — simple invisible wall colliders + a fence ring.
+// World boundary fence.
 // =====================================================================
 function buildBoundaryFence() {
   const group = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.7 });
   const postGeom = new THREE.BoxGeometry(0.15, 1.6, 0.15);
-  const step = 4;
+  const step = 5;
   for (let v = -WORLD_HALF; v <= WORLD_HALF; v += step) {
     for (const [x, z] of [[v, -WORLD_HALF], [v, WORLD_HALF], [-WORLD_HALF, v], [WORLD_HALF, v]]) {
       const post = new THREE.Mesh(postGeom, mat);
@@ -163,4 +186,6 @@ const { group: rockGroup, colliders: rockColliders } = buildRocks();
 scene.add(rockGroup);
 scene.add(buildBoundaryFence());
 
+// Building colliders are appended to this array by towns.js when the welcome
+// message arrives.
 export const obstacles = [...treeColliders, ...rockColliders];

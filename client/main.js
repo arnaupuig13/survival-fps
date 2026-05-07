@@ -8,7 +8,7 @@ import { player, updatePlayer } from './player.js';
 import { network } from './network.js';
 import { updateEntities } from './entities.js';
 import { updateWeapons } from './weapons.js';
-import { setHP, setOnlineCount, flashDamage, logLine, tickFps } from './hud.js';
+import { setHP, setOnlineCount, flashDamage, logLine, tickFps, showBanner } from './hud.js';
 
 const menuEl = document.getElementById('menu');
 const playBtn = document.getElementById('playBtn');
@@ -20,7 +20,7 @@ const respawnBtn = document.getElementById('respawnBtn');
 // menu is up. The player is invulnerable until JUGAR is pressed.
 // =====================================================================
 network.connect(player);
-network.onYouHit = (dmg, src) => {
+network.onYouHit = (dmg, src, source) => {
   player.takeDamage(dmg);
   setHP(player.hp);
   flashDamage();
@@ -30,6 +30,10 @@ network.onYouHit = (dmg, src) => {
   }
 };
 network.onPeerCount = setOnlineCount;
+network.onBanner = (text) => showBanner(text);
+network.onEnemyDead = (id, msg) => {
+  if (msg.isBoss) logLine('★ EL DOCTOR HA CAIDO');
+};
 
 // =====================================================================
 // Menu wiring — JUGAR drops invulnerability and engages pointer lock.

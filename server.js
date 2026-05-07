@@ -1,12 +1,15 @@
-// Survival FPS v1 — server: HTTP static + WebSocket multiplayer + zombie AI.
+// Survival FPS v1.1 — server: HTTP static + WS multiplayer + zombie/scientist
+// AI + town streaming + boss.
 //
-// Design choices that fix problems from v0:
-// - heightAt() shared with client; server spawns/moves zombies AT terrain Y so
-//   they're never buried. Eliminates the "invisible zombie that hits you" bug.
-// - Single source of truth for entities. No RemoteEnemy mirror lists on client.
-// - Snapshot-based sync at 10 Hz; positions client-side lerp.
-// - No town streaming, no sleeping zombies, no separate enemy variants. Just
-//   "zombie" — keeps the loop tight. More variants come in v1.1.
+// Design choices:
+// - heightAt() shared with client; every entity is positioned AT terrain Y so
+//   nothing buries underground (the v0 bug we eliminated).
+// - Hardcoded TOWN_LOCATIONS — same world for every connected client.
+// - Sleeping zombies live inside town buildings; they wake up when a player
+//   gets close. A streaming system spawns/despawns them based on player
+//   proximity so unvisited towns don't burn CPU.
+// - The science city has scientists (ranged shooters with rifles). When 50%
+//   are killed, a boss spawns to defend the loot.
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -18,7 +21,7 @@ const PORT = process.env.PORT || 3001;
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
 // =====================================================================
-// Static HTTP server — serves index.html, /client/*, /node_modules/three.
+// Static HTTP server.
 // =====================================================================
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -28,12 +31,12 @@ const MIME = {
   '.png':  'image/png',
   '.jpg':  'image/jpeg',
   '.svg':  'image/svg+xml',
+  '.md':   'text/markdown; charset=utf-8',
 };
 
 const httpServer = http.createServer((req, res) => {
   let p = req.url.split('?')[0];
   if (p === '/') p = '/index.html';
-  // Security: disallow .. traversal.
   if (p.includes('..')) { res.writeHead(400); res.end('bad'); return; }
   const filePath = path.join(__dirname, p);
   fs.readFile(filePath, (err, data) => {
@@ -45,21 +48,17 @@ const httpServer = http.createServer((req, res) => {
 });
 
 // =====================================================================
-// Procedural world — deterministic by seed. heightAt() and worldRng() must
-// be byte-identical to the client copies (client/world.js) so server-side
-// AI walks the same terrain the player sees.
+// Procedural world heightmap. MUST be byte-identical to client/world.js.
 // =====================================================================
 const WORLD_SEED = 1337;
-const WORLD_HALF = 100; // 200x200 m playable area
+export const WORLD_HALF = 200; // 400x400 m playable
 
-// Cheap hash → [0,1). Same as client.
 function hash(x, y) {
   let h = (x * 374761393 + y * 668265263 + WORLD_SEED * 982451653) | 0;
   h = (h ^ (h >>> 13)) * 1274126177;
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-// Smooth value-noise heightmap. Two octaves of bilinear-interpolated hash.
 export function heightAt(x, z) {
   function octave(scale, amp) {
     const sx = x / scale, sz = z / scale;
@@ -69,126 +68,348 @@ export function heightAt(x, z) {
     const b = hash(x0 + 1, z0);
     const c = hash(x0,     z0 + 1);
     const d = hash(x0 + 1, z0 + 1);
-    // Smoothstep on fx, fz so corners blend instead of grid-flat tiles.
     const u = fx * fx * (3 - 2 * fx);
     const v = fz * fz * (3 - 2 * fz);
     return (a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + d * u * v) * amp;
   }
-  // Two octaves: large rolling hills + small bumps. Total amplitude ~3 m,
-  // intentionally gentle so the player can run anywhere without cliffs.
   return octave(28, 2.4) + octave(7, 0.6) - 1.5;
 }
 
 // =====================================================================
-// World state — players, zombies. Authoritative on server.
+// Enemy types. Stats authoritative on server. Client renders mesh per etype.
 // =====================================================================
-const players = new Map();   // id → { id, ws, x, y, z, ry, hp, name }
-const zombies = new Map();   // id → { id, x, y, z, ry, hp, attackCd }
+const ETYPES = {
+  zombie:    { hp: 10,  speed: 1.6, dmg: 8,  range: 1.6, cd: 1.4, aggro: 30, ranged: false },
+  runner:    { hp: 6,   speed: 3.0, dmg: 5,  range: 1.6, cd: 0.9, aggro: 35, ranged: false },
+  tank:      { hp: 30,  speed: 0.9, dmg: 20, range: 1.8, cd: 2.0, aggro: 25, ranged: false },
+  scientist: { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 40, ranged: true  },
+  boss:      { hp: 220, speed: 1.7, dmg: 16, range: 32,  cd: 0.6, aggro: 50, ranged: true, isBoss: true },
+};
+
+// =====================================================================
+// Towns — fixed layout. Every connected client sees these in the same
+// place. Each town has a type ('town' or 'city') and a list of buildings
+// (relative offsets + size) that the client will render. Sleeping enemies
+// live one-per-building; the type field of the town picks the enemy variant.
+// =====================================================================
+//
+// Building geometry stored as: { dx, dz, w, h, ry } — offset from town
+// center, footprint size in metres, and yaw rotation. Door faces +Z by
+// convention so the client knows where to put openings.
+//
+// Layouts are computed once at boot (deterministic — same seed → same town).
+// =====================================================================
+
+function genTownBuildings(centerX, centerZ, count, seed) {
+  // Deterministic PRNG so all clients agree on the layout.
+  let s = seed;
+  const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+  const buildings = [];
+  // Grid jitter: place on a 12 m grid then jitter ±2 m per axis.
+  const cols = Math.ceil(Math.sqrt(count));
+  const cell = 12;
+  for (let i = 0; i < count; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const ox = (col - (cols - 1) / 2) * cell + (rng() - 0.5) * 4;
+    const oz = (row - (cols - 1) / 2) * cell + (rng() - 0.5) * 4;
+    const w = 5.5 + rng() * 2.5;
+    const h = 5.5 + rng() * 2.5;
+    const ry = (rng() < 0.25) ? Math.PI / 2 : 0;
+    buildings.push({ dx: ox, dz: oz, w, h, ry });
+  }
+  return buildings;
+}
+
+const TOWNS = [
+  // Four regular towns scattered around the map. Each has 6 buildings with
+  // a sleeping zombie inside. Loot crate inside one random building per town.
+  { id: 'westhaven', cx: -150, cz:  140, type: 'town', buildings: genTownBuildings(-150,  140, 6, 11), label: 'Westhaven' },
+  { id: 'eastfield', cx:  155, cz:  150, type: 'town', buildings: genTownBuildings( 155,  150, 6, 22), label: 'Eastfield' },
+  { id: 'pinecreek', cx: -160, cz: -130, type: 'town', buildings: genTownBuildings(-160, -130, 6, 33), label: 'Pinecreek' },
+  { id: 'southridge', cx:  140, cz: -160, type: 'town', buildings: genTownBuildings( 140, -160, 6, 44), label: 'Southridge' },
+  // The science city — bigger, in the middle-but-offset, with scientists
+  // protecting valuable loot. Boss spawns when 50%+ scientists are dead.
+  { id: 'helix-lab', cx:  0,   cz: -90,  type: 'city', buildings: genTownBuildings(  0,  -90, 12, 77), label: 'Helix Lab' },
+];
+
+// Compute world-space center of each building so spawn / wake checks
+// don't need to recompute the offset every tick.
+for (const t of TOWNS) {
+  for (const b of t.buildings) {
+    b.wx = t.cx + b.dx;
+    b.wz = t.cz + b.dz;
+  }
+}
+
+// =====================================================================
+// World state — players, enemies. Authoritative.
+// =====================================================================
+const players = new Map();   // id → player
+const enemies = new Map();   // id → enemy
 let nextPlayerId = 1;
-let nextZombieId = 1;
+let nextEnemyId = 1;
 
-const ZOMBIE_HP = 10;
-const ZOMBIE_DMG = 8;
-const ZOMBIE_SPEED = 1.6;       // m/s
-const ZOMBIE_ATTACK_RANGE = 1.6;
-const ZOMBIE_ATTACK_COOLDOWN = 1.4; // s
-const ZOMBIE_AGGRO_RANGE = 30;  // m — zombies idle outside this
-const MAX_ZOMBIES = 25;
-const ZOMBIE_SPAWN_INTERVAL = 6.0; // s
+// Per-town streaming state.
+const townState = new Map(); // townId → { spawned, enemyIds: Set, scientistsDead, bossSpawned }
+for (const t of TOWNS) {
+  townState.set(t.id, { spawned: false, enemyIds: new Set(), scientistsDead: 0, bossSpawned: false });
+}
 
-// Spawn a zombie at a random spot on the heightmap, at least `minDist` from
-// every connected player. Returns the zombie or null if no spot found.
-function spawnZombie(minDist = 38, maxDist = 80) {
+const STREAM_RADIUS = 150;   // m — spawn town when any player closer
+const DESPAWN_RADIUS = 260;  // m — despawn town when ALL players farther
+const WAKE_RADIUS = 12;      // m — sleeping zombie wakes when player approaches
+
+const MAX_AMBIENT_ZOMBIES = 18; // cap on the random-spawn zombies (not town-bound)
+const AMBIENT_SPAWN_INTERVAL = 7.0;
+
+function makeEnemy(opts) {
+  const cfg = ETYPES[opts.etype] || ETYPES.zombie;
+  const id = nextEnemyId++;
+  const e = {
+    id,
+    etype: opts.etype || 'zombie',
+    x: opts.x, z: opts.z, y: heightAt(opts.x, opts.z),
+    ry: opts.ry ?? Math.random() * Math.PI * 2,
+    hp: cfg.hp,
+    maxHp: cfg.hp,
+    attackCd: 0,
+    sleeping: !!opts.sleeping,
+    townId: opts.townId || null,
+    ambient: !!opts.ambient,
+    isBoss: !!cfg.isBoss,
+  };
+  enemies.set(id, e);
+  return e;
+}
+
+function killEnemy(e, byId = null) {
+  if (e.townId === 'helix-lab' && e.etype === 'scientist') {
+    const ts = townState.get('helix-lab');
+    ts.scientistsDead++;
+    // Boss appears once half the lab's scientists have fallen.
+    if (!ts.bossSpawned && ts.scientistsDead >= 6) {
+      const t = TOWNS.find(x => x.id === 'helix-lab');
+      ts.bossSpawned = true;
+      const boss = makeEnemy({
+        etype: 'boss', x: t.cx, z: t.cz + 4, townId: 'helix-lab',
+      });
+      ts.enemyIds.add(boss.id);
+      broadcast({ type: 'eSpawn', e: ePub(boss) });
+      broadcast({ type: 'banner', text: '⚠ EL DOCTOR ESTA EN EL LABORATORIO' });
+    }
+  }
+  enemies.delete(e.id);
+  if (e.townId) {
+    const ts = townState.get(e.townId);
+    if (ts) ts.enemyIds.delete(e.id);
+  }
+  broadcast({ type: 'eDead', id: e.id, by: byId, isBoss: !!e.isBoss });
+}
+
+function ePub(e) {
+  return {
+    id: e.id, etype: e.etype,
+    x: +e.x.toFixed(2), y: +e.y.toFixed(2), z: +e.z.toFixed(2),
+    ry: +e.ry.toFixed(2), hp: e.hp, maxHp: e.maxHp,
+    sleeping: !!e.sleeping, isBoss: !!e.isBoss,
+  };
+}
+function pPub(p) { return { id: p.id, x: p.x, y: p.y, z: p.z, ry: p.ry, hp: p.hp, name: p.name }; }
+
+// =====================================================================
+// Town streaming — spawn / despawn enemies inside each town's buildings.
+// =====================================================================
+function streamTowns() {
+  for (const t of TOWNS) {
+    const ts = townState.get(t.id);
+    // Find nearest player to this town.
+    let nearestD = Infinity;
+    for (const p of players.values()) {
+      const dx = p.x - t.cx, dz = p.z - t.cz;
+      const d = Math.hypot(dx, dz);
+      if (d < nearestD) nearestD = d;
+    }
+
+    if (!ts.spawned && nearestD < STREAM_RADIUS) {
+      // Spawn one sleeping enemy per building. Town type picks variant.
+      ts.spawned = true;
+      for (let i = 0; i < t.buildings.length; i++) {
+        const b = t.buildings[i];
+        let etype;
+        if (t.type === 'city') {
+          etype = 'scientist';
+        } else {
+          // Towns: mostly zombies, sprinkle of runner / tank.
+          const r = (i * 17 + 3) % 10;
+          if (r < 7) etype = 'zombie';
+          else if (r < 9) etype = 'runner';
+          else etype = 'tank';
+        }
+        const e = makeEnemy({
+          etype, x: b.wx, z: b.wz,
+          sleeping: t.type === 'town', // city scientists are awake patrolling
+          townId: t.id,
+        });
+        ts.enemyIds.add(e.id);
+        broadcast({ type: 'eSpawn', e: ePub(e) });
+      }
+    } else if (ts.spawned && nearestD > DESPAWN_RADIUS) {
+      // Despawn — release CPU on a town nobody's near. Keep the boss alive
+      // even if despawned far (he stays around the lab).
+      for (const id of ts.enemyIds) {
+        const e = enemies.get(id);
+        if (!e) continue;
+        if (e.isBoss) continue;
+        enemies.delete(id);
+        broadcast({ type: 'eDead', id, despawn: true });
+      }
+      ts.enemyIds = new Set([...ts.enemyIds].filter(id => enemies.has(id)));
+      ts.spawned = false;
+    }
+  }
+}
+
+// =====================================================================
+// Ambient (random) zombie spawn — same as v1, but caps separately from
+// town zombies. These spawn around players outside any town's radius.
+// =====================================================================
+function spawnAmbientZombie(minDist = 38, maxDist = 80) {
+  if (players.size === 0) return null;
   for (let tries = 0; tries < 30; tries++) {
+    const list = [...players.values()];
+    const anchor = list[Math.floor(Math.random() * list.length)];
     const angle = Math.random() * Math.PI * 2;
     const r = minDist + Math.random() * (maxDist - minDist);
-    // If no players, spawn around origin.
-    let ax = 0, az = 0;
-    if (players.size > 0) {
-      const list = [...players.values()];
-      const anchor = list[Math.floor(Math.random() * list.length)];
-      ax = anchor.x; az = anchor.z;
-    }
-    const x = ax + Math.cos(angle) * r;
-    const z = az + Math.sin(angle) * r;
+    const x = anchor.x + Math.cos(angle) * r;
+    const z = anchor.z + Math.sin(angle) * r;
     if (Math.abs(x) > WORLD_HALF || Math.abs(z) > WORLD_HALF) continue;
-    // Reject if any player is too close (e.g. another anchor).
-    let tooClose = false;
-    for (const p of players.values()) {
-      const dx = p.x - x, dz = p.z - z;
-      if (dx * dx + dz * dz < minDist * minDist) { tooClose = true; break; }
+    // Reject if inside any town footprint — those are streamed separately.
+    let insideTown = false;
+    for (const t of TOWNS) {
+      const dx = t.cx - x, dz = t.cz - z;
+      if (dx * dx + dz * dz < 60 * 60) { insideTown = true; break; }
     }
-    if (tooClose) continue;
-    const id = nextZombieId++;
-    const z0 = { id, x, y: heightAt(x, z), z, ry: Math.random() * Math.PI * 2, hp: ZOMBIE_HP, attackCd: 0 };
-    zombies.set(id, z0);
-    broadcast({ type: 'zSpawn', z: zPub(z0) });
-    return z0;
+    if (insideTown) continue;
+    // 80% zombie, 15% runner, 5% tank — flavor variety in the wild.
+    let etype = 'zombie';
+    const r2 = Math.random();
+    if (r2 > 0.95) etype = 'tank';
+    else if (r2 > 0.80) etype = 'runner';
+    const e = makeEnemy({ etype, x, z, ambient: true });
+    broadcast({ type: 'eSpawn', e: ePub(e) });
+    return e;
   }
   return null;
 }
 
-// Public-shape projection — what we send over the wire for one zombie.
-function zPub(z) { return { id: z.id, x: z.x, y: z.y, z: z.z, ry: z.ry, hp: z.hp }; }
-function pPub(p) { return { id: p.id, x: p.x, y: p.y, z: p.z, ry: p.ry, hp: p.hp, name: p.name }; }
-
 // =====================================================================
-// AI tick — runs at 10 Hz. Zombies chase nearest player and attack on contact.
+// AI tick — runs at 10 Hz. Dispatches per behavior (sleeping → wake,
+// melee chase, ranged shooter, boss).
 // =====================================================================
 const AI_HZ = 10;
 const AI_DT = 1 / AI_HZ;
-let zombieSpawnAccum = 0;
+let ambientSpawnAccum = 0;
+let streamCheckAccum = 0;
 
 setInterval(() => {
-  zombieSpawnAccum += AI_DT;
-  if (zombieSpawnAccum >= ZOMBIE_SPAWN_INTERVAL && zombies.size < MAX_ZOMBIES && players.size > 0) {
-    zombieSpawnAccum = 0;
-    spawnZombie();
+  // Town streaming check — every 0.8 s, not every tick.
+  streamCheckAccum += AI_DT;
+  if (streamCheckAccum >= 0.8) {
+    streamCheckAccum = 0;
+    streamTowns();
   }
 
-  for (const z of zombies.values()) {
-    if (z.attackCd > 0) z.attackCd -= AI_DT;
+  // Ambient (out-of-town) spawn ticker.
+  ambientSpawnAccum += AI_DT;
+  if (ambientSpawnAccum >= AMBIENT_SPAWN_INTERVAL && players.size > 0) {
+    let ambientCount = 0;
+    for (const e of enemies.values()) if (e.ambient && !e.dead) ambientCount++;
+    if (ambientCount < MAX_AMBIENT_ZOMBIES) {
+      ambientSpawnAccum = 0;
+      spawnAmbientZombie();
+    }
+  }
+
+  // Per-enemy AI.
+  for (const e of enemies.values()) {
+    if (e.attackCd > 0) e.attackCd -= AI_DT;
+    const cfg = ETYPES[e.etype] || ETYPES.zombie;
 
     // Find nearest alive player.
-    let nearest = null, nearestD2 = Infinity;
+    let nearest = null, nd2 = Infinity;
     for (const p of players.values()) {
       if (p.hp <= 0) continue;
-      const dx = p.x - z.x, dz = p.z - z.z;
+      const dx = p.x - e.x, dz = p.z - e.z;
       const d2 = dx * dx + dz * dz;
-      if (d2 < nearestD2) { nearestD2 = d2; nearest = p; }
+      if (d2 < nd2) { nd2 = d2; nearest = p; }
     }
     if (!nearest) continue;
-    if (nearestD2 > ZOMBIE_AGGRO_RANGE * ZOMBIE_AGGRO_RANGE) continue;
+    const d = Math.sqrt(nd2);
 
-    const d = Math.sqrt(nearestD2);
-    if (d > ZOMBIE_ATTACK_RANGE) {
-      // Walk toward player.
-      const dx = nearest.x - z.x, dz = nearest.z - z.z;
-      z.x += (dx / d) * ZOMBIE_SPEED * AI_DT;
-      z.z += (dz / d) * ZOMBIE_SPEED * AI_DT;
-      z.y = heightAt(z.x, z.z);
-      z.ry = Math.atan2(dx, dz);
-    } else if (z.attackCd <= 0) {
-      // Attack — only the targeted player gets damage. Others see a lunge anim.
-      z.attackCd = ZOMBIE_ATTACK_COOLDOWN;
-      nearest.hp = Math.max(0, nearest.hp - ZOMBIE_DMG);
-      sendTo(nearest, { type: 'youHit', dmg: ZOMBIE_DMG, by: z.id, sx: z.x, sy: z.y, sz: z.z });
-      broadcast({ type: 'zAttack', id: z.id });
+    // Sleeping: don't move. Wake if a player crosses WAKE_RADIUS.
+    if (e.sleeping) {
+      if (d < WAKE_RADIUS) {
+        e.sleeping = false;
+        broadcast({ type: 'eWake', id: e.id });
+      }
+      continue;
+    }
+
+    if (d > cfg.aggro) continue;
+
+    if (cfg.ranged) {
+      // Shooter: keep optimal distance ~70% of range; circle-strafe slightly.
+      const desired = cfg.range * 0.65;
+      if (d > desired + 2) {
+        const dx = nearest.x - e.x, dz = nearest.z - e.z;
+        e.x += (dx / d) * cfg.speed * AI_DT;
+        e.z += (dz / d) * cfg.speed * AI_DT;
+      } else if (d < desired - 2) {
+        const dx = nearest.x - e.x, dz = nearest.z - e.z;
+        e.x -= (dx / d) * cfg.speed * AI_DT * 0.7;
+        e.z -= (dz / d) * cfg.speed * AI_DT * 0.7;
+      }
+      e.y = heightAt(e.x, e.z);
+      e.ry = Math.atan2(nearest.x - e.x, nearest.z - e.z);
+      // Fire when in range.
+      if (d < cfg.range && e.attackCd <= 0) {
+        e.attackCd = cfg.cd;
+        nearest.hp = Math.max(0, nearest.hp - cfg.dmg);
+        sendTo(nearest, { type: 'youHit', dmg: cfg.dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+        broadcast({ type: 'eShoot', id: e.id, tx: nearest.x, ty: nearest.y, tz: nearest.z });
+      }
+    } else {
+      // Melee: chase + bite.
+      if (d > cfg.range) {
+        const dx = nearest.x - e.x, dz = nearest.z - e.z;
+        e.x += (dx / d) * cfg.speed * AI_DT;
+        e.z += (dz / d) * cfg.speed * AI_DT;
+        e.y = heightAt(e.x, e.z);
+        e.ry = Math.atan2(dx, dz);
+      } else if (e.attackCd <= 0) {
+        e.attackCd = cfg.cd;
+        nearest.hp = Math.max(0, nearest.hp - cfg.dmg);
+        sendTo(nearest, { type: 'youHit', dmg: cfg.dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+        broadcast({ type: 'eAttack', id: e.id });
+      }
     }
   }
 }, 1000 / AI_HZ);
 
 // =====================================================================
-// Snapshot tick — every 100 ms, send compact snapshot of zombies + players
-// so clients can lerp. Player position broadcast piggybacks on this.
+// Snapshot tick — compact arrays at 10 Hz.
 // =====================================================================
 setInterval(() => {
-  // Compact zombie list: [id, x, y, z, ry, hp]
+  // Compact enemy list: [id, x, y, z, ry, hp, sleeping]
   const z = [];
-  for (const e of zombies.values()) z.push([e.id, +e.x.toFixed(2), +e.y.toFixed(2), +e.z.toFixed(2), +e.ry.toFixed(2), e.hp]);
-  // Player snapshot for peers.
+  for (const e of enemies.values()) {
+    z.push([e.id, +e.x.toFixed(2), +e.y.toFixed(2), +e.z.toFixed(2), +e.ry.toFixed(2), e.hp, e.sleeping ? 1 : 0]);
+  }
   const ps = [];
-  for (const p of players.values()) ps.push([p.id, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.ry.toFixed(2), p.hp]);
+  for (const p of players.values()) {
+    ps.push([p.id, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.ry.toFixed(2), p.hp]);
+  }
   broadcast({ type: 'snapshot', z, p: ps });
 }, 100);
 
@@ -203,16 +424,18 @@ wss.on('connection', (ws) => {
   players.set(id, player);
   console.log(`[+] player ${id} connected. total=${players.size}`);
 
-  // Send welcome with their id and initial world snapshot.
   ws.send(JSON.stringify({
     type: 'welcome',
     you: id,
     seed: WORLD_SEED,
     worldHalf: WORLD_HALF,
     peers: [...players.values()].filter(p => p.id !== id).map(pPub),
-    zombies: [...zombies.values()].map(zPub),
+    enemies: [...enemies.values()].map(ePub),
+    towns: TOWNS.map(t => ({
+      id: t.id, cx: t.cx, cz: t.cz, type: t.type, label: t.label,
+      buildings: t.buildings.map(b => ({ dx: b.dx, dz: b.dz, w: b.w, h: b.h, ry: b.ry })),
+    })),
   }));
-  // Tell others a peer joined.
   broadcast({ type: 'peerJoin', p: pPub(player) }, id);
 
   ws.on('message', (raw) => {
@@ -220,31 +443,27 @@ wss.on('connection', (ws) => {
     try { msg = JSON.parse(raw); } catch { return; }
 
     if (msg.type === 'pos') {
-      // Reject NaN / out-of-bounds — would propagate to peers.
       if (!Number.isFinite(msg.x) || !Number.isFinite(msg.z)) return;
       if (Math.abs(msg.x) > WORLD_HALF + 5 || Math.abs(msg.z) > WORLD_HALF + 5) return;
       player.x = msg.x; player.y = msg.y; player.z = msg.z;
       player.ry = Number.isFinite(msg.ry) ? msg.ry : 0;
     } else if (msg.type === 'shoot') {
-      // Client claims a hit on zombie `id` for `dmg`. Server applies damage,
-      // broadcasts visual fire event. No client-trust kill, but peer-side
-      // consistency: a missed broadcast hides the muzzle flash everywhere.
       broadcast({ type: 'fire', from: id, x: msg.x, y: msg.y, z: msg.z, dx: msg.dx, dy: msg.dy, dz: msg.dz });
       if (msg.hitId != null) {
-        const z = zombies.get(msg.hitId);
-        if (z && z.hp > 0) {
-          z.hp -= msg.dmg | 0;
-          broadcast({ type: 'zHit', id: z.id, hp: Math.max(0, z.hp) });
-          if (z.hp <= 0) {
-            zombies.delete(z.id);
-            broadcast({ type: 'zDead', id: z.id, by: id });
+        const e = enemies.get(msg.hitId);
+        if (e && e.hp > 0) {
+          e.hp -= msg.dmg | 0;
+          // If shot wakes a sleeping enemy, flip the flag.
+          if (e.sleeping) {
+            e.sleeping = false;
+            broadcast({ type: 'eWake', id: e.id });
           }
+          broadcast({ type: 'eHit', id: e.id, hp: Math.max(0, e.hp) });
+          if (e.hp <= 0) killEnemy(e, id);
         }
       }
     } else if (msg.type === 'respawn') {
       player.hp = 100;
-      // Spawn at origin (deterministic safe spot — server picks a clear
-      // tile in v1.1; v1 uses (0,0) which the client renders correctly).
       player.x = 0; player.z = 0;
       player.y = heightAt(0, 0);
       sendTo(player, { type: 'respawned', x: player.x, y: player.y, z: player.z });
@@ -270,7 +489,7 @@ function sendTo(player, message) {
 }
 
 httpServer.listen(PORT, () => {
-  console.log(`Survival FPS v1 listening on http://0.0.0.0:${PORT}`);
+  console.log(`Survival FPS v1.1 listening on http://0.0.0.0:${PORT}`);
   console.log(`  open:  http://localhost:${PORT}/`);
   console.log(`  ws:    ws://localhost:${PORT}/ws`);
 });

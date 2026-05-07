@@ -1,11 +1,35 @@
-// HUD — HP bar, FPS counter, online counter, event log, damage flash.
-// Pure DOM; the canvas+three handles the world.
+// HUD — HP bar, FPS counter, online counter, event log, damage flash, banner.
 
 const hpFill = document.getElementById('hpFill');
 const fpsEl = document.getElementById('fps');
 const onlineEl = document.getElementById('online');
 const logEl = document.getElementById('log');
 const dmgFlash = document.getElementById('dmgFlash');
+
+// Lazy-create the banner element (used for boss spawn / death announcements).
+let bannerEl = null;
+function ensureBanner() {
+  if (bannerEl) return bannerEl;
+  bannerEl = document.createElement('div');
+  bannerEl.id = 'banner';
+  Object.assign(bannerEl.style, {
+    position: 'fixed', top: '18%', left: '50%', transform: 'translateX(-50%)',
+    background: 'rgba(40,8,8,0.85)', color: '#ff5050',
+    border: '1px solid #722', padding: '10px 28px', fontSize: '20px',
+    fontWeight: '700', letterSpacing: '4px', textAlign: 'center',
+    zIndex: 8, opacity: '0', transition: 'opacity 0.4s', pointerEvents: 'none',
+    fontFamily: 'system-ui, sans-serif',
+  });
+  document.body.appendChild(bannerEl);
+  return bannerEl;
+}
+export function showBanner(text, durationMs = 3500) {
+  const el = ensureBanner();
+  el.textContent = text;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, durationMs);
+}
 
 let lastFpsUpdate = 0;
 let frameCount = 0;
