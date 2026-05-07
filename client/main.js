@@ -18,7 +18,8 @@ import {
   setCompass, setSurvival,
 } from './hud.js';
 import * as survival from './survival.js';
-import * as knife from './knife.js';
+import * as tools from './tools.js';
+const knife = tools; // legacy alias — older code uses knife.updateKnife / setKnifeActive
 import { updateCityLights, toggleColliderDebug } from './towns.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
@@ -55,6 +56,8 @@ inv.onChange((state) => {
   setHotbarCount(2, state.bandage);
   setHotbarCount(3, state.grenade);
   setHotbarLocked(1, !state.rifle_pickup);
+  setHotbarLocked(5, !state.axe);
+  setHotbarLocked(6, !state.pickaxe);
   if (isInventoryOpen()) renderInventory(state, inv.ITEMS, { recipes: inv.RECIPES, nearFire: player.nearFire, onCraft: tryCraft });
 });
 
@@ -520,8 +523,7 @@ function closeSettings() {
 
 function handleHotbarSlot(slotIdx) {
   if (slotIdx === 0 || slotIdx === 1) {
-    // Pistol or rifle.
-    knife.setKnifeActive(false);
+    tools.setActiveTool(null);
     selectWeaponBySlot(slotIdx);
     setHotbarActive(slotIdx);
     return;
@@ -534,14 +536,24 @@ function handleHotbarSlot(slotIdx) {
     return;
   }
   if (slotIdx === 3) {
-    // Grenade selection — actual throw on G key. Just visual cue here.
     setHotbarActive(3);
     return;
   }
   if (slotIdx === 4) {
-    // Knife — slot 5.
-    knife.setKnifeActive(true);
+    tools.setActiveTool('knife');
     setHotbarActive(4);
+    return;
+  }
+  if (slotIdx === 5) {
+    if (!inv.has('axe', 1)) { logLine('Necesitás craftear un hacha (3 madera + 2 piedra)'); return; }
+    tools.setActiveTool('axe');
+    setHotbarActive(5);
+    return;
+  }
+  if (slotIdx === 6) {
+    if (!inv.has('pickaxe', 1)) { logLine('Necesitás craftear un pico (2 madera + 4 piedra)'); return; }
+    tools.setActiveTool('pickaxe');
+    setHotbarActive(6);
     return;
   }
 }

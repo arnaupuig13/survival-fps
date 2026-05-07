@@ -10,6 +10,8 @@ export const ITEMS = {
   bandage:      { label: 'VENDAJES',      max: 9  },
   grenade:      { label: 'GRANADAS',      max: 6  },
   rifle_pickup: { label: 'RIFLE',         max: 1, oneTime: true },
+  axe:          { label: 'HACHA',         max: 1, oneTime: true },
+  pickaxe:      { label: 'PICO',          max: 1, oneTime: true },
   // Survival items.
   meat_raw:     { label: 'CARNE CRUDA',   max: 9  },
   meat_cooked:  { label: 'CARNE COCIDA',  max: 9  },
@@ -26,6 +28,8 @@ const state = {
   bandage:  1,
   grenade:  2,
   rifle_pickup: 0,
+  axe: 0,
+  pickaxe: 0,
   meat_raw: 0,
   meat_cooked: 0,
   berry: 3,                 // start with a few berries so first hunger drop has a fix
@@ -41,6 +45,8 @@ const state = {
 // be standing near a campfire.
 export const RECIPES = [
   { id: 'cook_meat',     label: 'COCINAR CARNE',  requires: { meat_raw: 1 },        produces: { meat_cooked: 1 }, needsFire: true },
+  { id: 'craft_axe',     label: 'HACHA',          requires: { wood: 3, stone: 2 },  produces: { axe: 1 } },
+  { id: 'craft_pickaxe', label: 'PICO',           requires: { wood: 2, stone: 4 },  produces: { pickaxe: 1 } },
   { id: 'craft_bandage', label: 'VENDA',          requires: { wood: 2 },            produces: { bandage: 1 } },
   { id: 'craft_campfire',label: 'HOGUERA',        requires: { wood: 5, stone: 2 },  produces: { campfire: 1 } },
   { id: 'craft_grenade', label: 'GRANADA',        requires: { stone: 3, wood: 1 },  produces: { grenade: 1 } },
@@ -53,10 +59,13 @@ export function craft(recipeId, opts = {}) {
   if (!r) return null;
   if (r.needsFire && !opts.nearFire) return null;
   if (r.special === 'fillWater') {
-    // Filling needs proximity to water. opts.nearWater tells us.
     if (!opts.nearWater) return null;
     add('water_bottle', 1);
     return ITEMS.water_bottle.label;
+  }
+  // oneTime items can only be crafted once — block if already owned.
+  for (const item of Object.keys(r.produces)) {
+    if (ITEMS[item]?.oneTime && state[item] > 0) return null;
   }
   // Consume requires.
   for (const [item, count] of Object.entries(r.requires)) {
@@ -77,6 +86,7 @@ function notify() { for (const fn of listeners) fn(state); }
 export function onChange(fn) { listeners.add(fn); fn(state); return () => listeners.delete(fn); }
 
 export function get(item) { return state[item] | 0; }
+export function getState() { return state; } // read-only snapshot helper
 export function has(item, n = 1) { return get(item) >= n; }
 export function add(item, n) {
   if (!ITEMS[item]) return;
