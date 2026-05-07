@@ -120,6 +120,7 @@ let _chatOpen = false;
 function openChat() {
   if (_chatOpen) return;
   _chatOpen = true;
+  _voluntaryUnlock = true;
   document.exitPointerLock?.();
   chatInputWrap.classList.remove('hidden');
   chatInput.value = '';
@@ -132,7 +133,10 @@ function closeChat(send = false) {
   chatInputWrap.classList.add('hidden');
   if (send && text) network.chat(text);
   // Re-engage pointer lock when chat closes.
-  setTimeout(() => renderer.domElement.requestPointerLock?.(), 50);
+  setTimeout(() => {
+    _voluntaryUnlock = false;
+    renderer.domElement.requestPointerLock?.();
+  }, 50);
 }
 chatInput?.addEventListener('keydown', (e) => {
   if (e.code === 'Enter') { e.preventDefault(); closeChat(true); }
@@ -354,10 +358,15 @@ respawnBtn.addEventListener('click', () => {
   renderer.domElement.requestPointerLock?.();
 });
 
+// Flag para distinguir desbloqueos voluntarios (inventario / chat) del
+// desbloqueo "ESC" que debería mostrar el menú principal.
+let _voluntaryUnlock = false;
+
 player.onLockChange = (locked) => {
   if (locked) return;
   if (player.hp <= 0) return;
   if (deathEl.classList.contains('show')) return;
+  if (_voluntaryUnlock) return;       // inventario / chat — no mostrar menú
   menuEl.style.display = 'flex';
 };
 
@@ -380,11 +389,29 @@ addEventListener('keydown', (e) => {
     else closeSettings();
     return;
   }
-  // TAB inventory works even outside game.
+  // TAB inventory works even outside game. Liberamos el pointer lock al
+  // abrir para que el mouse pueda usar el panel; al cerrar volvemos al lock
+  // si el jugador estaba jugando (para que pueda seguir sin clickear).
   if (e.code === 'Tab') {
     e.preventDefault();
+    const wasOpen = isInventoryOpen();
     toggleInventory();
-    if (isInventoryOpen()) inventoryUI.refresh();
+    if (!wasOpen) {
+      // Acabamos de abrir
+      inventoryUI.refresh();
+      if (player.hp > 0 && !menuEl.style.display.includes('flex')) {
+        _voluntaryUnlock = true;
+        document.exitPointerLock?.();
+      }
+    } else {
+      // Acabamos de cerrar — re-lockear si estaba en juego
+      if (player.hp > 0 && _voluntaryUnlock) {
+        setTimeout(() => {
+          _voluntaryUnlock = false;
+          renderer.domElement.requestPointerLock?.();
+        }, 60);
+      }
+    }
     return;
   }
   // Chat open key — only when the player is in-game.
