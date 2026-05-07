@@ -9,6 +9,7 @@ import { network } from './network.js';
 import { player } from './player.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
+import { spawnTracer } from './effects.js';
 
 // Each weapon names the inventory key it consumes per shot. The rifle
 // requires `rifle_pickup > 0` to be selectable (locked behind a city loot).
@@ -120,6 +121,17 @@ function tryFire() {
   }
 
   network.shoot(_origin, _dir, hitId, cfg.dmg);
+
+  // Tracer from muzzle to either the hit point or a far point along ray.
+  const muzzleWorld = new THREE.Vector3();
+  muzzle.getWorldPosition(muzzleWorld);
+  let endPoint;
+  if (hits.length > 0) {
+    endPoint = hits[0].point.clone();
+  } else {
+    endPoint = _origin.clone().add(_dir.clone().multiplyScalar(cfg.range));
+  }
+  spawnTracer(muzzleWorld, endPoint);
 
   // Local muzzle flash + hit marker. Kill upgrade happens from main.js
   // when the server confirms the entity died within a short window.

@@ -17,6 +17,9 @@ import * as sfx from './sounds.js';
 import { nearestInRange } from './loot.js';
 import { renderMinimap } from './minimap.js';
 import { lastShotWithinKillWindow } from './weapons.js';
+import { updateEffects, spawnBloodDecal, spawnGoreBurst } from './effects.js';
+import { enemies } from './entities.js';
+import * as vehicle from './vehicle.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -70,9 +73,19 @@ network.onBanner = (text) => {
   if (text.includes('DOCTOR') && text.includes('LABORATORIO')) sfx.playBossSting();
 };
 network.onEnemyDead = (id, msg) => {
+  // Capture position BEFORE removeEnemy strips the mesh from entities.
+  // (network.js calls removeEnemy after invoking this callback.)
+  const e = enemies.get(id);
+  const x = e ? e.mesh.position.x : null;
+  const z = e ? e.mesh.position.z : null;
   // Town despawns broadcast eDead too — ignore those for the kill counter.
   if (msg.despawn) return;
   inv.bumpKills();
+  // Visceral feedback only on real kills, not despawn cleanups.
+  if (e && x != null) {
+    spawnBloodDecal(x, z);
+    spawnGoreBurst(x, e.mesh.position.y, z, msg.isBoss ? 32 : 12);
+  }
   // If we were the one who shot this enemy a moment ago, upgrade the
   // hit marker to red and chime.
   if (lastShotWithinKillWindow(id)) {
@@ -143,6 +156,13 @@ addEventListener('keydown', (e) => {
       logLine('+30 HP (vendaje usado)');
       sfx.playPickup();
     }
+  } else if (e.code === 'KeyF') {
+    if (vehicle.isDriving()) {
+      vehicle.exit();
+      logLine('Bajaste del buggy');
+    } else if (vehicle.enterNearest(player.pos)) {
+      logLine('Subiste al buggy — W/S acelerar, A/D girar, F bajar');
+    }
   }
 });
 
@@ -161,7 +181,8 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
-  updatePlayer(dt);
+  if (vehicle.isDriving()) vehicle.updateDriving(dt);
+  else updatePlayer(dt);
   updateEntities(dt);
   updateWeapons(dt);
   network.update(dt);
@@ -187,17 +208,24 @@ function frame(now) {
     }
   }
 
-  // Pickup prompt.
+  // Interaction prompt — prefer crate prompt; fall back to vehicle prompt.
   if (player.locked && player.hp > 0) {
     const c = nearestInRange(player.pos);
+    const vp = vehicle.nearbyVehiclePrompt(player.pos);
     if (c && c !== nearbyCrate) {
       nearbyCrate = c;
       const tier = c.tableKey === 'boss' ? 'cofre del DOCTOR'
                 : c.tableKey === 'city' ? 'cofre del laboratorio'
+                : c.tableKey === 'animal' ? 'restos del animal'
                 : 'cofre';
       showInteract(`abrir ${tier}`);
     } else if (!c && nearbyCrate) {
       nearbyCrate = null;
+      hideInteract();
+    } else if (!c && !nearbyCrate && vp) {
+      showInteract(vp.replace('[F]', '').trim());
+      // Use the prompt label but the [F] action is wired in the keydown handler above.
+    } else if (!c && !nearbyCrate && !vp) {
       hideInteract();
     }
   }
@@ -219,9 +247,86 @@ function frame(now) {
   // Mini-map.
   renderMinimap();
 
+  // Effects: tracers, decals, gore particles.
+  updateEffects(dt);
+
+  // Sniper warning — show a red dot in HUD if any sci_sniper has us in
+  // line of sight from > 35 m and is roughly facing us.
+  updateSniperWarning(dt);
+
   tickFps(dt);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 let _combatMusic = false;
+
+// =====================================================================
+// Sniper warning — checks every frame whether any sci_sniper has the
+// player in their attack range AND is facing us. If so, fade in a red
+// dot at top-center; play a low pulse the moment it appears.
+// =====================================================================
+let _sniperWarnEl = null;
+let _sniperWarnActive = false;
+let _sniperWarnPulseAt = 0;
+function ensureSniperWarn() {
+  if (_sniperWarnEl) return _sniperWarnEl;
+  _sniperWarnEl = document.createElement('div');
+  Object.assign(_sniperWarnEl.style, {
+    position: 'fixed', top: '90px', left: '50%', transform: 'translateX(-50%)',
+    width: '14px', height: '14px', borderRadius: '50%',
+    background: '#ff2020', boxShadow: '0 0 12px rgba(255,30,30,0.9)',
+    opacity: '0', transition: 'opacity 0.25s', pointerEvents: 'none', zIndex: 7,
+  });
+  document.body.appendChild(_sniperWarnEl);
+  // Label below the dot.
+  const lbl = document.createElement('div');
+  Object.assign(lbl.style, {
+    position: 'fixed', top: '108px', left: '50%', transform: 'translateX(-50%)',
+    color: '#ff5050', fontSize: '11px', letterSpacing: '2px', fontWeight: '700',
+    opacity: '0', transition: 'opacity 0.25s', pointerEvents: 'none', zIndex: 7,
+    fontFamily: 'system-ui, sans-serif',
+  });
+  lbl.textContent = 'TE TIENEN EN LA MIRA';
+  document.body.appendChild(lbl);
+  _sniperWarnEl._label = lbl;
+  return _sniperWarnEl;
+}
+function updateSniperWarning(dt) {
+  if (!player.locked) {
+    if (_sniperWarnActive) {
+      ensureSniperWarn().style.opacity = '0';
+      _sniperWarnEl._label.style.opacity = '0';
+      _sniperWarnActive = false;
+    }
+    return;
+  }
+  let tracked = false;
+  for (const e of enemies.values()) {
+    if (e.etype !== 'sci_sniper') continue;
+    const dx = player.pos.x - e.mesh.position.x;
+    const dz = player.pos.z - e.mesh.position.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 35 || d > 70) continue;        // sniper sweet spot for warning
+    // Sniper aim direction is its yaw — see if it points roughly at us.
+    const aimX = Math.sin(e.mesh.rotation.y);
+    const aimZ = Math.cos(e.mesh.rotation.y);
+    const dirX = dx / (d || 1), dirZ = dz / (d || 1);
+    const dot = aimX * dirX + aimZ * dirZ;
+    if (dot > 0.85) { tracked = true; break; }
+  }
+  const el = ensureSniperWarn();
+  if (tracked && !_sniperWarnActive) {
+    el.style.opacity = '1';
+    el._label.style.opacity = '0.9';
+    _sniperWarnActive = true;
+    if (performance.now() - _sniperWarnPulseAt > 800) {
+      sfx.playEmpty(); // short sting; reuse the empty-click chirp
+      _sniperWarnPulseAt = performance.now();
+    }
+  } else if (!tracked && _sniperWarnActive) {
+    el.style.opacity = '0';
+    el._label.style.opacity = '0';
+    _sniperWarnActive = false;
+  }
+}
 requestAnimationFrame(frame);
