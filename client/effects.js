@@ -86,6 +86,35 @@ export function spawnGoreBurst(x, y, z, count = 14) {
 }
 
 // =====================================================================
+// Bullet holes — small dark plane oriented to the surface normal at the
+// hit point. Persistent (no fade) up to a cap.
+// =====================================================================
+const HOLE_CAP = 64;
+const _holes = [];
+const _holeGeom = new THREE.PlaneGeometry(0.16, 0.16);
+const _holeMat = new THREE.MeshBasicMaterial({
+  color: 0x1a1014, transparent: true, opacity: 0.92, depthWrite: false,
+});
+
+export function spawnBulletHole(point, normal) {
+  const m = new THREE.Mesh(_holeGeom, _holeMat);
+  m.position.copy(point);
+  // Offset slightly along normal to avoid z-fighting.
+  m.position.addScaledVector(normal, 0.012);
+  // Orient plane to face along the normal.
+  const up = Math.abs(normal.y) > 0.95 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  m.lookAt(point.clone().add(normal));
+  // Random in-plane rotation for variety.
+  m.rotation.z = Math.random() * Math.PI * 2;
+  scene.add(m);
+  _holes.push(m);
+  if (_holes.length > HOLE_CAP) {
+    const dead = _holes.shift();
+    scene.remove(dead);
+  }
+}
+
+// =====================================================================
 // Damage numbers — short-lived 3D sprites floating up at the impact spot.
 // Critical hits (headshots) render bigger and red.
 // =====================================================================

@@ -15,7 +15,9 @@ import {
   setClock, showDamageArrow, setStamina, flashHitMarker,
   setDay, setPlayerName, setHotbarActive, setHotbarCount, setHotbarLocked,
   setActiveWeapon, showReload, toggleInventory, isInventoryOpen, renderInventory,
+  setCompass,
 } from './hud.js';
+import * as knife from './knife.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
 import { nearestInRange } from './loot.js';
@@ -186,14 +188,12 @@ network.onBanner = (text) => {
   if (text.includes('DOCTOR') && text.includes('LABORATORIO')) sfx.playBossSting();
 };
 network.onEnemyDead = (id, msg) => {
-  // Capture position BEFORE removeEnemy strips the mesh from entities.
-  // (network.js calls removeEnemy after invoking this callback.)
   const e = enemies.get(id);
   const x = e ? e.mesh.position.x : null;
   const z = e ? e.mesh.position.z : null;
-  // Town despawns broadcast eDead too — ignore those for the kill counter.
   if (msg.despawn) return;
   inv.bumpKills();
+  lifeKills++;
   // Persist total kills.
   profile.totalKills = (profile.totalKills | 0) + 1;
   saveProfile(profile);
@@ -304,6 +304,7 @@ respawnBtn.addEventListener('click', () => {
   network.respawn();
   setHP(player.hp);
   deathEl.classList.remove('show');
+  resetLifeStats();
   renderer.domElement.requestPointerLock?.();
 });
 
@@ -319,9 +320,17 @@ player.onLockChange = (locked) => {
 // =====================================================================
 let nearbyCrate = null;
 
+// Player.js applies player.mouseSensitivity if present (default 0.0022).
+// We just need the field to exist so applySettings can override it.
+
 addEventListener('keydown', (e) => {
-  // Chat is a typing context — don't intercept other game keys while it's open.
   if (_chatOpen) return;
+  // ESC toggles settings menu (don't fight the browser's pointer-lock release).
+  if (e.code === 'Escape' && !e.repeat) {
+    if (settingsMenu.classList.contains('hidden')) openSettings();
+    else closeSettings();
+    return;
+  }
   // TAB inventory works even outside game.
   if (e.code === 'Tab') {
     e.preventDefault();
@@ -375,22 +384,108 @@ let _shadowInvState = {};
 inv.onChange((s) => { _shadowInvState = { ...s }; });
 function _currentInvState() { return _shadowInvState; }
 
+// =====================================================================
+// Per-life stats — reset on respawn, displayed on the death screen.
+// =====================================================================
+let lifeStartedAt = performance.now();
+let lifeKills = 0;
+let lifeDamage = 0;
+function resetLifeStats() {
+  lifeStartedAt = performance.now();
+  lifeKills = 0;
+  lifeDamage = 0;
+}
+function showDeathStats() {
+  const t = (performance.now() - lifeStartedAt) / 1000;
+  const m = Math.floor(t / 60), s = Math.floor(t % 60);
+  document.getElementById('dsTimeI').textContent = `${m}:${String(s).padStart(2, '0')}`;
+  document.getElementById('dsKillsI').textContent = lifeKills | 0;
+  document.getElementById('dsDmgI').textContent = lifeDamage | 0;
+  document.getElementById('dsTotalI').textContent = profile.totalKills | 0;
+}
+
+// =====================================================================
+// Settings menu — ESC during play. Saves to localStorage.
+// =====================================================================
+const SETTINGS_KEY = 'survival-fps-v1-settings';
+const settings = (function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) return Object.assign({ vol: 40, sens: 22, crosshair: true, minimap: true }, JSON.parse(raw));
+  } catch {}
+  return { vol: 40, sens: 22, crosshair: true, minimap: true };
+})();
+function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {} }
+function applySettings() {
+  document.body.classList.toggle('no-crosshair', !settings.crosshair);
+  document.body.classList.toggle('no-minimap', !settings.minimap);
+  // Volume: sounds module has a setMaster() — fall back if not present.
+  sfx.setMasterVolume?.(settings.vol / 100);
+  // Mouse sensitivity drives a player.js exposed scalar.
+  player.mouseSensitivity = settings.sens / 10;
+}
+
+// Bind UI controls.
+const settingsMenu = document.getElementById('settingsMenu');
+const setVol = document.getElementById('setVol');
+const setVolN = document.getElementById('setVolN');
+const setSens = document.getElementById('setSens');
+const setSensN = document.getElementById('setSensN');
+const setCross = document.getElementById('setCross');
+const setMinimap = document.getElementById('setMinimap');
+const setOk = document.getElementById('setOk');
+function syncSettingsUI() {
+  setVol.value = settings.vol; setVolN.textContent = settings.vol;
+  setSens.value = settings.sens; setSensN.textContent = (settings.sens / 10).toFixed(1);
+  setCross.checked = !!settings.crosshair;
+  setMinimap.checked = !!settings.minimap;
+}
+syncSettingsUI();
+applySettings();
+
+setVol?.addEventListener('input', () => { settings.vol = +setVol.value; setVolN.textContent = settings.vol; applySettings(); saveSettings(); });
+setSens?.addEventListener('input', () => { settings.sens = +setSens.value; setSensN.textContent = (settings.sens / 10).toFixed(1); applySettings(); saveSettings(); });
+setCross?.addEventListener('change', () => { settings.crosshair = setCross.checked; applySettings(); saveSettings(); });
+setMinimap?.addEventListener('change', () => { settings.minimap = setMinimap.checked; applySettings(); saveSettings(); });
+setOk?.addEventListener('click', () => closeSettings());
+
+function openSettings() {
+  settingsMenu.classList.remove('hidden');
+  document.exitPointerLock?.();
+}
+function closeSettings() {
+  settingsMenu.classList.add('hidden');
+  if (player.locked || player.hp > 0) {
+    setTimeout(() => renderer.domElement.requestPointerLock?.(), 50);
+  }
+}
+
 function handleHotbarSlot(slotIdx) {
   if (slotIdx === 0 || slotIdx === 1) {
-    // Weapon slot: delegate to weapons.js. Hotbar visual sync below.
+    // Pistol or rifle.
+    knife.setKnifeActive(false);
     selectWeaponBySlot(slotIdx);
     setHotbarActive(slotIdx);
     return;
   }
   if (slotIdx === 2) {
-    // Bandage — use immediately.
     if (inv.useBandage(player)) {
       logLine('+30 HP (vendaje usado)');
       sfx.playPickup();
     }
     return;
   }
-  // Slots 3..8 reserved for future items (grenades, food, etc).
+  if (slotIdx === 3) {
+    // Grenade selection — actual throw on G key. Just visual cue here.
+    setHotbarActive(3);
+    return;
+  }
+  if (slotIdx === 4) {
+    // Knife — slot 5.
+    knife.setKnifeActive(true);
+    setHotbarActive(4);
+    return;
+  }
 }
 
 // =====================================================================
@@ -398,6 +493,7 @@ function handleHotbarSlot(slotIdx) {
 // =====================================================================
 let footAccum = 0;
 let lastPlayerX = player.pos.x, lastPlayerZ = player.pos.z;
+let _growlAccum = 0;
 
 // =====================================================================
 // Game loop.
@@ -412,15 +508,39 @@ function frame(now) {
   else updatePlayer(dt);
   updateEntities(dt);
   updateWeapons(dt);
+  knife.updateKnife(dt);
   network.update(dt);
   player.regen(dt);
   setHP(player.hp);
+  setCompass(player.yaw());
 
   // Death detection — see hp <= 0 even if onYouHit didn't fire on this tick.
   if (player.hp <= 0 && !deathEl.classList.contains('show')) {
     deathEl.classList.add('show');
     menuEl.style.display = 'none';
     document.exitPointerLock?.();
+    showDeathStats();
+  }
+
+  // Zombie growl cue: every ~2.5 s, pick a random close hostile and play
+  // a growl scaled by distance. Cheap atmospheric pressure.
+  _growlAccum += dt;
+  if (_growlAccum > 2.5) {
+    _growlAccum = 0;
+    const candidates = [];
+    for (const e of enemies.values()) {
+      if (e.sleeping) continue;
+      const dx = e.mesh.position.x - player.pos.x;
+      const dz = e.mesh.position.z - player.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 22 && (e.etype === 'zombie' || e.etype === 'runner' || e.etype === 'tank')) {
+        candidates.push({ e, d });
+      }
+    }
+    if (candidates.length > 0) {
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      sfx.playGrowl?.(pick.d);
+    }
   }
 
   // Footstep cadence.

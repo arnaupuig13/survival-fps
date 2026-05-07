@@ -44,7 +44,9 @@ document.addEventListener('pointerlockchange', () => {
 });
 document.addEventListener('mousemove', (e) => {
   if (!locked) return;
-  const sens = 0.0022;
+  // Settings UI writes to player.mouseSensitivity (default 0.0022). 1.0 in
+  // settings = 0.001, so a slider at 22 = 0.0022.
+  const sens = (player.mouseSensitivity || 22) / 10000;
   yaw   -= e.movementX * sens;
   pitch -= e.movementY * sens;
   if (pitch >  PITCH_LIMIT) pitch =  PITCH_LIMIT;
@@ -65,6 +67,7 @@ export const player = {
   eyeHeightCurrent: EYE_HEIGHT,
   invulnerable: true,
   invulnGraceUntil: 0,
+  mouseSensitivity: 22,         // overridden by settings; 22 ≈ 0.0022 raw rate
   yaw: () => yaw,
   pitch: () => pitch,
   get locked() { return locked; },

@@ -19,6 +19,13 @@ export function ensureAudio() {
   return ctx;
 }
 
+// 0..1 master volume controlled from settings UI. No-op if audio hasn't
+// been unlocked yet (e.g. settings opened before JUGAR).
+export function setMasterVolume(v) {
+  if (!ctx || !masterGain) return;
+  masterGain.gain.value = Math.max(0, Math.min(1, v));
+}
+
 function envelope(node, attack, decay, sustainLvl, release) {
   const t = ctx.currentTime;
   const g = node.gain;

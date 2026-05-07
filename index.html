@@ -70,6 +70,10 @@
     #death .panel { background: rgba(20,0,0,0.92); border: 1px solid #722; padding: 40px 60px; text-align: center; }
     #death h1 { margin: 0 0 18px 0; font-size: 36px; color: #ff5050; letter-spacing: 6px; }
     #death button { background: #c93f3f; color: #fff; border: none; padding: 12px 28px; font-size: 15px; font-weight: 600; letter-spacing: 2px; cursor: pointer; }
+    #deathStatsInner { margin-bottom: 22px; min-width: 280px; }
+    .dsRowI { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #511; font-family: monospace; font-size: 13px; color: #ddd; }
+    .dsRowI span:first-child { color: #aaa; letter-spacing: 1px; }
+    .dsRowI span:last-child { color: #f0c060; font-weight: 700; }
 
     /* Online counter */
     #online { position: fixed; right: 12px; top: 36px; font-size: 12px; color: #8f8; background: rgba(0,20,0,0.45); padding: 3px 8px; font-family: monospace; }
@@ -125,6 +129,35 @@
     /* Scope vignette — radial gradient that darkens corners + crosshair circle. */
     #scopeVignette { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.18s; background: radial-gradient(circle at center, transparent 18%, rgba(0,0,0,0.4) 30%, rgba(0,0,0,0.95) 65%); z-index: 5; }
     #scopeVignette.show { opacity: 1; }
+
+    /* Compass — narrow bar at top center with cardinal marks. */
+    #compass { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); width: 320px; height: 24px; background: rgba(0,0,0,0.45); border: 1px solid #333; overflow: hidden; pointer-events: none; }
+    #compassStrip { position: absolute; top: 0; left: 0; height: 100%; width: 1280px; }
+    #compassStrip span { position: absolute; top: 50%; transform: translate(-50%, -50%); font-family: monospace; font-size: 11px; color: #ddd; letter-spacing: 1px; }
+    #compassStrip span.major { color: #f0c060; font-weight: 700; font-size: 13px; }
+    #compassTick { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 2px; height: 100%; background: #ff4040; }
+
+    /* Settings menu */
+    #settingsMenu { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 11; }
+    #settingsMenu.hidden { display: none; }
+    .settingsPanel { background: rgba(20,20,20,0.95); border: 1px solid #444; padding: 28px 38px; min-width: 380px; }
+    .settingsPanel h2 { margin: 0 0 18px 0; font-size: 18px; letter-spacing: 4px; color: #f0c060; text-align: center; }
+    .setting { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; font-family: system-ui; font-size: 12px; color: #ddd; }
+    .setting label { flex: 1; letter-spacing: 1px; color: #aaa; }
+    .setting input[type=range] { width: 140px; accent-color: #f0c060; }
+    .setting input[type=checkbox] { accent-color: #f0c060; transform: scale(1.3); }
+    .setting span { width: 36px; text-align: right; font-family: monospace; color: #f0c060; }
+    #setOk { display: block; margin: 18px auto 0; background: #f0c060; color: #1a1a1a; border: none; padding: 8px 24px; font-size: 13px; font-weight: 700; letter-spacing: 2px; cursor: pointer; }
+
+    /* Death stats (rendered inside #death panel via JS) */
+    #deathStats { display: none; position: fixed; inset: 0; pointer-events: none; }
+    #deathStats.show { display: block; z-index: 20; }
+    #death.show + #deathStats.show .dsRow { display: flex; }
+    .dsRow { display: none; }
+
+    /* Hide crosshair when toggled off via settings */
+    body.no-crosshair #crosshair { display: none; }
+    body.no-minimap #minimap { display: none; }
 
     /* Name dialog */
     #nameDialog { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 12; }
@@ -214,6 +247,32 @@
   <!-- ADS scope vignette (hidden by default) -->
   <div id="scopeVignette"></div>
 
+  <!-- Compass — top-center bar with cardinal markers. -->
+  <div id="compass">
+    <div id="compassStrip"></div>
+    <div id="compassTick"></div>
+  </div>
+
+  <!-- Settings menu (ESC). Audio + mouse + crosshair. -->
+  <div id="settingsMenu" class="hidden">
+    <div class="settingsPanel">
+      <h2>AJUSTES</h2>
+      <div class="setting"><label>Volumen general</label><input id="setVol" type="range" min="0" max="100" value="40" /><span id="setVolN">40</span></div>
+      <div class="setting"><label>Sensibilidad del mouse</label><input id="setSens" type="range" min="1" max="40" value="22" /><span id="setSensN">2.2</span></div>
+      <div class="setting"><label>Mostrar crosshair</label><input id="setCross" type="checkbox" checked /></div>
+      <div class="setting"><label>Mostrar mini-mapa</label><input id="setMinimap" type="checkbox" checked /></div>
+      <button id="setOk">CERRAR</button>
+    </div>
+  </div>
+
+  <!-- Stats screen — appears under HAS MUERTO with run summary. -->
+  <div id="deathStats">
+    <div class="dsRow"><span class="dsLabel">Tiempo</span><span class="dsVal" id="dsTime">0:00</span></div>
+    <div class="dsRow"><span class="dsLabel">Bajas</span><span class="dsVal" id="dsKills">0</span></div>
+    <div class="dsRow"><span class="dsLabel">Daño infligido</span><span class="dsVal" id="dsDmg">0</span></div>
+    <div class="dsRow"><span class="dsLabel">Total bajas</span><span class="dsVal" id="dsTotalKills">0</span></div>
+  </div>
+
   <!-- Nickname dialog — first-run prompt before JUGAR. -->
   <div id="nameDialog" class="hidden">
     <div class="nameDialogPanel">
@@ -246,6 +305,12 @@
   <div id="death">
     <div class="panel">
       <h1>HAS MUERTO</h1>
+      <div id="deathStatsInner">
+        <div class="dsRowI"><span>Tiempo</span><span id="dsTimeI">0:00</span></div>
+        <div class="dsRowI"><span>Bajas en esta partida</span><span id="dsKillsI">0</span></div>
+        <div class="dsRowI"><span>Daño infligido</span><span id="dsDmgI">0</span></div>
+        <div class="dsRowI"><span>Total bajas</span><span id="dsTotalI">0</span></div>
+      </div>
       <button id="respawnBtn">REAPARECER</button>
     </div>
   </div>

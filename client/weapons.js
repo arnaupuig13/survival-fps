@@ -9,7 +9,8 @@ import { network } from './network.js';
 import { player } from './player.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
-import { spawnTracer, spawnDamageNumber } from './effects.js';
+import { spawnTracer, spawnDamageNumber, spawnBulletHole } from './effects.js';
+import { scene as worldScene } from './three-setup.js';
 
 // Each weapon names the inventory key it consumes per shot. magazineSize
 // caps the loaded round count; reload pulls from the inventory pool. The
@@ -152,6 +153,9 @@ function tryFire() {
     e.mesh.traverse(c => { if (c.isMesh) { candidates.push(c); eMap.set(c, id); } });
   }
 
+  // Wider raycast against scene as fallback for surface hits — used to
+  // place bullet holes when we miss enemies (we don't want to miss-trace
+  // through the world). We cap recursive=true so building children count.
   const hits = ray.intersectObjects(candidates, false);
   let hitId = null;
   let isHeadshot = false;
@@ -159,18 +163,28 @@ function tryFire() {
   if (hits.length > 0) {
     const hit = hits[0];
     hitPoint = hit.point;
-    // Walk up to find which enemy the hit object belongs to.
     let obj = hit.object;
     while (obj && !eMap.has(obj)) obj = obj.parent;
     if (obj) {
       hitId = eMap.get(obj);
-      // Headshot heuristic — most enemy meshes have the head ~1.6-1.8 m
-      // above their root. We treat any hit with localY >= 1.45 m as a head
-      // hit. Boss/scientist are taller so the threshold scales loosely.
       const enemyEntry = enemies.get(hitId);
       if (enemyEntry) {
         const localY = hit.point.y - enemyEntry.mesh.position.y;
         isHeadshot = localY >= 1.45;
+      }
+    }
+  } else {
+    // No enemy hit — second raycast against the whole scene to place a
+    // bullet hole on whatever the player shot.
+    const rs = new THREE.Raycaster(_origin.clone(), _dir.clone(), 0.2, cfg.range);
+    const sceneHits = rs.intersectObjects(worldScene.children, true);
+    if (sceneHits.length > 0) {
+      const sh = sceneHits[0];
+      // Skip our own gun mesh + camera-attached helpers (they sit very close).
+      if (sh.distance > 0.4 && sh.face) {
+        const normal = sh.face.normal.clone();
+        normal.transformDirection(sh.object.matrixWorld);
+        spawnBulletHole(sh.point, normal);
       }
     }
   }

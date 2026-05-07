@@ -129,6 +129,52 @@ export function toggleInventory(state) {
   // pressing ESC; we don't unlock here to avoid interfering.
 }
 
+// =====================================================================
+// Compass — top-center bar with NSWE markers. Update with player yaw.
+// 1280px strip wraps around 360°, only middle 320px visible. We slide
+// the strip negatively as yaw increases so cardinal points stay accurate.
+// =====================================================================
+const compassStrip = document.getElementById('compassStrip');
+let _compassBuilt = false;
+function buildCompass() {
+  if (!compassStrip || _compassBuilt) return;
+  _compassBuilt = true;
+  // Build 5 copies of N E S W spanning 1280 px so we can slide cleanly.
+  const total = 1280;
+  const cardinals = [
+    { lbl: 'N', deg: 0,   major: true },
+    { lbl: 'NE', deg: 45 },
+    { lbl: 'E', deg: 90,  major: true },
+    { lbl: 'SE', deg: 135 },
+    { lbl: 'S', deg: 180, major: true },
+    { lbl: 'SO', deg: 225 },
+    { lbl: 'O', deg: 270, major: true },
+    { lbl: 'NO', deg: 315 },
+  ];
+  for (const c of cardinals) {
+    // Two copies — one centered around 0°, one around 360°, so wrap looks seamless.
+    for (let copy = 0; copy <= 1; copy++) {
+      const span = document.createElement('span');
+      span.textContent = c.lbl;
+      if (c.major) span.className = 'major';
+      const x = (c.deg + copy * 360) / 720 * total;
+      span.style.left = `${x}px`;
+      compassStrip.appendChild(span);
+    }
+  }
+}
+export function setCompass(yawRad) {
+  buildCompass();
+  if (!compassStrip) return;
+  // Yaw 0 = facing -Z = North. Map yaw to strip offset: 360° → 640 px.
+  let deg = (yawRad * 180 / Math.PI) % 360;
+  if (deg < 0) deg += 360;
+  // Center the strip so 0° lines up with the tick. Strip is 1280px,
+  // visible window 320px. Tick is at center (160px).
+  const offsetX = 160 - (deg / 720) * 1280 + 320; // shift +320 puts the [360..720] copies under the tick
+  compassStrip.style.transform = `translateX(${offsetX}px)`;
+}
+
 export function renderInventory(state, itemMeta) {
   if (!invGrid) return;
   invGrid.innerHTML = '';

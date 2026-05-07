@@ -3,7 +3,7 @@
 
 import {
   spawnEnemy, removeEnemy, wakeEnemy, triggerEnemyAttack,
-  spawnPeer, removePeer, peers, enemies, setPeerName, showPeerBubble,
+  spawnPeer, removePeer, peers, enemies, setPeerName, showPeerBubble, setPeerHP,
 } from './entities.js';
 import { setTownLayouts } from './towns.js';
 import { spawnCrate, removeCrate } from './loot.js';
@@ -111,6 +111,10 @@ class NetworkClient {
         p.target.x = arr[1];
         p.target.z = arr[3];
         p.target.ry = arr[4];
+        // arr[5] = hp; only repaint label if it actually changed.
+        if (arr[5] != null && arr[5] !== p.hp) {
+          setPeerHP(arr[0], arr[5], 100);
+        }
       }
     } else if (msg.type === 'youHit') {
       this.onYouHit?.(msg.dmg, { x: msg.sx, y: msg.sy, z: msg.sz }, msg.source || 'enemy');

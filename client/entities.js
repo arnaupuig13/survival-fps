@@ -183,27 +183,57 @@ function makePeerMesh(name = '') {
   return g;
 }
 
-// Canvas-textured sprite name tag. White text + dark outline so it reads
-// against any sky / building background.
-function makePeerLabel(name) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256; canvas.height = 64;
+// Canvas-textured sprite name tag with HP bar. Re-rendered when hp changes.
+function paintPeerLabel(canvas, name, hp = 100, maxHp = 100) {
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  ctx.fillRect(0, 0, 256, 64);
+  ctx.clearRect(0, 0, 256, 96);
+  // Name plate.
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(0, 0, 256, 56);
   ctx.font = 'bold 28px system-ui';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#1a1a1a';
-  ctx.fillText(name, 128, 33);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(name, 128, 32);
+  ctx.fillStyle = '#1a1a1a'; ctx.fillText(name, 128, 31);
+  ctx.fillStyle = '#ffffff'; ctx.fillText(name, 128, 30);
+  // HP bar (below name).
+  const barX = 16, barY = 64, barW = 224, barH = 18;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(barX, barY, barW, barH);
+  const t = Math.max(0, Math.min(1, hp / maxHp));
+  // Color shifts red → orange → green as hp climbs.
+  const r = Math.round(220 * (1 - t) + 80 * t);
+  const g = Math.round(60 * (1 - t) + 200 * t);
+  ctx.fillStyle = `rgb(${r}, ${g}, 60)`;
+  ctx.fillRect(barX + 1, barY + 1, (barW - 2) * t, barH - 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barW, barH);
+}
+
+function makePeerLabel(name, hp = 100, maxHp = 100) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 96;
+  paintPeerLabel(canvas, name, hp, maxHp);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
-  sprite.scale.set(2.0, 0.5, 1);
-  sprite.position.y = 2.4;
+  sprite.scale.set(2.0, 0.75, 1);
+  sprite.position.y = 2.5;
   sprite.userData.isLabel = true;
+  sprite.userData.canvas = canvas;
+  sprite.userData.tex = tex;
   return sprite;
+}
+
+// Update an existing peer's label HP without rebuilding the sprite.
+export function setPeerHP(id, hp, maxHp = 100) {
+  const p = peers.get(id); if (!p) return;
+  p.hp = hp; p.maxHp = maxHp;
+  for (const child of p.mesh.children) {
+    if (child.userData?.isLabel && child.userData.canvas) {
+      paintPeerLabel(child.userData.canvas, p.name || `P${id}`, hp, maxHp);
+      child.userData.tex.needsUpdate = true;
+    }
+  }
 }
 
 // Speech bubble sprite — short-lived bigger label with chat text.
@@ -370,6 +400,7 @@ export function spawnPeer(info) {
     mesh, target: { x: info.x, z: info.z, ry: info.ry || 0 },
     walkPhase: 0, lastX: info.x, lastZ: info.z,
     name: info.name || `P${info.id}`,
+    hp: info.hp ?? 100, maxHp: info.maxHp ?? 100,
     bubble: null, bubbleExpiresAt: 0,
   });
 }
@@ -378,7 +409,6 @@ export function spawnPeer(info) {
 export function setPeerName(id, name) {
   const p = peers.get(id); if (!p) return;
   p.name = name;
-  // Find and remove old label, add new one.
   for (const child of [...p.mesh.children]) {
     if (child.userData?.isLabel) {
       p.mesh.remove(child);
@@ -386,7 +416,7 @@ export function setPeerName(id, name) {
       child.material.dispose();
     }
   }
-  p.mesh.add(makePeerLabel(name));
+  p.mesh.add(makePeerLabel(name, p.hp ?? 100, p.maxHp ?? 100));
 }
 
 // Show a speech bubble above a peer for `durationMs`. Replaces an existing
