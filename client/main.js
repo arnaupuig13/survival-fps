@@ -32,7 +32,7 @@ import { nearestInRange, removeCrate } from './loot.js';
 import { renderMinimap } from './minimap.js';
 import {
   lastShotWithinKillWindow, getActive as getActiveWeapon,
-  selectWeaponBySlot, isReloading, activeWeaponMeta,
+  selectWeaponBySlot, isReloading, activeWeaponMeta, consumeRecoil,
 } from './weapons.js';
 import { updateEffects, spawnBloodDecal, spawnGoreBurst } from './effects.js';
 import { enemies } from './entities.js';
