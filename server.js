@@ -89,6 +89,10 @@ const ETYPES = {
   sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 22, range: 12,  cd: 1.5, aggro: 30, ranged: true,  weapon: 'shotgun' },
   sci_sniper:   { hp: 16,  speed: 1.0, dmg: 32, range: 60,  cd: 2.4, aggro: 60, ranged: true,  weapon: 'sniper'  },
   boss:         { hp: 240, speed: 1.7, dmg: 16, range: 32,  cd: 0.55, aggro: 50, ranged: true, weapon: 'ak', isBoss: true },
+  // Hostile wildlife — bear is a slow tank with huge melee damage; boar is
+  // a sprinter that charges and bowls the player over.
+  bear:         { hp: 90,  speed: 3.4, dmg: 28, range: 2.2, cd: 1.6, aggro: 36, ranged: false },
+  boar:         { hp: 26,  speed: 4.5, dmg: 14, range: 1.9, cd: 1.0, aggro: 28, ranged: false },
   // Passive animals — wander, flee when a player gets close. Killable for loot.
   deer:         { hp: 12,  speed: 5.0, dmg: 0,  range: 0,   cd: 0,    aggro: 0,  ranged: false, passive: true, fleeRange: 22 },
   rabbit:       { hp: 4,   speed: 6.0, dmg: 0,  range: 0,   cd: 0,    aggro: 0,  ranged: false, passive: true, fleeRange: 14 },
@@ -150,6 +154,47 @@ for (const t of TOWNS) {
     b.wz = t.cz + b.dz;
   }
 }
+
+// =====================================================================
+// POIs — Points of Interest scattered between towns. Each is a small
+// landmark with its own visual identity, guards and loot. Streamed the
+// same way towns are; the kind field controls mesh + loot tier + guards.
+//
+// kind:
+//   helicopter — crashed military heli, 2 scientist guards, 2 city-tier
+//                crates (high-end loot).
+//   gas        — abandoned gas station, 1 zombie + 1 runner guard, 2
+//                town-tier crates.
+//   cabin      — lone wooden cabin, 1 zombie guard, 1 town-tier crate.
+// =====================================================================
+const POIS = [
+  // Three crashed helicopters in mid-map clearings.
+  { id: 'heli-a',  kind: 'helicopter', cx: -80,  cz:  60,  ry: 0.4 },
+  { id: 'heli-b',  kind: 'helicopter', cx:  80,  cz:  70,  ry: -0.3 },
+  { id: 'heli-c',  kind: 'helicopter', cx: -40,  cz:  10,  ry: 1.2 },
+  // Two abandoned gas stations on the routes between towns.
+  { id: 'gas-a',   kind: 'gas',        cx: -90,  cz: -40,  ry: 0 },
+  { id: 'gas-b',   kind: 'gas',        cx:  100, cz: -30,  ry: Math.PI / 2 },
+  // Five lone cabins scattered in the woods.
+  { id: 'cabin-a', kind: 'cabin',      cx:  60,  cz: 100,  ry: 0 },
+  { id: 'cabin-b', kind: 'cabin',      cx: -100, cz:  90,  ry: Math.PI / 3 },
+  { id: 'cabin-c', kind: 'cabin',      cx:  30,  cz: -50,  ry: -0.5 },
+  { id: 'cabin-d', kind: 'cabin',      cx: -40,  cz: -50,  ry: 0.8 },
+  { id: 'cabin-e', kind: 'cabin',      cx: 110,  cz:  90,  ry: 0 },
+];
+
+const POI_GUARDS = {
+  helicopter: ['scientist', 'sci_shotgun'],
+  gas:        ['zombie', 'runner'],
+  cabin:      ['zombie'],
+};
+const POI_CRATES = {
+  helicopter: { count: 2, tier: 'city' },
+  gas:        { count: 2, tier: 'town' },
+  cabin:      { count: 1, tier: 'town' },
+};
+const poiState = new Map();
+for (const p of POIS) poiState.set(p.id, { spawned: false, enemyIds: new Set() });
 
 // =====================================================================
 // Loot tables — what kinds of items each crate type drops. Counts are
@@ -221,10 +266,23 @@ function spawnTownCrates() {
       crates.set(id, {
         id, x: b.wx, z: b.wz,
         y: heightAt(b.wx, b.wz),
-        tableKey: t.type, // 'town' or 'city'
+        tableKey: t.type,
         townId: t.id,
         taken: false,
       });
+    }
+  }
+  // POI crates — placed near each POI center with a small offset.
+  for (const p of POIS) {
+    const cfg = POI_CRATES[p.kind];
+    if (!cfg) continue;
+    for (let i = 0; i < cfg.count; i++) {
+      const angle = (i / cfg.count) * Math.PI * 2;
+      const r = 1.8;
+      const x = p.cx + Math.cos(angle) * r;
+      const z = p.cz + Math.sin(angle) * r;
+      const id = nextCrateId++;
+      crates.set(id, { id, x, z, y: heightAt(x, z), tableKey: cfg.tier, townId: p.id, taken: false });
     }
   }
 }
@@ -331,10 +389,42 @@ function cPub(c) {
 // =====================================================================
 // Town streaming — spawn / despawn enemies inside each town's buildings.
 // =====================================================================
+function streamPois() {
+  for (const p of POIS) {
+    const ps = poiState.get(p.id);
+    let nearestD = Infinity;
+    for (const pl of players.values()) {
+      const d = Math.hypot(pl.x - p.cx, pl.z - p.cz);
+      if (d < nearestD) nearestD = d;
+    }
+    if (!ps.spawned && nearestD < 110) {
+      ps.spawned = true;
+      const guards = POI_GUARDS[p.kind] || ['zombie'];
+      for (let i = 0; i < guards.length; i++) {
+        const angle = (i / guards.length) * Math.PI * 2;
+        const r = 4 + Math.random() * 2;
+        const x = p.cx + Math.cos(angle) * r;
+        const z = p.cz + Math.sin(angle) * r;
+        const e = makeEnemy({ etype: guards[i], x, z, townId: p.id });
+        ps.enemyIds.add(e.id);
+        broadcast({ type: 'eSpawn', e: ePub(e) });
+      }
+    } else if (ps.spawned && nearestD > 200) {
+      for (const id of ps.enemyIds) {
+        const e = enemies.get(id);
+        if (!e || e.isBoss) continue;
+        enemies.delete(id);
+        broadcast({ type: 'eDead', id, despawn: true });
+      }
+      ps.enemyIds = new Set([...ps.enemyIds].filter(id => enemies.has(id)));
+      ps.spawned = false;
+    }
+  }
+}
+
 function streamTowns() {
   for (const t of TOWNS) {
     const ts = townState.get(t.id);
-    // Find nearest player to this town.
     let nearestD = Infinity;
     for (const p of players.values()) {
       const dx = p.x - t.cx, dz = p.z - t.cz;
@@ -415,14 +505,18 @@ function spawnAmbientHostile(minDist = 38, maxDist = 80) {
     let etype = 'zombie';
     const r2 = Math.random();
     if (isNight) {
-      if (r2 > 0.85)      etype = 'tank';
-      else if (r2 > 0.60) etype = 'wolf';
-      else if (r2 > 0.35) etype = 'runner';
+      if (r2 > 0.96)      etype = 'bear';
+      else if (r2 > 0.88) etype = 'tank';
+      else if (r2 > 0.82) etype = 'boar';
+      else if (r2 > 0.55) etype = 'wolf';
+      else if (r2 > 0.30) etype = 'runner';
       else                etype = 'zombie';
     } else {
-      if (r2 > 0.93)      etype = 'tank';
-      else if (r2 > 0.85) etype = 'wolf';
-      else if (r2 > 0.78) etype = 'runner';
+      if (r2 > 0.97)      etype = 'bear';
+      else if (r2 > 0.93) etype = 'tank';
+      else if (r2 > 0.88) etype = 'boar';
+      else if (r2 > 0.82) etype = 'wolf';
+      else if (r2 > 0.75) etype = 'runner';
       else                etype = 'zombie';
     }
     const e = makeEnemy({ etype, x, z, ambient: true });
@@ -460,6 +554,9 @@ function spawnAmbientAnimal() {
   }
   return null;
 }
+
+// Supply drop timer — first one ~3 min after first player connects.
+let supplyDropCountdown = 180;
 
 // =====================================================================
 // Day / night cycle. The game hour wraps every DAY_LENGTH seconds. Night
@@ -594,11 +691,27 @@ setInterval(() => {
     broadcast({ type: 'time', h: +gameHour.toFixed(2), night: isNightHour(gameHour) });
   }
 
-  // Town streaming check — every 0.8 s, not every tick.
+  // Town + POI streaming check — every 0.8 s, not every tick.
   streamCheckAccum += AI_DT;
   if (streamCheckAccum >= 0.8) {
     streamCheckAccum = 0;
     streamTowns();
+    streamPois();
+  }
+
+  // Supply drop event — every 4-6 minutes a high-tier crate parachutes
+  // somewhere in the playable map (away from towns). All clients get a
+  // banner + a position so they can fight over it.
+  supplyDropCountdown -= AI_DT;
+  if (supplyDropCountdown <= 0 && players.size > 0) {
+    supplyDropCountdown = 240 + Math.random() * 120;
+    const sx = (Math.random() * 2 - 1) * (WORLD_HALF * 0.7);
+    const sz = (Math.random() * 2 - 1) * (WORLD_HALF * 0.7);
+    const id = nextCrateId++;
+    crates.set(id, { id, x: sx, z: sz, y: heightAt(sx, sz), tableKey: 'boss', townId: null, taken: false });
+    broadcast({ type: 'crateSpawn', c: cPub(crates.get(id)) });
+    broadcast({ type: 'banner', text: '★ SUMINISTROS CAYERON ★' });
+    broadcast({ type: 'supplyDrop', x: sx, z: sz });
   }
 
   // Ambient (out-of-town) spawn ticker. At night spawn faster + cap higher.
@@ -764,6 +877,7 @@ wss.on('connection', (ws) => {
       buildings: t.buildings.map(b => ({ dx: b.dx, dz: b.dz, w: b.w, h: b.h, ry: b.ry })),
     })),
     crates: [...crates.values()].filter(c => !c.taken).map(cPub),
+    pois: POIS.map(p => ({ id: p.id, kind: p.kind, cx: p.cx, cz: p.cz, ry: p.ry || 0 })),
   }));
   broadcast({ type: 'peerJoin', p: pPub(player) }, id);
 

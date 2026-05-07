@@ -155,6 +155,127 @@ export function harvestBush(bush) {
 }
 
 // =====================================================================
+// Lakes — small water plates scattered around. Walk close, press E to
+// fill a water bottle. Static, deterministic seed.
+// =====================================================================
+
+const lakes = [];
+const LAKE_MAT = new THREE.MeshStandardMaterial({
+  color: 0x2860a0, roughness: 0.1, metalness: 0.0,
+  emissive: 0x103060, emissiveIntensity: 0.18, transparent: true, opacity: 0.78,
+});
+
+function spawnLakes() {
+  // 6 lakes in deterministic positions across the map.
+  const places = [
+    [-60, 70, 6.0], [50, -60, 5.5], [-110, -20, 7.0],
+    [120, 40, 5.0], [-30, -110, 6.5], [90, 110, 5.8],
+  ];
+  for (const [cx, cz, r] of places) {
+    // Skip if inside any town clearing.
+    let inTown = false;
+    for (const t of [
+      [-150, 140, 32], [155, 150, 32], [-160, -130, 32],
+      [140, -160, 32], [0, -100, 80],
+    ]) {
+      const dx = t[0] - cx, dz = t[1] - cz;
+      if (dx * dx + dz * dz < t[2] * t[2]) { inTown = true; break; }
+    }
+    if (inTown) continue;
+    const geom = new THREE.CircleGeometry(r, 24);
+    geom.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geom, LAKE_MAT);
+    // Sit just above terrain to avoid z-fight.
+    mesh.position.set(cx, heightAt(cx, cz) - 0.15, cz);
+    scene.add(mesh);
+    lakes.push({ mesh, x: cx, z: cz, r });
+  }
+}
+spawnLakes();
+
+export function nearestLakeInRange(playerPos, range = 3.5) {
+  let best = null, bestD = range;
+  for (const l of lakes) {
+    const d = Math.hypot(l.x - playerPos.x, l.z - playerPos.z) - l.r;
+    if (d < bestD) { bestD = d; best = l; }
+  }
+  return best;
+}
+
+// =====================================================================
+// Medicinal plants — emissive green leaf cluster, +20 HP on pickup.
+// 50 spawned in forests away from towns.
+// =====================================================================
+
+const PLANT_COUNT = 50;
+const plants = [];
+const PLANT_MATS = {
+  leaf:   new THREE.MeshStandardMaterial({ color: 0x40d060, roughness: 0.7, emissive: 0x10501a, emissiveIntensity: 0.4 }),
+  flower: new THREE.MeshStandardMaterial({ color: 0xf0f0e0, roughness: 0.5, emissive: 0xc0c0a0, emissiveIntensity: 0.3 }),
+};
+
+function makePlantMesh() {
+  const g = new THREE.Group();
+  // Leaf cluster.
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2;
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.45, 0.18), PLANT_MATS.leaf);
+    leaf.position.set(Math.cos(angle) * 0.12, 0.22, Math.sin(angle) * 0.12);
+    leaf.rotation.z = Math.cos(angle) * 0.4;
+    leaf.rotation.x = Math.sin(angle) * 0.4;
+    g.add(leaf);
+  }
+  // Single white flower on top.
+  const flower = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), PLANT_MATS.flower);
+  flower.position.y = 0.5; g.add(flower);
+  return g;
+}
+
+function spawnPlants() {
+  let s = 13579;
+  const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+  let tries = 0;
+  while (plants.length < PLANT_COUNT && tries < PLANT_COUNT * 20) {
+    tries++;
+    const x = (rng() * 2 - 1) * (WORLD_HALF - 6);
+    const z = (rng() * 2 - 1) * (WORLD_HALF - 6);
+    if (x * x + z * z < 36) continue;
+    let inTown = false;
+    for (const t of [
+      [-150, 140, 32], [155, 150, 32], [-160, -130, 32],
+      [140, -160, 32], [0, -100, 80],
+    ]) {
+      const dx = t[0] - x, dz = t[1] - z;
+      if (dx * dx + dz * dz < t[2] * t[2]) { inTown = true; break; }
+    }
+    if (inTown) continue;
+    const mesh = makePlantMesh();
+    mesh.position.set(x, heightAt(x, z), z);
+    scene.add(mesh);
+    plants.push({ mesh, x, z, taken: false });
+  }
+}
+spawnPlants();
+
+export function nearestPlantInRange(playerPos, range = 1.8) {
+  let best = null, bestD = range;
+  for (const p of plants) {
+    if (p.taken) continue;
+    const d = Math.hypot(p.x - playerPos.x, p.z - playerPos.z);
+    if (d < bestD) { bestD = d; best = p; }
+  }
+  return best;
+}
+export function harvestPlant(plant) {
+  if (!plant || plant.taken) return false;
+  plant.taken = true;
+  plant.mesh.visible = false;
+  // Regrow after 2 minutes.
+  setTimeout(() => { plant.taken = false; plant.mesh.visible = true; }, 120 * 1000);
+  return true;
+}
+
+// =====================================================================
 // Per-frame update — flame flicker + light pulse on fires.
 // =====================================================================
 export function updateSurvival(dt) {

@@ -21,6 +21,7 @@ import * as survival from './survival.js';
 import * as tools from './tools.js';
 const knife = tools; // legacy alias — older code uses knife.updateKnife / setKnifeActive
 import { updateCityLights, toggleColliderDebug } from './towns.js';
+import { updatePoi } from './poi.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
 import { nearestInRange } from './loot.js';
@@ -213,6 +214,11 @@ network.onEnemyDead = (id, msg) => {
   // Persist total kills.
   profile.totalKills = (profile.totalKills | 0) + 1;
   saveProfile(profile);
+  // Achievement milestones.
+  if (profile.totalKills === 1)   unlockAchievement('first_kill', 'Primera baja');
+  if (profile.totalKills === 10)  unlockAchievement('ten_kills', '10 enemigos eliminados');
+  if (profile.totalKills === 50)  unlockAchievement('fifty_kills', '50 enemigos eliminados');
+  if (profile.totalKills === 100) unlockAchievement('hundred_kills', 'Centurión: 100 enemigos');
   // Visceral feedback only on real kills, not despawn cleanups.
   if (e && x != null) {
     spawnBloodDecal(x, z);
@@ -227,6 +233,7 @@ network.onEnemyDead = (id, msg) => {
   if (msg.isBoss) {
     logLine('★ EL DOCTOR HA CAIDO — loot legendario disponible');
     sfx.playPickup();
+    unlockAchievement('boss_down', 'El Doctor cayó');
   }
 };
 network.onLootGranted = (loot) => {
@@ -255,6 +262,12 @@ network.onWave = (state) => {
     sfx.setMusicMode?.(isNightServer ? 'night' : 'day');
     logLine('Oleada terminó');
   }
+};
+network.onSupplyDrop = (x, z) => {
+  sfx.playPickup?.();
+  showBanner('★ SUMINISTROS CAYERON ★', 4000);
+  logLine(`★ Suministros en (${Math.round(x)}, ${Math.round(z)})`);
+  unlockAchievement('supply_dropped', 'Suministros aéreos avistados');
 };
 
 network.onTimeUpdate = (h, isNight) => {
@@ -336,6 +349,8 @@ player.onLockChange = (locked) => {
 // =====================================================================
 let nearbyCrate = null;
 let nearbyBush = null;
+let nearbyPlant = null;
+let nearbyLake = null;
 
 // Player.js applies player.mouseSensitivity if present (default 0.0022).
 // We just need the field to exist so applySettings can override it.
@@ -382,8 +397,26 @@ addEventListener('keydown', (e) => {
       inv.add('berry', got);
       logLine('+1 BAYA');
       sfx.playPickup?.();
+      unlockAchievement('first_berry', 'Recolectaste tu primera baya');
     }
     nearbyBush = null;
+    hideInteract();
+  } else if (e.code === 'KeyE' && nearbyPlant) {
+    if (survival.harvestPlant(nearbyPlant)) {
+      player.hp = Math.min(100, player.hp + 20);
+      logLine('+20 HP (planta medicinal)');
+      sfx.playPickup?.();
+      unlockAchievement('herbalist', 'Sanaste con una planta medicinal');
+    }
+    nearbyPlant = null;
+    hideInteract();
+  } else if (e.code === 'KeyE' && nearbyLake) {
+    if (inv.add('water_bottle', 1) || true) {
+      // add returns nothing meaningful; just give one and check max via has logic.
+      logLine('+1 BOTELLA AGUA');
+      sfx.playPickup?.();
+    }
+    nearbyLake = null;
     hideInteract();
   } else if (e.code === 'KeyH') {
     if (inv.useBandage(player)) {
@@ -630,32 +663,28 @@ function frame(now) {
     }
   }
 
-  // Interaction prompt — crate > bush > vehicle.
+  // Interaction prompt — priority: crate > plant > bush > lake > vehicle.
   if (player.locked && player.hp > 0) {
     const c = nearestInRange(player.pos);
-    const bush = c ? null : survival.nearestBushInRange(player.pos);
-    const vp = (c || bush) ? null : vehicle.nearbyVehiclePrompt(player.pos);
-    if (c && c !== nearbyCrate) {
-      nearbyCrate = c;
+    const plant = !c ? survival.nearestPlantInRange(player.pos) : null;
+    const bush = (!c && !plant) ? survival.nearestBushInRange(player.pos) : null;
+    const lake = (!c && !plant && !bush) ? survival.nearestLakeInRange(player.pos) : null;
+    const vp = (!c && !plant && !bush && !lake) ? vehicle.nearbyVehiclePrompt(player.pos) : null;
+    nearbyCrate = c || null;
+    nearbyPlant = plant || null;
+    nearbyBush = bush || null;
+    nearbyLake = lake || null;
+    if (c) {
       const tier = c.tableKey === 'boss' ? 'cofre del DOCTOR'
                 : c.tableKey === 'city' ? 'cofre del laboratorio'
                 : c.tableKey === 'animal' ? 'restos del animal'
                 : 'cofre';
       showInteract(`abrir ${tier}`);
-      nearbyBush = null;
-    } else if (!c && bush && bush !== nearbyBush) {
-      nearbyBush = bush;
-      nearbyCrate = null;
-      showInteract('recoger bayas');
-    } else if (!c && !bush && (nearbyCrate || nearbyBush)) {
-      nearbyCrate = null;
-      nearbyBush = null;
-      hideInteract();
-    } else if (!c && !bush && !nearbyCrate && !nearbyBush && vp) {
-      showInteract(vp.replace('[F]', '').trim());
-    } else if (!c && !bush && !nearbyCrate && !nearbyBush && !vp) {
-      hideInteract();
-    }
+    } else if (plant) showInteract('recoger planta medicinal');
+    else if (bush) showInteract('recoger bayas');
+    else if (lake) showInteract('rellenar botella');
+    else if (vp) showInteract(vp.replace('[F]', '').trim());
+    else hideInteract();
   }
 
   // Drive day/night visuals — interpolate between server updates.
@@ -713,8 +742,9 @@ function frame(now) {
   // Effects: tracers, decals, gore particles.
   updateEffects(dt);
 
-  // Pulse the Helix Lab's red emergency lights.
+  // Pulse the Helix Lab's red emergency lights + POI smoke pillars.
   updateCityLights(dt);
+  updatePoi(dt);
 
   // Sniper warning — show a red dot in HUD if any sci_sniper has us in
   // line of sight from > 35 m and is roughly facing us.
@@ -725,6 +755,42 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 let _combatMusic = false;
+
+// =====================================================================
+// Achievements — one-shot toasts persisted in localStorage so they don't
+// re-fire across sessions. Track ad-hoc IDs from gameplay events.
+// =====================================================================
+const ACH_KEY = 'survival-fps-v1-achievements';
+const _achievementsUnlocked = (function loadAch() {
+  try { return new Set(JSON.parse(localStorage.getItem(ACH_KEY) || '[]')); }
+  catch { return new Set(); }
+})();
+function saveAchievements() {
+  try { localStorage.setItem(ACH_KEY, JSON.stringify([..._achievementsUnlocked])); } catch {}
+}
+function unlockAchievement(id, label) {
+  if (_achievementsUnlocked.has(id)) return;
+  _achievementsUnlocked.add(id);
+  saveAchievements();
+  showAchievementToast(label);
+}
+function showAchievementToast(label) {
+  const el = document.createElement('div');
+  Object.assign(el.style, {
+    position: 'fixed', top: '120px', left: '50%', transform: 'translateX(-50%)',
+    background: 'rgba(40,30,10,0.92)', border: '1px solid #f0c060',
+    color: '#f0c060', padding: '12px 26px', font: '700 14px system-ui',
+    letterSpacing: '2px', zIndex: 9, opacity: '0',
+    transition: 'opacity 0.4s, transform 0.4s', pointerEvents: 'none',
+  });
+  el.innerHTML = `★ LOGRO<br><span style="color:#fff;font-weight:400;font-size:12px;letter-spacing:1px;">${label}</span>`;
+  document.body.appendChild(el);
+  // Animate in.
+  setTimeout(() => { el.style.opacity = '1'; el.style.transform = 'translateX(-50%) translateY(8px)'; }, 20);
+  setTimeout(() => { el.style.opacity = '0'; }, 4000);
+  setTimeout(() => el.remove(), 4500);
+  sfx.playPickup?.();
+}
 
 // =====================================================================
 // Sniper warning — checks every frame whether any sci_sniper has the

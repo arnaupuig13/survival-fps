@@ -334,12 +334,102 @@ function makeRabbitMesh() {
   return g;
 }
 
+// Bear — large quadruped, dark fur, glowing yellow eyes, big claws.
+function makeBearMesh() {
+  const g = new THREE.Group();
+  const furMat = new THREE.MeshStandardMaterial({ color: 0x2a1a10, roughness: 0.95 });
+  const noseMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffe040, emissive: 0xffaa20, emissiveIntensity: 0.6 });
+  const clawMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.4 });
+  // Big body.
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.85, 1.6), furMat);
+  body.position.y = 1.05; g.add(body);
+  // Hump on shoulders.
+  const hump = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.3, 0.55), furMat);
+  hump.position.set(0, 1.55, 0.55); g.add(hump);
+  // Head.
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), furMat);
+  head.position.set(0, 1.4, 0.95); g.add(head);
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.34), furMat);
+  snout.position.set(0, 1.3, 1.27); g.add(snout);
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.06), noseMat);
+  nose.position.set(0, 1.32, 1.45); g.add(nose);
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), eyeMat);
+    eye.position.set(sx * 0.16, 1.5, 1.18); g.add(eye);
+  }
+  // Round ears.
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.13, 6, 5), furMat);
+    ear.position.set(sx * 0.22, 1.7, 0.85); g.add(ear);
+  }
+  // 4 thick legs with claws.
+  const legGeom = new THREE.BoxGeometry(0.24, 0.7, 0.24);
+  const front = [-1, 1].map(sx => {
+    const leg = new THREE.Mesh(legGeom, furMat);
+    leg.position.set(sx * 0.3, 0.35, 0.65); g.add(leg);
+    // Claws.
+    for (let i = 0; i < 3; i++) {
+      const claw = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.1, 4), clawMat);
+      claw.position.set(sx * 0.3 + (i - 1) * 0.07, 0.04, 0.78);
+      claw.rotation.x = Math.PI / 2;
+      g.add(claw);
+    }
+    return leg;
+  });
+  const back = [-1, 1].map(sx => {
+    const leg = new THREE.Mesh(legGeom, furMat);
+    leg.position.set(sx * 0.3, 0.35, -0.65); g.add(leg);
+    return leg;
+  });
+  g.userData.legs = [...front, ...back];
+  return g;
+}
+
+// Boar — stout, tusked, brown bristles.
+function makeBoarMesh() {
+  const g = new THREE.Group();
+  const furMat = new THREE.MeshStandardMaterial({ color: 0x4a3018, roughness: 0.95 });
+  const tuskMat = new THREE.MeshStandardMaterial({ color: 0xeeeae0, roughness: 0.4 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x800808, emissive: 0x600404, emissiveIntensity: 0.5 });
+  // Body.
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 1.0), furMat);
+  body.position.y = 0.65; g.add(body);
+  // Head — pointier triangular shape.
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.4, 0.42), furMat);
+  head.position.set(0, 0.7, 0.6); g.add(head);
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), furMat);
+  snout.position.set(0, 0.6, 0.85); g.add(snout);
+  // Tusks — two small white cones.
+  for (const sx of [-1, 1]) {
+    const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.18, 5), tuskMat);
+    tusk.position.set(sx * 0.08, 0.55, 0.95);
+    tusk.rotation.x = -Math.PI / 2;
+    tusk.rotation.z = sx * -0.3;
+    g.add(tusk);
+  }
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.04, 5, 4), eyeMat);
+    eye.position.set(sx * 0.1, 0.78, 0.78); g.add(eye);
+  }
+  // 4 short legs.
+  const legGeom = new THREE.BoxGeometry(0.13, 0.4, 0.13);
+  const fL = new THREE.Mesh(legGeom, furMat); fL.position.set(-0.18, 0.2,  0.35); g.add(fL);
+  const fR = new THREE.Mesh(legGeom, furMat); fR.position.set( 0.18, 0.2,  0.35); g.add(fR);
+  const bL = new THREE.Mesh(legGeom, furMat); bL.position.set(-0.18, 0.2, -0.35); g.add(bL);
+  const bR = new THREE.Mesh(legGeom, furMat); bR.position.set( 0.18, 0.2, -0.35); g.add(bR);
+  g.userData.legs = [fL, fR, bL, bR];
+  return g;
+}
+
 function meshFor(etype) {
   if (etype === 'scientist')   return makeScientistMesh('rifle');
   if (etype === 'sci_shotgun') return makeScientistMesh('shotgun');
   if (etype === 'sci_sniper')  return makeScientistMesh('sniper');
   if (etype === 'boss')        return makeBossMesh();
   if (etype === 'wolf')        return makeWolfMesh();
+  if (etype === 'bear')        return makeBearMesh();
+  if (etype === 'boar')        return makeBoarMesh();
   if (etype === 'deer')        return makeDeerMesh();
   if (etype === 'rabbit')      return makeRabbitMesh();
   if (etype === 'runner')      return makeZombieMesh('runner');

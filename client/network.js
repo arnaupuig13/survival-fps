@@ -6,6 +6,7 @@ import {
   spawnPeer, removePeer, peers, enemies, setPeerName, showPeerBubble, setPeerHP,
 } from './entities.js';
 import { setTownLayouts } from './towns.js';
+import { setPoiLayouts } from './poi.js';
 import { spawnCrate, removeCrate } from './loot.js';
 
 const SEND_HZ = 10;
@@ -34,6 +35,7 @@ class NetworkClient {
     this.onGrenade = null;
     this.onGrenadeBoom = null;
     this.onWave = null;
+    this.onSupplyDrop = null;
     this._sendAccum = 0;
   }
 
@@ -52,6 +54,7 @@ class NetworkClient {
     if (msg.type === 'welcome') {
       this.selfId = msg.you;
       if (msg.towns) setTownLayouts(msg.towns);
+      if (msg.pois) setPoiLayouts(msg.pois);
       for (const peer of msg.peers) spawnPeer(peer);
       const initial = msg.enemies || msg.zombies || [];
       for (const en of initial) spawnEnemy(en);
@@ -137,6 +140,8 @@ class NetworkClient {
       this.onGrenadeBoom?.(msg);
     } else if (msg.type === 'wave') {
       this.onWave?.(msg.state);
+    } else if (msg.type === 'supplyDrop') {
+      this.onSupplyDrop?.(msg.x, msg.z);
     } else if (msg.type === 'fire') {
       // TODO: muzzle flash from peer position.
     } else if (msg.type === 'respawned') {
