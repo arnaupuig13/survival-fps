@@ -13,12 +13,16 @@ import { spawnTracer, spawnDamageNumber, spawnBulletHole } from './effects.js';
 import { scene as worldScene } from './three-setup.js';
 
 // Each weapon names the inventory key it consumes per shot. magazineSize
-// caps the loaded round count; reload pulls from the inventory pool. The
-// rifle requires `rifle_pickup > 0` to be selectable (locked behind city
-// loot).
+// caps the loaded round count; reload pulls from the inventory pool.
+//
+// shotgun fires `pellets` per shot at high spread.
+// sniper has a slow cooldown but huge damage; auto-zooms when ADS held.
 const WEAPONS = {
-  pistol: { dmg: 4,  cooldown: 0.5,  range: 50,  auto: false, name: 'PISTOLA', ammo: 'bullet_p', magazineSize: 12, reloadTime: 1.2 },
-  rifle:  { dmg: 6,  cooldown: 0.12, range: 100, auto: true,  name: 'RIFLE',   ammo: 'bullet_r', requires: 'rifle_pickup', magazineSize: 30, reloadTime: 1.8 },
+  pistol:  { dmg: 4,  cooldown: 0.5,  range: 50,  auto: false, name: 'PISTOLA',     ammo: 'bullet_p',     magazineSize: 12, reloadTime: 1.2, aggroRange: 18 },
+  rifle:   { dmg: 6,  cooldown: 0.12, range: 100, auto: true,  name: 'RIFLE',       ammo: 'bullet_r',     requires: 'rifle_pickup',   magazineSize: 30, reloadTime: 1.8, aggroRange: 32 },
+  smg:     { dmg: 3,  cooldown: 0.07, range: 70,  auto: true,  name: 'SMG',         ammo: 'bullet_smg',   requires: 'smg_pickup',     magazineSize: 35, reloadTime: 2.0, aggroRange: 24 },
+  shotgun: { dmg: 5,  cooldown: 0.85, range: 35,  auto: false, name: 'ESCOPETA',    ammo: 'shell',        requires: 'shotgun_pickup', magazineSize: 6,  reloadTime: 2.4, aggroRange: 30, pellets: 8, spread: 0.18 },
+  sniper:  { dmg: 90, cooldown: 1.6,  range: 220, auto: false, name: 'SNIPER',      ammo: 'sniper_round', requires: 'sniper_pickup',  magazineSize: 5,  reloadTime: 2.8, aggroRange: 42 },
 };
 
 // =====================================================================
@@ -27,8 +31,7 @@ const WEAPONS = {
 let active = 'pistol';
 let cooldown = 0;
 let mouseDown = false;
-// Per-weapon loaded magazine — independent from total ammo in inventory.
-const loaded = { pistol: 12, rifle: 0 };
+const loaded = { pistol: 12, rifle: 0, smg: 0, shotgun: 0, sniper: 0 };
 let reloading = false;
 let reloadTimer = 0;
 const ray = new THREE.Raycaster();
@@ -72,13 +75,15 @@ scene.add(camera); // make sure camera is in scene so its children render
 // Input
 // =====================================================================
 addEventListener('keydown', (e) => {
-  if (e.code === 'Digit1') selectWeapon('pistol');
-  else if (e.code === 'Digit2') selectWeapon('rifle');
-  else if (e.code === 'KeyR') startReload();
+  if (e.code === 'KeyR') startReload();
+  // Hotbar weapon select happens via main.js (handleHotbarSlot calls
+  // selectWeaponBySlot). Direct number keys here would conflict.
 });
 
 function selectWeapon(name) {
-  if (name === 'rifle' && !inv.has('rifle_pickup', 1)) return;
+  const cfg = WEAPONS[name];
+  if (!cfg) return;
+  if (cfg.requires && !inv.has(cfg.requires, 1)) return;
   if (reloading) cancelReload();
   active = name; updateGunVisual();
 }
@@ -100,7 +105,9 @@ function cancelReload() { reloading = false; reloadTimer = 0; }
 function finishReload() {
   const cfg = WEAPONS[active];
   if (!cfg) return;
-  const need = cfg.magazineSize - (loaded[active] | 0);
+  // Extended-mag attachment increases capacity by 50%.
+  const cap = inv.has('ext_mag', 1) ? Math.round(cfg.magazineSize * 1.5) : cfg.magazineSize;
+  const need = cap - (loaded[active] | 0);
   const got = Math.min(need, inv.get(cfg.ammo));
   if (got > 0) {
     loaded[active] = (loaded[active] | 0) + got;
@@ -140,7 +147,13 @@ function tryFire() {
     loaded[active] = (loaded[active] | 0) - 1;
   }
   cooldown = cfg.cooldown;
-  if (active === 'rifle') sfx.playRifle(0); else sfx.playPistol(0);
+  // Sound — silencer mutes the report. Picks per weapon kind.
+  const silent = inv.has('silencer', 1) && (active === 'pistol' || active === 'smg');
+  if (silent) sfx.playEmpty?.();
+  else if (active === 'rifle' || active === 'sniper') sfx.playRifle(0);
+  else sfx.playPistol(0);
+  // Recoil — pitch the camera up a bit, scaled by weapon damage.
+  pendingRecoil += cfg.dmg * 0.0015 + (active === 'sniper' ? 0.05 : 0);
 
   // Build raycast from camera center, transformed into world space.
   camera.getWorldPosition(_origin);
@@ -258,10 +271,24 @@ export function updateWeapons(dt) {
 }
 
 export function activeWeaponName() { return WEAPONS[active].name; }
-export function activeWeaponMeta() { return { name: WEAPONS[active].name, loaded: loaded[active] | 0, ammo: inv.get(WEAPONS[active].ammo) }; }
-// Allow main.js to drive weapon selection via the hotbar (1..3 etc).
+export function activeWeaponMeta() {
+  const cfg = WEAPONS[active];
+  const cap = inv.has('ext_mag', 1) ? Math.round(cfg.magazineSize * 1.5) : cfg.magazineSize;
+  return { name: cfg.name, loaded: loaded[active] | 0, ammo: inv.get(cfg.ammo), cap };
+}
+// Allow main.js to drive weapon selection via the hotbar.
 export function selectWeaponBySlot(slotIdx) {
   if (slotIdx === 0) selectWeapon('pistol');
   else if (slotIdx === 1) selectWeapon('rifle');
-  // Slots 2..8 = items / future weapons. main.js handles bandage etc.
+  else if (slotIdx === 7) selectWeapon('shotgun');
+  else if (slotIdx === 8) selectWeapon('sniper');
+  // Slots 2..6 reserved for non-firing tools (handled in main.js).
+}
+
+// Recoil exposed so main.js can drain it into the camera each frame.
+let pendingRecoil = 0;
+export function consumeRecoil() {
+  const r = pendingRecoil;
+  pendingRecoil = 0;
+  return r;
 }

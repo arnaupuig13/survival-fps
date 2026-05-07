@@ -54,14 +54,19 @@ const respawnBtn = document.getElementById('respawnBtn');
 // HUD subscribes to inventory updates so ammo/kill counts always match state.
 inv.onChange(setInventory);
 inv.onChange((state) => {
-  // Hotbar slot counts.
   setHotbarCount(0, state.bullet_p);
   setHotbarCount(1, state.bullet_r);
   setHotbarCount(2, state.bandage);
   setHotbarCount(3, state.grenade);
+  setHotbarCount(7, state.shell);
+  setHotbarCount(8, state.sniper_round);
   setHotbarLocked(1, !state.rifle_pickup);
   setHotbarLocked(5, !state.axe);
   setHotbarLocked(6, !state.pickaxe);
+  setHotbarLocked(7, !state.shotgun_pickup);
+  setHotbarLocked(8, !state.sniper_pickup);
+  // Sync armor onto the player so takeDamage applies the reduction.
+  player.armorState = { vest: !!state.vest_armor, helmet: !!state.helmet_armor };
   if (isInventoryOpen()) renderInventory(state, inv.ITEMS, { recipes: inv.RECIPES, nearFire: player.nearFire, onCraft: tryCraft });
 });
 
@@ -335,12 +340,7 @@ playBtn.addEventListener('click', () => {
 respawnBtn.addEventListener('click', () => {
   player.respawn();
   network.respawn();
-  // Respawn at the player's bedroll if they have one placed.
-  const bed = build.getBedrollSpawn();
-  if (bed) {
-    player.pos.set(bed.x, bed.y + 1.65, bed.z);
-    logLine('Reapareciste en tu cama');
-  }
+  // Bedroll respawn pausado (sistema de building deshabilitado).
   setHP(player.hp);
   deathEl.classList.remove('show');
   resetLifeStats();
@@ -479,42 +479,11 @@ addEventListener('keydown', (e) => {
     // Quick-drink water bottle.
     if (inv.consume('water_bottle', 1)) { player.drink(); logLine('+ AGUA'); sfx.playPickup?.(); }
     else logLine('Sin agua');
-  } else if (e.code === 'KeyZ' && !e.repeat) {
-    // Toggle build mode. Default kind is wall; press again to switch to bedroll.
-    if (!build.isBuildingActive()) {
-      build.toggleBuild();
-      build.setBuildKind('wall');
-      logLine('CONSTRUIR — click izq pone pared. Z otra vez = cama. ESC sale.');
-    } else {
-      // Already in build — cycle wall → bedroll → off.
-      // Simplification: each press cycles through.
-      build.setBuildKind('bedroll');
-      logLine('CONSTRUIR — modo CAMA. Z otra vez = sale.');
-      // Toggle off on the third press by using a small flag.
-      _buildMode2 = true;
-    }
-  } else if (e.code === 'Escape' && build.isBuildingActive()) {
-    build.toggleBuild();
-    e.preventDefault();
-    return;
-  } else if (e.code === 'KeyM' && !e.repeat) {
-    if (isStashOpen()) toggleStash();
-    toggleMap();
-  } else if (e.code === 'KeyX' && !e.repeat) {
-    if (isMapOpen()) toggleMap();
-    toggleStash();
   }
+  // NOTE: Build (Z) / Map (M) / Stash (X) están deshabilitados por ahora.
+  // El user pidió priorizar otras cosas; el código sigue en
+  // client/build.js, client/map.js, client/stash.js para reactivar después.
 });
-let _buildMode2 = false;
-addEventListener('keydown', (e) => {
-  if (e.code === 'KeyZ' && _buildMode2 && !e.repeat && build.isBuildingActive()) {
-    // Third press of Z → exit build.
-    build.toggleBuild();
-    _buildMode2 = false;
-    logLine('Salio modo construir');
-    e.preventDefault();
-  }
-}, true);
 
 // Snapshot of the inventory state — inventory.js doesn't expose the raw
 // state object, so we shadow it via the onChange listener.
@@ -599,7 +568,10 @@ function closeSettings() {
 }
 
 function handleHotbarSlot(slotIdx) {
-  if (slotIdx === 0 || slotIdx === 1) {
+  // Firearm slots: 0 pistol, 1 rifle, 7 shotgun, 8 sniper.
+  if (slotIdx === 0 || slotIdx === 1 || slotIdx === 7 || slotIdx === 8) {
+    if (slotIdx === 7 && !inv.has('shotgun_pickup', 1)) { logLine('Necesitás encontrar la escopeta'); return; }
+    if (slotIdx === 8 && !inv.has('sniper_pickup', 1)) { logLine('Necesitás encontrar el rifle de francotirador'); return; }
     tools.setActiveTool(null);
     selectWeaponBySlot(slotIdx);
     setHotbarActive(slotIdx);
@@ -761,10 +733,21 @@ function frame(now) {
   if (inCombat && !_combatMusic) { _combatMusic = true; sfx.setMusicMode?.('combat'); }
   else if (!inCombat && _combatMusic) { _combatMusic = false; sfx.setMusicMode?.(isNightServer ? 'night' : 'day'); }
 
-  // ADS FOV lerp.
-  const targetFov = _ads ? ADS_FOV : BASE_FOV;
+  // ADS FOV lerp — sniper auto-zooms further while ADS held.
+  const isSniper = getActiveWeapon() === 'sniper';
+  const targetFov = _ads ? (isSniper ? 22 : ADS_FOV) : BASE_FOV;
   camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-15 * dt));
   camera.updateProjectionMatrix();
+
+  // Recoil — tilt the camera up briefly each shot. We pile pitch onto a
+  // local kick value that decays fast.
+  const kick = consumeRecoil();
+  if (kick > 0) _recoilKick += kick;
+  if (_recoilKick > 0) {
+    camera.rotation.x -= _recoilKick;
+    _recoilKick *= Math.max(0, 1 - dt * 8);
+    if (_recoilKick < 0.001) _recoilKick = 0;
+  }
 
   // Grenade meshes — local physics interp until detonation. Server is
   // authoritative for damage; this is just visual smoothing between the
@@ -789,8 +772,7 @@ function frame(now) {
   // Pulse the Helix Lab's red emergency lights + POI smoke pillars.
   updateCityLights(dt);
   updatePoi(dt);
-  build.updateBuild(dt);
-  updateMap();
+  // build.updateBuild + updateMap pausados — ver nota arriba.
 
   // Sniper warning — show a red dot in HUD if any sci_sniper has us in
   // line of sight from > 35 m and is roughly facing us.
@@ -801,6 +783,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 let _combatMusic = false;
+let _recoilKick = 0;
 
 // =====================================================================
 // Achievements — one-shot toasts persisted in localStorage so they don't

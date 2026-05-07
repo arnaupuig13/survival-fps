@@ -47,6 +47,13 @@ export function setInventory(state) {
   if (ammoR) ammoR.textContent = state.bullet_r | 0;
   if (invBandage) invBandage.textContent = state.bandage | 0;
   if (killCount) killCount.textContent = state.kills | 0;
+  // Armor indicator: vest 25% + helmet 25% = 50% combined max.
+  const armorEl = document.getElementById('armorPct');
+  if (armorEl) {
+    const pct = (state.vest_armor ? 25 : 0) + (state.helmet_armor ? 25 : 0);
+    armorEl.textContent = `${pct}%`;
+    armorEl.style.color = pct >= 50 ? '#80ffd0' : pct >= 25 ? '#80c0ff' : '#888';
+  }
 }
 
 export function showInteract(text) {
@@ -184,6 +191,11 @@ export function setCompass(yawRad) {
   compassStrip.style.transform = `translateX(${offsetX}px)`;
 }
 
+const RARITY_COLORS = {
+  common:    '#666', uncommon: '#48d068', rare: '#4a90e0',
+  epic:      '#a060e0', legendary: '#f0c040',
+};
+
 export function renderInventory(state, itemMeta, opts = {}) {
   if (!invGrid) return;
   invGrid.innerHTML = '';
@@ -193,6 +205,9 @@ export function renderInventory(state, itemMeta, opts = {}) {
     div.className = 'invItem';
     if (count === 0) div.classList.add('zero');
     if (meta.oneTime && count === 0) div.classList.add('locked');
+    // Border color reflects rarity.
+    const rcol = RARITY_COLORS[meta.rarity || 'common'];
+    div.style.borderLeft = `3px solid ${rcol}`;
     div.innerHTML = `<div class="iname">${meta.label}</div><div class="icount">${count}</div>`;
     if (meta.oneTime) {
       const flag = document.createElement('div');

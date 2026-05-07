@@ -73,10 +73,9 @@ export const player = {
   invulnerable: true,
   invulnGraceUntil: 0,
   mouseSensitivity: 22,
-  // Dev god-mode toggled with the L key. Affects speed, damage immunity,
-  // ammo consumption, and gravity (lets the player fly). Removed before
-  // public launch — main.js logs the toggle so it's obvious when on.
   godMode: false,
+  // Armor state — main.js writes this from the inventory each frame.
+  armorState: { vest: false, helmet: false },
   yaw: () => yaw,
   pitch: () => pitch,
   get locked() { return locked; },
@@ -85,7 +84,11 @@ export const player = {
     if (this.hp <= 0 || this.invulnerable) return;
     if (performance.now() / 1000 < this.invulnGraceUntil) return;
     if (this.godMode) return;
-    this.hp = Math.max(0, this.hp - dmg);
+    // Armor reduction. Vest 25%, helmet 25% — combined 50%. Read from
+    // inventory at hit time (cheap; no caching needed at this scale).
+    const armorReduction = (this.armorState?.vest ? 0.25 : 0) + (this.armorState?.helmet ? 0.25 : 0);
+    const after = Math.max(1, Math.round(dmg * (1 - armorReduction)));
+    this.hp = Math.max(0, this.hp - after);
     this.lastHitAt = performance.now() / 1000;
   },
   respawn() {

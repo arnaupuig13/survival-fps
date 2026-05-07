@@ -203,24 +203,62 @@ for (const p of POIS) poiState.set(p.id, { spawned: false, enemyIds: new Set() }
 // rifle_pickup (unlocks the rifle weapon).
 // =====================================================================
 const LOOT_TABLES = {
+  // Street loot — most abundant, common-tier only. Spread thinly across
+  // the wilderness so wandering between towns is never empty-handed.
+  street: [
+    { item: 'bullet_p',     range: [2, 6] },
+    { item: 'wood',         range: [0, 2] },
+    { item: 'stone',        range: [0, 1] },
+    { item: 'bandage',      chance: 0.18 },
+    { item: 'berry',        range: [0, 2] },
+    { item: 'water_bottle', chance: 0.10 },
+    { item: 'shell',        chance: 0.08 },
+  ],
+  // Zombie houses — moderate ammo, occasional uncommon attachments.
   town: [
-    { item: 'bullet_p', range: [5, 10] },
-    { item: 'bullet_r', range: [0, 4] },
-    { item: 'bandage',  range: [0, 1] },
+    { item: 'bullet_p',     range: [6, 12] },
+    { item: 'bullet_r',     range: [0, 6] },
+    { item: 'shell',        range: [0, 4] },
+    { item: 'bullet_smg',   range: [0, 6] },
+    { item: 'bandage',      range: [1, 2] },
+    { item: 'wood',         range: [1, 3] },
+    { item: 'stone',        range: [0, 2] },
+    { item: 'shotgun_pickup', chance: 0.12 },
+    { item: 'smg_pickup',     chance: 0.08 },
+    { item: 'vest_armor',     chance: 0.06 },
+    { item: 'ext_mag',        chance: 0.05 },
   ],
+  // Helix Lab + city POIs — strongly tilted toward attachments + armor.
   city: [
-    { item: 'bullet_p',    range: [8, 14] },
-    { item: 'bullet_r',    range: [6, 12] },
-    { item: 'bandage',     range: [1, 3] },
-    { item: 'rifle_pickup', chance: 0.45 }, // ~45% per city crate
+    { item: 'bullet_p',      range: [10, 18] },
+    { item: 'bullet_r',      range: [10, 18] },
+    { item: 'bullet_smg',    range: [6, 14] },
+    { item: 'shell',         range: [4, 10] },
+    { item: 'sniper_round',  range: [0, 4] },
+    { item: 'bandage',       range: [2, 4] },
+    { item: 'rifle_pickup',  chance: 0.55 },
+    { item: 'shotgun_pickup',chance: 0.30 },
+    { item: 'smg_pickup',    chance: 0.30 },
+    { item: 'vest_armor',    chance: 0.30 },
+    { item: 'helmet_armor',  chance: 0.18 },
+    { item: 'scope',         chance: 0.22 },
+    { item: 'ext_mag',       chance: 0.18 },
   ],
+  // Boss drop — guaranteed legendary plus full attachment kit.
   boss: [
-    { item: 'bullet_r', range: [25, 40] },
-    { item: 'bullet_p', range: [15, 25] },
-    { item: 'bandage',  range: [3, 6] },
-    { item: 'rifle_pickup', chance: 1 },
+    { item: 'bullet_r',       range: [40, 60] },
+    { item: 'bullet_p',       range: [25, 40] },
+    { item: 'shell',          range: [12, 18] },
+    { item: 'sniper_round',   range: [10, 16] },
+    { item: 'bandage',        range: [4, 7] },
+    { item: 'sniper_pickup',  chance: 1.0 },
+    { item: 'silencer',       chance: 1.0 },
+    { item: 'scope',          chance: 0.9 },
+    { item: 'helmet_armor',   chance: 0.85 },
+    { item: 'vest_armor',     chance: 0.85 },
+    { item: 'ext_mag',        chance: 0.7 },
+    { item: 'rifle_pickup',   chance: 1.0 },
   ],
-  // Animal kill — raw meat for cooking, small chance of bandage.
   animal: [
     { item: 'meat_raw', range: [1, 2] },
     { item: 'bandage',  chance: 0.3 },
@@ -287,6 +325,37 @@ function spawnTownCrates() {
   }
 }
 spawnTownCrates();
+
+// Ground loot — small street drops scattered across the wilderness. Same
+// crate plumbing as the town/POI crates, just a smaller mesh client-side
+// (mesh choice is by tableKey === 'street').
+function spawnGroundLoot() {
+  let s = 91011;
+  const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+  const TARGET = 80;
+  let placed = 0, tries = 0;
+  while (placed < TARGET && tries < TARGET * 25) {
+    tries++;
+    const x = (rng() * 2 - 1) * (WORLD_HALF - 8);
+    const z = (rng() * 2 - 1) * (WORLD_HALF - 8);
+    if (x * x + z * z < 64) continue;
+    // Skip if inside any town clearing or near a POI.
+    let nearStruct = false;
+    for (const t of TOWNS) {
+      const dx = t.cx - x, dz = t.cz - z;
+      if (dx * dx + dz * dz < 70 * 70) { nearStruct = true; break; }
+    }
+    if (!nearStruct) for (const p of POIS) {
+      const dx = p.cx - x, dz = p.cz - z;
+      if (dx * dx + dz * dz < 18 * 18) { nearStruct = true; break; }
+    }
+    if (nearStruct) continue;
+    const id = nextCrateId++;
+    crates.set(id, { id, x, z, y: heightAt(x, z), tableKey: 'street', townId: null, taken: false });
+    placed++;
+  }
+}
+spawnGroundLoot();
 
 // Per-town streaming state.
 const townState = new Map(); // townId → { spawned, enemyIds: Set, scientistsDead, bossSpawned }
