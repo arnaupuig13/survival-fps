@@ -163,22 +163,10 @@ export function updatePlayer(dt) {
   if (nz >  WORLD_HALF - 0.5) nz =  WORLD_HALF - 0.5;
   if (nz < -WORLD_HALF + 0.5) nz = -WORLD_HALF + 0.5;
 
-  // God mode bypasses obstacle collision entirely so the user can fly
-  // through walls during dev testing.
-  if (player.godMode) {
-    player.pos.x = nx;
-    player.pos.z = nz;
-    player.vy -= GRAVITY * dt;
-    if (keys['Space']) { player.pos.y += speed * dt; }
-    if (keys['ControlLeft'] || keys['ControlRight']) { player.pos.y -= speed * dt; }
-    player.vy = 0;
-    camera.position.copy(player.pos);
-    return;
-  }
   // Obstacle collision — circle (trees, rocks, props) AND box (building
-  // walls) variants. Box collision uses closest-point pushout, which lets
-  // the player slide naturally along a wall and walk through doorways.
-  for (const o of obstacles) {
+  // walls) variants. Skipped entirely in god mode so the user can phase
+  // through walls during dev testing.
+  if (!player.godMode) for (const o of obstacles) {
     if (o.type === 'box') {
       // Closest-point on box (in box-local space) to player center.
       const cosI = Math.cos(-(o.ry || 0));
@@ -228,15 +216,12 @@ export function updatePlayer(dt) {
   player.pos.x = nx;
   player.pos.z = nz;
 
-  // Vertical: gravity + jump + terrain follow.
+  // Vertical: gravity + jump + terrain follow. God mode disables gravity
+  // and lets the user fly with SPACE / CTRL.
   if (player.godMode) {
-    // Free-fly: SPACE up, C/Ctrl down. Gravity disabled. Speed factor
-    // applies to vertical too so flying feels fast.
-    let dy = 0;
-    if (keys['Space']) dy += 1;
-    if (keys['ControlLeft'] || keys['ControlRight']) dy -= 1;
-    player.pos.y += dy * speed * dt;
     player.vy = 0;
+    if (keys['Space']) player.pos.y += speed * dt;
+    if (keys['ControlLeft'] || keys['ControlRight']) player.pos.y -= speed * dt;
   } else {
     player.vy -= GRAVITY * dt;
     if (keys['Space'] && player.onGround && !player.crouching) { player.vy = JUMP_VEL; player.onGround = false; }
