@@ -276,6 +276,7 @@ function startDrag(key, e) {
   const count = inv.get(key);
   if (count <= 0) return;
   dragState = { itemKey: key, count };
+  document.body.classList.add('dragging');
   if (dragGhost) {
     dragGhost.innerHTML = `<div class="dgLabel">${meta.label}</div><div class="dgCount">${count > 1 ? count : ''}</div>`;
     dragGhost.classList.add('show');
@@ -293,6 +294,7 @@ function endDrag(e) {
   if (!dragState) return;
   const drag = dragState;
   dragState = null;
+  document.body.classList.remove('dragging');
   if (dragGhost) dragGhost.classList.remove('show');
 
   // Si el panel se cerró mid-drag (TAB / ESC), cancelamos.
@@ -454,6 +456,7 @@ window.addEventListener('blur', () => {
   if (ctxMenu) ctxMenu.classList.add('hidden');
   if (dragState) {
     dragState = null;
+    document.body.classList.remove('dragging');
     if (dragGhost) dragGhost.classList.remove('show');
   }
 });

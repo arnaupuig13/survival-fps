@@ -64,6 +64,28 @@
     /* Damage flash */
     #dmgFlash { position: fixed; inset: 0; background: rgba(180,0,0,0); pointer-events: none; transition: background 0.25s; }
 
+    /* =========================================================
+       Custom cursor — flecha dorada estilo survival.
+       Solo se ve cuando NO hay pointer lock (menú principal,
+       inventario, settings, chat). Durante el FPS el browser
+       oculta el cursor automáticamente por el pointer lock.
+       ========================================================= */
+    body {
+      cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M3 2 L3 22 L9 17 L13 26 L16 24.5 L12 15.5 L21 15 Z" fill="%23f0c060" stroke="%231a1a1a" stroke-width="1.2" stroke-linejoin="round"/></svg>') 2 2, default;
+    }
+    /* "Pointer" sobre elementos clickeables — misma flecha pero
+       con un pequeño glow para hint visual. */
+    button, .invSlot.has, .armorSlot.filled, .rustRecipeBtn,
+    .hbslot, #playBtn, #respawnBtn, .ddBtns button, .ctxMenu button,
+    a, label, input[type=range], input[type=checkbox], select,
+    .iiActions button {
+      cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="10" fill="none" stroke="%23f0c060" stroke-width="2"/><circle cx="14" cy="14" r="2" fill="%23f0c060"/></svg>') 14 14, pointer;
+    }
+    /* Cursor especial mientras se arrastra un item (drag activo) */
+    body.dragging, body.dragging * {
+      cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><rect x="6" y="6" width="16" height="16" fill="%23f0c060" stroke="%231a1a1a" stroke-width="1.5" opacity="0.7"/><path d="M14 2 L14 8 M14 20 L14 26 M2 14 L8 14 M20 14 L26 14" stroke="%23f0c060" stroke-width="2"/></svg>') 14 14, grabbing !important;
+    }
+
     /* Menu */
     #menu { position: fixed; inset: 0; background: rgba(0,0,0,0.78); display: flex; align-items: center; justify-content: center; z-index: 10; }
     #menu .panel { background: rgba(20,20,20,0.92); border: 1px solid #444; padding: 36px 44px; text-align: center; min-width: 320px; }
