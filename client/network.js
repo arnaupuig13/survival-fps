@@ -29,6 +29,7 @@ class NetworkClient {
     this.onBanner = null;
     this.onEnemyDead = null;
     this.onLootGranted = null;
+    this.onTimeUpdate = null;
     this._sendAccum = 0;
   }
 
@@ -52,6 +53,9 @@ class NetworkClient {
       for (const en of initial) spawnEnemy(en);
       for (const c of (msg.crates || [])) spawnCrate(c);
       this.onPeerCount?.(peers.size + 1);
+      if (msg.hour != null) this.onTimeUpdate?.(msg.hour, !!msg.night);
+    } else if (msg.type === 'time') {
+      this.onTimeUpdate?.(msg.h, !!msg.night);
     } else if (msg.type === 'peerJoin') {
       spawnPeer(msg.p);
       this.onPeerCount?.(peers.size + 1);
@@ -59,7 +63,16 @@ class NetworkClient {
       removePeer(msg.id);
       this.onPeerCount?.(peers.size + 1);
     } else if (msg.type === 'eSpawn' || msg.type === 'zSpawn') {
-      spawnEnemy(msg.e || msg.z);
+      const info = msg.e || msg.z;
+      spawnEnemy(info);
+      // Wolf snarl on spawn if it's reasonably near the player — adds the
+      // "predator just appeared somewhere in the wild" cue.
+      if (info && info.etype === 'wolf' && this.player) {
+        const dx = info.x - this.player.pos.x;
+        const dz = info.z - this.player.pos.z;
+        const d = Math.hypot(dx, dz);
+        if (d < 35) import('./sounds.js').then(s => s.playWolfSnarl(d));
+      }
     } else if (msg.type === 'eDead' || msg.type === 'zDead') {
       removeEnemy(msg.id);
       if (msg.isBoss) this.onBanner?.('★ EL DOCTOR HA CAIDO');

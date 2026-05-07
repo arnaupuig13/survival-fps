@@ -79,11 +79,16 @@ export function heightAt(x, z) {
 // Enemy types. Stats authoritative on server. Client renders mesh per etype.
 // =====================================================================
 const ETYPES = {
-  zombie:    { hp: 10,  speed: 1.6, dmg: 8,  range: 1.6, cd: 1.4, aggro: 30, ranged: false },
-  runner:    { hp: 6,   speed: 3.0, dmg: 5,  range: 1.6, cd: 0.9, aggro: 35, ranged: false },
-  tank:      { hp: 30,  speed: 0.9, dmg: 20, range: 1.8, cd: 2.0, aggro: 25, ranged: false },
-  scientist: { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 40, ranged: true  },
-  boss:      { hp: 220, speed: 1.7, dmg: 16, range: 32,  cd: 0.6, aggro: 50, ranged: true, isBoss: true },
+  zombie:       { hp: 10,  speed: 1.6, dmg: 8,  range: 1.6, cd: 1.4, aggro: 30, ranged: false },
+  runner:       { hp: 6,   speed: 3.0, dmg: 5,  range: 1.6, cd: 0.9, aggro: 35, ranged: false },
+  tank:         { hp: 30,  speed: 0.9, dmg: 20, range: 1.8, cd: 2.0, aggro: 25, ranged: false },
+  // Wolf — fast melee, predator. Lurks in the wilderness, aggro from far.
+  wolf:         { hp: 14,  speed: 4.5, dmg: 10, range: 1.8, cd: 1.0, aggro: 40, ranged: false },
+  // Three scientist variants. Same lab coat but different weapon profile.
+  scientist:    { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 40, ranged: true,  weapon: 'rifle'   },
+  sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 22, range: 12,  cd: 1.5, aggro: 30, ranged: true,  weapon: 'shotgun' },
+  sci_sniper:   { hp: 16,  speed: 1.0, dmg: 32, range: 60,  cd: 2.4, aggro: 60, ranged: true,  weapon: 'sniper'  },
+  boss:         { hp: 240, speed: 1.7, dmg: 16, range: 32,  cd: 0.55, aggro: 50, ranged: true, weapon: 'ak', isBoss: true },
 };
 
 // =====================================================================
@@ -246,7 +251,9 @@ function makeEnemy(opts) {
 }
 
 function killEnemy(e, byId = null) {
-  if (e.townId === 'helix-lab' && e.etype === 'scientist') {
+  // Any of the three scientist variants count toward the boss spawn.
+  const isScientist = e.etype === 'scientist' || e.etype === 'sci_shotgun' || e.etype === 'sci_sniper';
+  if (e.townId === 'helix-lab' && isScientist) {
     const ts = townState.get('helix-lab');
     ts.scientistsDead++;
     // Boss appears once half the lab's scientists have fallen.
@@ -283,6 +290,7 @@ function ePub(e) {
     x: +e.x.toFixed(2), y: +e.y.toFixed(2), z: +e.z.toFixed(2),
     ry: +e.ry.toFixed(2), hp: e.hp, maxHp: e.maxHp,
     sleeping: !!e.sleeping, isBoss: !!e.isBoss,
+    weapon: ETYPES[e.etype]?.weapon || null,
   };
 }
 function pPub(p) { return { id: p.id, x: p.x, y: p.y, z: p.z, ry: p.ry, hp: p.hp, name: p.name }; }
@@ -311,7 +319,14 @@ function streamTowns() {
         const b = t.buildings[i];
         let etype;
         if (t.type === 'city') {
-          etype = 'scientist';
+          // Helix Lab — mix of three scientist variants. Distribution
+          // chosen so the city feels different per visit and you have
+          // to engage at different ranges. Bias toward rifle (most
+          // standard), some shotgun guards and a couple snipers.
+          const r = (i * 23 + 5) % 12;
+          if (r < 7)       etype = 'scientist';      // 7/12 rifle
+          else if (r < 10) etype = 'sci_shotgun';   // 3/12 shotgun
+          else             etype = 'sci_sniper';    // 2/12 sniper
         } else {
           // Towns: mostly zombies, sprinkle of runner / tank.
           const r = (i * 17 + 3) % 10;
@@ -347,7 +362,7 @@ function streamTowns() {
 // Ambient (random) zombie spawn — same as v1, but caps separately from
 // town zombies. These spawn around players outside any town's radius.
 // =====================================================================
-function spawnAmbientZombie(minDist = 38, maxDist = 80) {
+function spawnAmbientHostile(minDist = 38, maxDist = 80) {
   if (players.size === 0) return null;
   for (let tries = 0; tries < 30; tries++) {
     const list = [...players.values()];
@@ -364,17 +379,45 @@ function spawnAmbientZombie(minDist = 38, maxDist = 80) {
       if (dx * dx + dz * dz < 60 * 60) { insideTown = true; break; }
     }
     if (insideTown) continue;
-    // 80% zombie, 15% runner, 5% tank — flavor variety in the wild.
+    // Mix per night/day. By day mostly zombies, sprinkle of others. At
+    // night wolves and runners get more common — predators come out.
+    const isNight = isNightHour(gameHour);
     let etype = 'zombie';
     const r2 = Math.random();
-    if (r2 > 0.95) etype = 'tank';
-    else if (r2 > 0.80) etype = 'runner';
+    if (isNight) {
+      if (r2 > 0.85)      etype = 'tank';
+      else if (r2 > 0.60) etype = 'wolf';
+      else if (r2 > 0.35) etype = 'runner';
+      else                etype = 'zombie';
+    } else {
+      if (r2 > 0.93)      etype = 'tank';
+      else if (r2 > 0.85) etype = 'wolf';
+      else if (r2 > 0.78) etype = 'runner';
+      else                etype = 'zombie';
+    }
     const e = makeEnemy({ etype, x, z, ambient: true });
     broadcast({ type: 'eSpawn', e: ePub(e) });
     return e;
   }
   return null;
 }
+// Backwards-compatible alias for any callsite still using the v1.2 name.
+const spawnAmbientZombie = spawnAmbientHostile;
+
+// =====================================================================
+// Day / night cycle. The game hour wraps every DAY_LENGTH seconds. Night
+// hours are 20..6 inclusive (10 hours of darkness, 14 of light).
+// Broadcast hour to clients via a low-frequency message; clients drive
+// the visual sun rotation off it.
+// =====================================================================
+const DAY_LENGTH = 360;          // seconds per in-game day
+const NIGHT_FROM = 20, NIGHT_TO = 6;
+let gameHour = 8;                // start in the morning
+function isNightHour(h) {
+  if (NIGHT_FROM > NIGHT_TO) return h >= NIGHT_FROM || h < NIGHT_TO;
+  return h >= NIGHT_FROM && h < NIGHT_TO;
+}
+let lastTimeBroadcast = 0;
 
 // =====================================================================
 // AI tick — runs at 10 Hz. Dispatches per behavior (sleeping → wake,
@@ -386,6 +429,16 @@ let ambientSpawnAccum = 0;
 let streamCheckAccum = 0;
 
 setInterval(() => {
+  // Advance day/night clock. 1 tick = 0.1 s real → DAY_LENGTH s = full day.
+  gameHour = (gameHour + (24 / DAY_LENGTH) * AI_DT) % 24;
+
+  // Broadcast hour every ~1 s (clients lerp).
+  lastTimeBroadcast += AI_DT;
+  if (lastTimeBroadcast >= 1) {
+    lastTimeBroadcast = 0;
+    broadcast({ type: 'time', h: +gameHour.toFixed(2), night: isNightHour(gameHour) });
+  }
+
   // Town streaming check — every 0.8 s, not every tick.
   streamCheckAccum += AI_DT;
   if (streamCheckAccum >= 0.8) {
@@ -393,14 +446,17 @@ setInterval(() => {
     streamTowns();
   }
 
-  // Ambient (out-of-town) spawn ticker.
+  // Ambient (out-of-town) spawn ticker. At night spawn faster + cap higher.
+  const night = isNightHour(gameHour);
+  const spawnInterval = night ? AMBIENT_SPAWN_INTERVAL * 0.55 : AMBIENT_SPAWN_INTERVAL;
+  const cap = night ? MAX_AMBIENT_ZOMBIES + 8 : MAX_AMBIENT_ZOMBIES;
   ambientSpawnAccum += AI_DT;
-  if (ambientSpawnAccum >= AMBIENT_SPAWN_INTERVAL && players.size > 0) {
+  if (ambientSpawnAccum >= spawnInterval && players.size > 0) {
     let ambientCount = 0;
     for (const e of enemies.values()) if (e.ambient && !e.dead) ambientCount++;
-    if (ambientCount < MAX_AMBIENT_ZOMBIES) {
+    if (ambientCount < cap) {
       ambientSpawnAccum = 0;
-      spawnAmbientZombie();
+      spawnAmbientHostile();
     }
   }
 
@@ -431,6 +487,10 @@ setInterval(() => {
 
     if (d > cfg.aggro) continue;
 
+    // Night buff — melee zombies/wolves move ~20% faster after dusk so the
+    // night actually feels different from the day.
+    const nightMul = (isNightHour(gameHour) && !cfg.ranged) ? 1.2 : 1.0;
+
     if (cfg.ranged) {
       // Shooter: keep optimal distance ~70% of range; circle-strafe slightly.
       const desired = cfg.range * 0.65;
@@ -456,8 +516,8 @@ setInterval(() => {
       // Melee: chase + bite.
       if (d > cfg.range) {
         const dx = nearest.x - e.x, dz = nearest.z - e.z;
-        e.x += (dx / d) * cfg.speed * AI_DT;
-        e.z += (dz / d) * cfg.speed * AI_DT;
+        e.x += (dx / d) * cfg.speed * nightMul * AI_DT;
+        e.z += (dz / d) * cfg.speed * nightMul * AI_DT;
         e.y = heightAt(e.x, e.z);
         e.ry = Math.atan2(dx, dz);
       } else if (e.attackCd <= 0) {
@@ -502,6 +562,8 @@ wss.on('connection', (ws) => {
     you: id,
     seed: WORLD_SEED,
     worldHalf: WORLD_HALF,
+    hour: +gameHour.toFixed(2),
+    night: isNightHour(gameHour),
     peers: [...players.values()].filter(p => p.id !== id).map(pPub),
     enemies: [...enemies.values()].map(ePub),
     towns: TOWNS.map(t => ({

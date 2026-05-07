@@ -1,7 +1,7 @@
 // Bootstrap — wire together world, player, network, entities, weapons, HUD,
 // inventory, loot, sounds. Single game loop.
 
-import { renderer, scene, camera } from './three-setup.js';
+import { renderer, scene, camera, setTimeOfDay } from './three-setup.js';
 import './world.js';                 // builds terrain + trees + rocks
 import { player, updatePlayer } from './player.js';
 import { network } from './network.js';
@@ -10,10 +10,20 @@ import { updateWeapons } from './weapons.js';
 import {
   setHP, setOnlineCount, flashDamage, logLine, tickFps, showBanner,
   setInventory, showInteract, hideInteract,
+  setClock, showDamageArrow,
 } from './hud.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
 import { nearestInRange } from './loot.js';
+
+// Day/night state — interpolated locally between server `time` updates.
+let serverHour = 8;
+let serverHourSetAt = performance.now();
+const DAY_LENGTH = 360; // seconds — keep in sync with server
+function currentHour() {
+  const elapsedS = (performance.now() - serverHourSetAt) / 1000;
+  return (serverHour + (elapsedS * 24 / DAY_LENGTH)) % 24;
+}
 
 const menuEl = document.getElementById('menu');
 const playBtn = document.getElementById('playBtn');
@@ -32,6 +42,20 @@ network.onYouHit = (dmg, src, source) => {
   setHP(player.hp);
   flashDamage();
   sfx.playPlayerHurt();
+  // Directional arrow — angle from camera forward to source position.
+  if (src && Number.isFinite(src.x) && Number.isFinite(src.z)) {
+    const yaw = player.yaw();
+    // Forward vector in world coords (camera looks -Z when yaw=0).
+    const fwdX = -Math.sin(yaw), fwdZ = -Math.cos(yaw);
+    const dx = src.x - player.pos.x, dz = src.z - player.pos.z;
+    const len = Math.hypot(dx, dz) || 1;
+    const dirX = dx / len, dirZ = dz / len;
+    // Signed angle between forward and source direction. Positive = right.
+    const dot = fwdX * dirX + fwdZ * dirZ;
+    const cross = fwdX * dirZ - fwdZ * dirX;
+    const angle = Math.atan2(cross, dot);
+    showDamageArrow(angle);
+  }
   if (player.hp <= 0) {
     deathEl.classList.add('show');
     menuEl.style.display = 'none';
@@ -56,6 +80,10 @@ network.onLootGranted = (loot) => {
   const lines = inv.applyLoot(loot);
   for (const l of lines) logLine(l);
   sfx.playPickup();
+};
+network.onTimeUpdate = (h, isNight) => {
+  serverHour = h;
+  serverHourSetAt = performance.now();
 };
 
 // =====================================================================
@@ -158,6 +186,11 @@ function frame(now) {
       hideInteract();
     }
   }
+
+  // Drive day/night visuals — interpolate between server updates.
+  const h = currentHour();
+  setTimeOfDay(h);
+  setClock(h);
 
   tickFps(dt);
   renderer.render(scene, camera);

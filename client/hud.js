@@ -29,6 +29,29 @@ export function hideInteract() {
   if (interactPrompt) interactPrompt.classList.remove('show');
 }
 
+// Format hour 13.5 → "13:30" for the clock readout.
+const clockEl = document.getElementById('clock');
+export function setClock(hour) {
+  if (!clockEl) return;
+  const h = Math.floor(hour) % 24;
+  const m = Math.floor((hour - Math.floor(hour)) * 60);
+  clockEl.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
+// Directional damage arrow — angle is in radians measured from camera
+// forward (0 = source in front, +PI/2 = right, etc). The svg is rotated
+// so the triangle points outward at the screen edge.
+const dmgArrow = document.getElementById('dmgArrow');
+let _arrowTimer = 0;
+export function showDamageArrow(angleRadFromForward) {
+  if (!dmgArrow) return;
+  const deg = (angleRadFromForward * 180 / Math.PI);
+  dmgArrow.style.transform = `translate(-50%,-50%) rotate(${deg}deg)`;
+  dmgArrow.style.opacity = '1';
+  clearTimeout(_arrowTimer);
+  _arrowTimer = setTimeout(() => { dmgArrow.style.opacity = '0'; }, 1200);
+}
+
 // Lazy-create the banner element (used for boss spawn / death announcements).
 let bannerEl = null;
 function ensureBanner() {

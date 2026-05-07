@@ -166,6 +166,34 @@ export function playGrowl(dist = 0) {
   noise.start(t0);
 }
 
+// Wolf snarl — short bandpass-filtered noise burst with a downward pitched
+// triangle on top. Reads as "predator close" without sounding like the
+// generic zombie growl.
+export function playWolfSnarl(dist = 0) {
+  if (!ensureAudio()) return;
+  const a = attenuate(dist, 35);
+  if (a <= 0) return;
+  const t0 = ctx.currentTime;
+  // Tonal element.
+  const osc = ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(380, t0);
+  osc.frequency.exponentialRampToValueAtTime(140, t0 + 0.35);
+  const og = ctx.createGain(); og.gain.value = 0;
+  envelope(og, 0.02, 0.15, 0.3, 0.2);
+  og.gain.setValueAtTime(a * 0.35, t0 + 0.001);
+  osc.connect(og).connect(masterGain);
+  osc.start(t0); osc.stop(t0 + 0.55);
+  // Noise body.
+  const noise = ctx.createBufferSource(); noise.buffer = noiseBuffer(380);
+  const filt = ctx.createBiquadFilter(); filt.type = 'bandpass'; filt.frequency.value = 600; filt.Q.value = 1.0;
+  const ng = ctx.createGain(); ng.gain.value = 0;
+  envelope(ng, 0.02, 0.1, 0.4, 0.2);
+  ng.gain.setValueAtTime(a * 0.5, t0 + 0.001);
+  noise.connect(filt).connect(ng).connect(masterGain);
+  noise.start(t0);
+}
+
 // Footstep — soft thump.
 export function playFootstep() {
   if (!ensureAudio()) return;
