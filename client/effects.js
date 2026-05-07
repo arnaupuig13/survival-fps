@@ -86,6 +86,47 @@ export function spawnGoreBurst(x, y, z, count = 14) {
 }
 
 // =====================================================================
+// Damage numbers — short-lived 3D sprites floating up at the impact spot.
+// Critical hits (headshots) render bigger and red.
+// =====================================================================
+const DMG_LIFE = 0.9;
+const DMG_CAP = 30;
+const _dmgs = [];
+
+function makeDamageSprite(value, isCrit) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.font = isCrit ? 'bold 48px monospace' : 'bold 36px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = isCrit ? '#ff5050' : '#fff0c0';
+  ctx.strokeStyle = '#1a0a05';
+  ctx.lineWidth = 4;
+  ctx.strokeText(String(value), 64, 36);
+  ctx.fillText(String(value), 64, 36);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(isCrit ? 1.6 : 1.0, isCrit ? 0.8 : 0.5, 1);
+  return sprite;
+}
+
+export function spawnDamageNumber(x, y, z, value, isCrit = false) {
+  const sprite = makeDamageSprite(value, isCrit);
+  sprite.position.set(x + (Math.random() - 0.5) * 0.4, y + 1.5, z + (Math.random() - 0.5) * 0.4);
+  scene.add(sprite);
+  _dmgs.push({ sprite, t: 0 });
+  if (_dmgs.length > DMG_CAP) {
+    const dead = _dmgs.shift();
+    scene.remove(dead.sprite);
+    dead.sprite.material.map.dispose();
+    dead.sprite.material.dispose();
+  }
+}
+
+// =====================================================================
 // Per-frame update — advance each pool, clean up expired entries.
 // =====================================================================
 export function updateEffects(dt) {
@@ -116,6 +157,22 @@ export function updateEffects(dt) {
       continue;
     }
     d.mesh.material.opacity = 0.85 * life;
+  }
+
+  // Damage numbers — float up + fade.
+  for (let i = _dmgs.length - 1; i >= 0; i--) {
+    const d = _dmgs[i];
+    d.t += dt;
+    const life = 1 - d.t / DMG_LIFE;
+    if (life <= 0) {
+      scene.remove(d.sprite);
+      d.sprite.material.map.dispose();
+      d.sprite.material.dispose();
+      _dmgs.splice(i, 1);
+      continue;
+    }
+    d.sprite.position.y += dt * 0.9;
+    d.sprite.material.opacity = life;
   }
 
   // Particles — gravity arc.

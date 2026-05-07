@@ -58,6 +58,97 @@ export function setClock(hour) {
   clockEl.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 }
 
+const dayEl = document.getElementById('dayCounter');
+export function setDay(day) {
+  if (dayEl) dayEl.textContent = `DIA ${day}`;
+}
+
+const nameEl = document.getElementById('playerName');
+export function setPlayerName(name) {
+  if (nameEl) nameEl.textContent = name ? `▣ ${name}` : '';
+}
+
+// =====================================================================
+// Hotbar — 9 slots. Slot 0..2 fixed (pistol, rifle, bandage). 3..8 reserved
+// for future weapons. Active slot has `.active`. Each slot shows a count
+// (rounds for guns, charges for bandage).
+// =====================================================================
+const hotbarSlots = Array.from(document.querySelectorAll('.hbslot'));
+let _activeSlot = 0;
+export function setHotbarActive(slotIdx) {
+  _activeSlot = slotIdx;
+  for (const el of hotbarSlots) el.classList.remove('active');
+  const el = hotbarSlots[slotIdx];
+  if (el) el.classList.add('active');
+}
+export function setHotbarCount(slotIdx, n) {
+  const el = document.getElementById(`hbcount${slotIdx}`);
+  if (el) el.textContent = n | 0;
+  // Disable visual when count = 0 (only for slots that have an item).
+  const slot = hotbarSlots[slotIdx];
+  if (slot && !slot.classList.contains('empty')) {
+    slot.classList.toggle('disabled', (n | 0) === 0);
+  }
+}
+// Mark a slot as locked (rifle before pickup) so it grays out.
+export function setHotbarLocked(slotIdx, locked) {
+  const slot = hotbarSlots[slotIdx];
+  if (slot) slot.classList.toggle('disabled', !!locked);
+}
+
+// Active-weapon big counter at bottom-right.
+const activeWeaponName = document.getElementById('activeWeaponName');
+const activeAmmoNum    = document.getElementById('activeAmmoNum');
+export function setActiveWeapon(name, ammo) {
+  if (activeWeaponName) activeWeaponName.textContent = name;
+  if (activeAmmoNum) {
+    activeAmmoNum.textContent = ammo == null ? '—' : (ammo | 0);
+    activeAmmoNum.classList.toggle('empty', ammo === 0);
+  }
+}
+
+// Reload indicator.
+const reloadIndicator = document.getElementById('reloadIndicator');
+export function showReload(show) {
+  if (reloadIndicator) reloadIndicator.classList.toggle('hidden', !show);
+}
+
+// =====================================================================
+// Inventory panel — TAB toggles. Renders every ITEMS entry as a tile.
+// =====================================================================
+const inventoryPanel = document.getElementById('inventoryPanel');
+const invGrid        = document.getElementById('invGrid');
+let _inventoryOpen = false;
+export function isInventoryOpen() { return _inventoryOpen; }
+
+export function toggleInventory(state) {
+  _inventoryOpen = state == null ? !_inventoryOpen : !!state;
+  if (inventoryPanel) inventoryPanel.classList.toggle('hidden', !_inventoryOpen);
+  // While inventory is open we want the cursor unlocked so the user can
+  // close with TAB or click. Pointer lock is intentionally released by
+  // pressing ESC; we don't unlock here to avoid interfering.
+}
+
+export function renderInventory(state, itemMeta) {
+  if (!invGrid) return;
+  invGrid.innerHTML = '';
+  for (const [key, meta] of Object.entries(itemMeta)) {
+    const count = (state[key] | 0);
+    const div = document.createElement('div');
+    div.className = 'invItem';
+    if (count === 0) div.classList.add('zero');
+    if (meta.oneTime && count === 0) div.classList.add('locked');
+    div.innerHTML = `<div class="iname">${meta.label}</div><div class="icount">${count}</div>`;
+    if (meta.oneTime) {
+      const flag = document.createElement('div');
+      flag.className = 'iflag';
+      flag.textContent = count > 0 ? 'EQUIPADO' : 'NO RECOLECTADO';
+      div.appendChild(flag);
+    }
+    invGrid.appendChild(div);
+  }
+}
+
 // Directional damage arrow — angle is in radians measured from camera
 // forward (0 = source in front, +PI/2 = right, etc). The svg is rotated
 // so the triangle points outward at the screen edge.

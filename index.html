@@ -73,8 +73,54 @@
 
     /* Online counter */
     #online { position: fixed; right: 12px; top: 36px; font-size: 12px; color: #8f8; background: rgba(0,20,0,0.45); padding: 3px 8px; font-family: monospace; }
-    /* Clock — top-right under online counter */
+    /* Clock + day + name — top-right column */
     #clock { position: fixed; right: 12px; top: 60px; font-size: 14px; color: #f0c060; background: rgba(0,0,0,0.45); padding: 3px 10px; font-family: monospace; letter-spacing: 1px; }
+    #dayCounter { position: fixed; right: 12px; top: 280px; font-size: 11px; color: #aaa; background: rgba(0,0,0,0.45); padding: 3px 10px; font-family: monospace; letter-spacing: 2px; }
+    #playerName { position: fixed; right: 12px; top: 304px; font-size: 11px; color: #8f8; background: rgba(0,20,0,0.45); padding: 3px 10px; font-family: monospace; letter-spacing: 1px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Active-weapon ammo counter — big at bottom right */
+    #activeAmmo { position: fixed; right: 18px; bottom: 18px; text-align: right; font-family: monospace; pointer-events: none; }
+    #activeWeaponName { font-size: 12px; letter-spacing: 3px; color: #aaa; }
+    #activeAmmoNum { font-size: 42px; font-weight: 700; color: #f0c060; line-height: 1; margin-top: 2px; text-shadow: 0 0 8px rgba(240,192,96,0.45); }
+    #activeAmmoNum.empty { color: #ff5050; text-shadow: 0 0 8px rgba(255,80,80,0.5); }
+
+    /* Hotbar — bottom center */
+    #hotbar { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; pointer-events: none; font-family: system-ui, sans-serif; }
+    .hbslot { width: 56px; height: 56px; background: rgba(0,0,0,0.6); border: 1px solid #333; position: relative; padding: 4px; box-sizing: border-box; transition: border 0.1s, background 0.1s; }
+    .hbslot.empty { opacity: 0.35; }
+    .hbslot.active { border: 1px solid #f0c060; background: rgba(40,30,10,0.8); box-shadow: 0 0 10px rgba(240,192,96,0.5); }
+    .hbslot.disabled { opacity: 0.4; }
+    .hbkey { position: absolute; top: 2px; left: 4px; font-size: 10px; color: #888; font-family: monospace; }
+    .hblabel { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 9px; letter-spacing: 1px; color: #ccc; }
+    .hbcount { position: absolute; bottom: 2px; right: 4px; font-size: 11px; font-weight: 700; color: #f0c060; font-family: monospace; }
+
+    /* Inventory panel — full modal */
+    #inventoryPanel { position: fixed; inset: 0; background: rgba(0,0,0,0.78); display: flex; align-items: center; justify-content: center; z-index: 8; }
+    #inventoryPanel.hidden { display: none; }
+    .invHeader { background: rgba(20,20,20,0.95); padding: 14px 32px; font-family: system-ui; font-size: 16px; letter-spacing: 4px; color: #f0c060; border-bottom: 1px solid #444; min-width: 540px; display: flex; justify-content: space-between; align-items: center; }
+    .invHint { font-size: 10px; color: #888; letter-spacing: 1px; }
+    .invGrid { background: rgba(20,20,20,0.95); padding: 24px 32px; min-width: 540px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .invItem { background: rgba(0,0,0,0.5); border: 1px solid #333; padding: 12px; min-height: 56px; }
+    .invItem .iname { font-size: 11px; letter-spacing: 1.5px; color: #aaa; }
+    .invItem .icount { font-size: 22px; font-weight: 700; color: #f0c060; margin-top: 4px; }
+    .invItem.zero .icount { color: #555; }
+    .invItem.locked { opacity: 0.45; }
+    .invItem .iflag { font-size: 9px; color: #888; margin-top: 2px; letter-spacing: 1px; }
+    .invHints { background: rgba(20,20,20,0.95); padding: 14px 32px; font-size: 11px; color: #888; line-height: 1.7; min-width: 540px; border-top: 1px solid #333; }
+    .invHints kbd { background: #333; color: #ddd; padding: 1px 6px; border-radius: 2px; }
+
+    /* Reload indicator — center top */
+    #reloadIndicator { position: fixed; top: 60%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #f0c060; padding: 6px 18px; font-size: 13px; letter-spacing: 3px; font-family: monospace; pointer-events: none; }
+    #reloadIndicator.hidden { display: none; }
+
+    /* Name dialog */
+    #nameDialog { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 12; }
+    #nameDialog.hidden { display: none; }
+    .nameDialogPanel { background: rgba(20,20,20,0.95); padding: 32px 44px; text-align: center; border: 1px solid #444; }
+    .nameDialogPanel h2 { margin: 0 0 16px 0; font-size: 16px; letter-spacing: 4px; color: #f0c060; }
+    .nameDialogPanel input { background: #111; border: 1px solid #444; color: #ddd; padding: 8px 12px; font-size: 16px; text-align: center; outline: none; min-width: 220px; font-family: monospace; }
+    .nameDialogPanel input:focus { border-color: #f0c060; }
+    .nameDialogPanel button { margin-top: 14px; background: #f0c060; color: #1a1a1a; border: none; padding: 8px 24px; font-size: 13px; font-weight: 700; letter-spacing: 2px; cursor: pointer; display: block; margin-left: auto; margin-right: auto; }
   </style>
   <script type="importmap">
   {
@@ -107,7 +153,50 @@
   <div id="fps">-- FPS</div>
   <div id="online">0 jugadores</div>
   <div id="clock">--:--</div>
+  <div id="dayCounter">DIA 1</div>
+  <div id="playerName"></div>
   <div id="log"></div>
+
+  <!-- Big active-weapon ammo counter at the bottom-right -->
+  <div id="activeAmmo">
+    <div id="activeWeaponName">PISTOLA</div>
+    <div id="activeAmmoNum">12</div>
+  </div>
+
+  <!-- Hotbar — 9 slots at bottom-center. Keys 1..9 select. -->
+  <div id="hotbar">
+    <div class="hbslot" data-slot="0"><span class="hbkey">1</span><span class="hblabel">PISTOLA</span><span class="hbcount" id="hbcount0">12</span></div>
+    <div class="hbslot" data-slot="1"><span class="hbkey">2</span><span class="hblabel">RIFLE</span><span class="hbcount" id="hbcount1">0</span></div>
+    <div class="hbslot" data-slot="2"><span class="hbkey">3</span><span class="hblabel">VENDA</span><span class="hbcount" id="hbcount2">1</span></div>
+    <div class="hbslot empty" data-slot="3"><span class="hbkey">4</span></div>
+    <div class="hbslot empty" data-slot="4"><span class="hbkey">5</span></div>
+    <div class="hbslot empty" data-slot="5"><span class="hbkey">6</span></div>
+    <div class="hbslot empty" data-slot="6"><span class="hbkey">7</span></div>
+    <div class="hbslot empty" data-slot="7"><span class="hbkey">8</span></div>
+    <div class="hbslot empty" data-slot="8"><span class="hbkey">9</span></div>
+  </div>
+
+  <!-- Inventory panel — toggled with TAB. Grid of all items. -->
+  <div id="inventoryPanel" class="hidden">
+    <div class="invHeader">INVENTARIO <span class="invHint">[TAB] cerrar</span></div>
+    <div class="invGrid" id="invGrid"></div>
+    <div class="invHints">
+      <div><kbd>1</kbd>-<kbd>9</kbd> hotbar · <kbd>R</kbd> recargar · <kbd>C</kbd> agacharse · <kbd>H</kbd> usar venda</div>
+      <div><kbd>F</kbd> subir/bajar buggy · <kbd>E</kbd> abrir cofre · <kbd>SHIFT</kbd> correr</div>
+    </div>
+  </div>
+
+  <!-- Reload indicator (only visible while reloading) -->
+  <div id="reloadIndicator" class="hidden">RECARGANDO...</div>
+
+  <!-- Nickname dialog — first-run prompt before JUGAR. -->
+  <div id="nameDialog" class="hidden">
+    <div class="nameDialogPanel">
+      <h2>NOMBRE DEL JUGADOR</h2>
+      <input id="nameInput" type="text" maxlength="14" placeholder="P1" />
+      <button id="nameOk">CONFIRMAR</button>
+    </div>
+  </div>
 
   <!-- Directional damage indicator: a triangle pointing toward the source -->
   <svg id="dmgArrow" width="160" height="160" viewBox="-80 -80 160 160" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;opacity:0;transition:opacity 0.3s;">

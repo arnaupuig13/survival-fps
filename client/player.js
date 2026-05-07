@@ -7,18 +7,24 @@ import { camera, renderer } from './three-setup.js';
 import { heightAt, obstacles, WORLD_HALF } from './world.js';
 
 const EYE_HEIGHT = 1.65;
+const CROUCH_HEIGHT = 1.05;
 const WALK_SPEED = 5.5;
 const SPRINT_MULT = 1.7;
+const CROUCH_MULT = 0.55;
 const JUMP_VEL = 6.0;
 const GRAVITY = 22;
 const PLAYER_RADIUS = 0.4;
 const STAMINA_MAX = 100;
-const STAMINA_DRAIN = 18;        // /s while sprinting
-const STAMINA_REGEN = 14;        // /s while not sprinting
-const STAMINA_REGEN_DELAY = 0.8; // s after stopping sprint before regen kicks in
+const STAMINA_DRAIN = 18;
+const STAMINA_REGEN = 14;
+const STAMINA_REGEN_DELAY = 0.8;
 
 export const keys = Object.create(null);
-addEventListener('keydown', (e) => { keys[e.code] = true; });
+addEventListener('keydown', (e) => {
+  keys[e.code] = true;
+  // Toggle crouch with C — non-repeating.
+  if (e.code === 'KeyC' && !e.repeat) player.crouching = !player.crouching;
+});
 addEventListener('keyup',   (e) => { keys[e.code] = false; });
 
 // =====================================================================
@@ -54,9 +60,11 @@ export const player = {
   onGround: false,
   hp: 100,
   stamina: STAMINA_MAX,
-  staminaCooldown: 0,           // counts down after sprinting; regen blocked while > 0
-  invulnerable: true,           // flipped by main.js when JUGAR is pressed
-  invulnGraceUntil: 0,          // post-respawn grace window
+  staminaCooldown: 0,
+  crouching: false,
+  eyeHeightCurrent: EYE_HEIGHT,
+  invulnerable: true,
+  invulnGraceUntil: 0,
   yaw: () => yaw,
   pitch: () => pitch,
   get locked() { return locked; },
@@ -121,8 +129,10 @@ export function updatePlayer(dt) {
   // Stamina-gated sprint: holding shift drains stamina; if it hits 0 the
   // sprint multiplier drops to 1 until enough has regenerated.
   const sprintHeld = (keys['ShiftLeft'] || keys['ShiftRight']) && (keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD']);
+  // Sprint cancels crouch (you can't sprint and crouch at the same time).
+  if (sprintHeld && player.crouching) player.crouching = false;
   let sprint = 1;
-  if (sprintHeld && player.stamina > 1) {
+  if (sprintHeld && player.stamina > 1 && !player.crouching) {
     sprint = SPRINT_MULT;
     player.stamina = Math.max(0, player.stamina - STAMINA_DRAIN * dt);
     player.staminaCooldown = STAMINA_REGEN_DELAY;
@@ -130,7 +140,11 @@ export function updatePlayer(dt) {
     if (player.staminaCooldown > 0) player.staminaCooldown -= dt;
     else if (player.stamina < STAMINA_MAX) player.stamina = Math.min(STAMINA_MAX, player.stamina + STAMINA_REGEN * dt);
   }
-  const speed = WALK_SPEED * sprint;
+  const crouchMul = player.crouching ? CROUCH_MULT : 1;
+  const speed = WALK_SPEED * sprint * crouchMul;
+  // Smooth eye height transition for crouch.
+  const targetEye = player.crouching ? CROUCH_HEIGHT : EYE_HEIGHT;
+  player.eyeHeightCurrent += (targetEye - player.eyeHeightCurrent) * (1 - Math.exp(-12 * dt));
   let nx = player.pos.x + _move.x * speed * dt;
   let nz = player.pos.z + _move.z * speed * dt;
 
@@ -163,10 +177,10 @@ export function updatePlayer(dt) {
 
   // Vertical: gravity + jump + terrain follow.
   player.vy -= GRAVITY * dt;
-  if (keys['Space'] && player.onGround) { player.vy = JUMP_VEL; player.onGround = false; }
+  if (keys['Space'] && player.onGround && !player.crouching) { player.vy = JUMP_VEL; player.onGround = false; }
   player.pos.y += player.vy * dt;
 
-  const groundY = heightAt(player.pos.x, player.pos.z) + EYE_HEIGHT;
+  const groundY = heightAt(player.pos.x, player.pos.z) + player.eyeHeightCurrent;
   if (player.pos.y <= groundY) {
     player.pos.y = groundY;
     player.vy = 0;

@@ -11,12 +11,17 @@ import {
   setHP, setOnlineCount, flashDamage, logLine, tickFps, showBanner,
   setInventory, showInteract, hideInteract,
   setClock, showDamageArrow, setStamina, flashHitMarker,
+  setDay, setPlayerName, setHotbarActive, setHotbarCount, setHotbarLocked,
+  setActiveWeapon, showReload, toggleInventory, isInventoryOpen, renderInventory,
 } from './hud.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
 import { nearestInRange } from './loot.js';
 import { renderMinimap } from './minimap.js';
-import { lastShotWithinKillWindow } from './weapons.js';
+import {
+  lastShotWithinKillWindow, getActive as getActiveWeapon,
+  selectWeaponBySlot, isReloading, activeWeaponMeta,
+} from './weapons.js';
 import { updateEffects, spawnBloodDecal, spawnGoreBurst } from './effects.js';
 import { enemies } from './entities.js';
 import * as vehicle from './vehicle.js';
@@ -37,6 +42,37 @@ const respawnBtn = document.getElementById('respawnBtn');
 
 // HUD subscribes to inventory updates so ammo/kill counts always match state.
 inv.onChange(setInventory);
+inv.onChange((state) => {
+  // Hotbar slot counts: pistol bullets, rifle bullets, bandages.
+  setHotbarCount(0, state.bullet_p);
+  setHotbarCount(1, state.bullet_r);
+  setHotbarCount(2, state.bandage);
+  setHotbarLocked(1, !state.rifle_pickup);    // rifle locked until looted
+  // If the inventory panel is currently open, keep it in sync.
+  if (isInventoryOpen()) renderInventory(state, inv.ITEMS);
+});
+
+// =====================================================================
+// Persistence — total kills, days survived, nickname.
+// =====================================================================
+const STORAGE_KEY = 'survival-fps-v1-profile';
+function loadProfile() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { name: '', totalKills: 0, daysSurvived: 0 };
+    return JSON.parse(raw);
+  } catch { return { name: '', totalKills: 0, daysSurvived: 0 }; }
+}
+function saveProfile(p) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); } catch {}
+}
+const profile = loadProfile();
+setPlayerName(profile.name);
+
+// Day counter — derived from gameHour rollovers since session start. The
+// in-session day starts at 1 and increments each time the hour wraps.
+let inSessionDay = 1;
+let _lastClockHour = 0;
 
 // =====================================================================
 // Network wiring.
@@ -81,6 +117,9 @@ network.onEnemyDead = (id, msg) => {
   // Town despawns broadcast eDead too — ignore those for the kill counter.
   if (msg.despawn) return;
   inv.bumpKills();
+  // Persist total kills.
+  profile.totalKills = (profile.totalKills | 0) + 1;
+  saveProfile(profile);
   // Visceral feedback only on real kills, not despawn cleanups.
   if (e && x != null) {
     spawnBloodDecal(x, z);
@@ -116,13 +155,47 @@ network.onTimeUpdate = (h, isNight) => {
 // =====================================================================
 // Menu wiring.
 // =====================================================================
-playBtn.addEventListener('click', () => {
+// Name dialog — first time the user clicks JUGAR, ask for a nickname.
+const nameDialog = document.getElementById('nameDialog');
+const nameInput = document.getElementById('nameInput');
+const nameOk = document.getElementById('nameOk');
+function openNameDialog() {
+  if (!nameDialog) return;
+  nameInput.value = profile.name || `P${Math.floor(Math.random() * 99) + 1}`;
+  nameDialog.classList.remove('hidden');
+  setTimeout(() => nameInput.focus(), 50);
+}
+function closeNameDialog() {
+  if (nameDialog) nameDialog.classList.add('hidden');
+}
+nameOk?.addEventListener('click', () => {
+  const v = (nameInput.value || '').trim().slice(0, 14) || 'P1';
+  profile.name = v;
+  saveProfile(profile);
+  setPlayerName(v);
+  closeNameDialog();
+  startGame();
+});
+nameInput?.addEventListener('keydown', (e) => {
+  if (e.code === 'Enter') nameOk.click();
+});
+
+function startGame() {
   sfx.ensureAudio();          // first user gesture unlocks AudioContext
   sfx.startMusic?.();         // start the ambient drone
   player.startGame();
   menuEl.style.display = 'none';
   renderer.domElement.requestPointerLock?.();
-  logLine('Bienvenido. Sobrevivi.');
+  logLine(`Bienvenido ${profile.name || 'P1'}. Total bajas: ${profile.totalKills | 0}.`);
+}
+
+playBtn.addEventListener('click', () => {
+  // First-run: ask for a name. Subsequent runs go straight in.
+  if (!profile.name) {
+    openNameDialog();
+  } else {
+    startGame();
+  }
 });
 
 respawnBtn.addEventListener('click', () => {
@@ -146,6 +219,14 @@ player.onLockChange = (locked) => {
 let nearbyCrate = null;
 
 addEventListener('keydown', (e) => {
+  // TAB inventory works even outside game (helps the user explore the
+  // hotbar before pressing JUGAR). Block default tab focus changes.
+  if (e.code === 'Tab') {
+    e.preventDefault();
+    toggleInventory();
+    if (isInventoryOpen()) renderInventory(_currentInvState(), inv.ITEMS);
+    return;
+  }
   if (!player.locked || player.hp <= 0) return;
   if (e.code === 'KeyE' && nearbyCrate) {
     network.openCrate(nearbyCrate.id);
@@ -163,8 +244,36 @@ addEventListener('keydown', (e) => {
     } else if (vehicle.enterNearest(player.pos)) {
       logLine('Subiste al buggy — W/S acelerar, A/D girar, F bajar');
     }
+  } else if (/^Digit[1-9]$/.test(e.code)) {
+    // Hotbar selection.
+    const slotIdx = parseInt(e.code.replace('Digit', ''), 10) - 1;
+    handleHotbarSlot(slotIdx);
   }
 });
+
+// Snapshot of the inventory state — inventory.js doesn't expose the raw
+// state object, so we shadow it via the onChange listener.
+let _shadowInvState = {};
+inv.onChange((s) => { _shadowInvState = { ...s }; });
+function _currentInvState() { return _shadowInvState; }
+
+function handleHotbarSlot(slotIdx) {
+  if (slotIdx === 0 || slotIdx === 1) {
+    // Weapon slot: delegate to weapons.js. Hotbar visual sync below.
+    selectWeaponBySlot(slotIdx);
+    setHotbarActive(slotIdx);
+    return;
+  }
+  if (slotIdx === 2) {
+    // Bandage — use immediately.
+    if (inv.useBandage(player)) {
+      logLine('+30 HP (vendaje usado)');
+      sfx.playPickup();
+    }
+    return;
+  }
+  // Slots 3..8 reserved for future items (grenades, food, etc).
+}
 
 // =====================================================================
 // Footstep ticker — plays a soft thump roughly every 0.45 s while moving.
@@ -234,6 +343,22 @@ function frame(now) {
   const h = currentHour();
   setTimeOfDay(h);
   setClock(h);
+
+  // Day counter — increment each time the hour rolls past midnight.
+  if (_lastClockHour > 23 && h < 1) {
+    inSessionDay++;
+    profile.daysSurvived = (profile.daysSurvived | 0) + 1;
+    saveProfile(profile);
+    logLine(`★ DIA ${inSessionDay}`);
+  }
+  _lastClockHour = h;
+  setDay(inSessionDay);
+
+  // Active weapon HUD + hotbar visual.
+  const meta = activeWeaponMeta();
+  setActiveWeapon(meta.name, meta.loaded);
+  setHotbarActive(getActiveWeapon() === 'rifle' ? 1 : 0);
+  showReload(isReloading());
 
   // Stamina HUD bar.
   setStamina(player.stamina ?? 100);

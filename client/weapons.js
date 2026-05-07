@@ -9,13 +9,15 @@ import { network } from './network.js';
 import { player } from './player.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
-import { spawnTracer } from './effects.js';
+import { spawnTracer, spawnDamageNumber } from './effects.js';
 
-// Each weapon names the inventory key it consumes per shot. The rifle
-// requires `rifle_pickup > 0` to be selectable (locked behind a city loot).
+// Each weapon names the inventory key it consumes per shot. magazineSize
+// caps the loaded round count; reload pulls from the inventory pool. The
+// rifle requires `rifle_pickup > 0` to be selectable (locked behind city
+// loot).
 const WEAPONS = {
-  pistol: { dmg: 4,  cooldown: 0.5,  range: 50,  auto: false, name: 'PISTOLA', ammo: 'bullet_p' },
-  rifle:  { dmg: 6,  cooldown: 0.12, range: 100, auto: true,  name: 'RIFLE',   ammo: 'bullet_r', requires: 'rifle_pickup' },
+  pistol: { dmg: 4,  cooldown: 0.5,  range: 50,  auto: false, name: 'PISTOLA', ammo: 'bullet_p', magazineSize: 12, reloadTime: 1.2 },
+  rifle:  { dmg: 6,  cooldown: 0.12, range: 100, auto: true,  name: 'RIFLE',   ammo: 'bullet_r', requires: 'rifle_pickup', magazineSize: 30, reloadTime: 1.8 },
 };
 
 // =====================================================================
@@ -24,6 +26,10 @@ const WEAPONS = {
 let active = 'pistol';
 let cooldown = 0;
 let mouseDown = false;
+// Per-weapon loaded magazine — independent from total ammo in inventory.
+const loaded = { pistol: 12, rifle: 0 };
+let reloading = false;
+let reloadTimer = 0;
 const ray = new THREE.Raycaster();
 const _origin = new THREE.Vector3();
 const _dir = new THREE.Vector3();
@@ -65,13 +71,43 @@ scene.add(camera); // make sure camera is in scene so its children render
 // Input
 // =====================================================================
 addEventListener('keydown', (e) => {
-  if (e.code === 'Digit1') { active = 'pistol'; updateGunVisual(); }
-  if (e.code === 'Digit2') {
-    // Rifle has to be looted before you can switch to it.
-    if (!inv.has('rifle_pickup', 1)) return;
-    active = 'rifle'; updateGunVisual();
-  }
+  if (e.code === 'Digit1') selectWeapon('pistol');
+  else if (e.code === 'Digit2') selectWeapon('rifle');
+  else if (e.code === 'KeyR') startReload();
 });
+
+function selectWeapon(name) {
+  if (name === 'rifle' && !inv.has('rifle_pickup', 1)) return;
+  if (reloading) cancelReload();
+  active = name; updateGunVisual();
+}
+export function getActive() { return active; }
+export function getLoaded() { return loaded[active] | 0; }
+export function isReloading() { return reloading; }
+
+function startReload() {
+  if (reloading) return;
+  const cfg = WEAPONS[active];
+  if (!cfg) return;
+  if ((loaded[active] | 0) >= cfg.magazineSize) return; // already full
+  if (!inv.has(cfg.ammo, 1)) return;                    // no ammo to load
+  reloading = true;
+  reloadTimer = cfg.reloadTime;
+  sfx.playEmpty?.(); // mechanical click stand-in
+}
+function cancelReload() { reloading = false; reloadTimer = 0; }
+function finishReload() {
+  const cfg = WEAPONS[active];
+  if (!cfg) return;
+  const need = cfg.magazineSize - (loaded[active] | 0);
+  const got = Math.min(need, inv.get(cfg.ammo));
+  if (got > 0) {
+    loaded[active] = (loaded[active] | 0) + got;
+    inv.remove(cfg.ammo, got);
+  }
+  reloading = false;
+  reloadTimer = 0;
+}
 addEventListener('mousedown', (e) => { if (e.button === 0) { mouseDown = true; tryFire(); } });
 addEventListener('mouseup',   (e) => { if (e.button === 0)   mouseDown = false; });
 
@@ -86,15 +122,20 @@ function updateGunVisual() {
 
 function tryFire() {
   if (!player.locked || player.hp <= 0) return;
-  if (cooldown > 0) return;
+  if (cooldown > 0 || reloading) return;
   const cfg = WEAPONS[active];
-  // Out of ammo → empty click + lock the trigger so we don't spam.
-  if (!inv.consume(cfg.ammo, 1)) {
-    sfx.playEmpty();
-    cooldown = 0.25;
-    mouseDown = false;
+  // Magazine empty → auto-reload if reserves exist, otherwise empty click.
+  if ((loaded[active] | 0) <= 0) {
+    if (inv.has(cfg.ammo, 1)) {
+      startReload();
+    } else {
+      sfx.playEmpty();
+      cooldown = 0.25;
+      mouseDown = false;
+    }
     return;
   }
+  loaded[active] = (loaded[active] | 0) - 1;
   cooldown = cfg.cooldown;
   if (active === 'rifle') sfx.playRifle(0); else sfx.playPistol(0);
 
@@ -113,14 +154,36 @@ function tryFire() {
 
   const hits = ray.intersectObjects(candidates, false);
   let hitId = null;
+  let isHeadshot = false;
+  let hitPoint = null;
   if (hits.length > 0) {
+    const hit = hits[0];
+    hitPoint = hit.point;
     // Walk up to find which enemy the hit object belongs to.
-    let obj = hits[0].object;
+    let obj = hit.object;
     while (obj && !eMap.has(obj)) obj = obj.parent;
-    if (obj) hitId = eMap.get(obj);
+    if (obj) {
+      hitId = eMap.get(obj);
+      // Headshot heuristic — most enemy meshes have the head ~1.6-1.8 m
+      // above their root. We treat any hit with localY >= 1.45 m as a head
+      // hit. Boss/scientist are taller so the threshold scales loosely.
+      const enemyEntry = enemies.get(hitId);
+      if (enemyEntry) {
+        const localY = hit.point.y - enemyEntry.mesh.position.y;
+        isHeadshot = localY >= 1.45;
+      }
+    }
   }
 
-  network.shoot(_origin, _dir, hitId, cfg.dmg);
+  // Final damage with headshot bonus.
+  const finalDmg = isHeadshot ? Math.round(cfg.dmg * 1.6) : cfg.dmg;
+  network.shoot(_origin, _dir, hitId, finalDmg);
+
+  // Damage number floats up at impact.
+  if (hitId !== null && hitPoint) {
+    spawnDamageNumber(hitPoint.x, hitPoint.y - 0.5, hitPoint.z, finalDmg, isHeadshot);
+    if (isHeadshot) sfx.playKill();
+  }
 
   // Tracer from muzzle to either the hit point or a far point along ray.
   const muzzleWorld = new THREE.Vector3();
@@ -164,8 +227,25 @@ function flashHitMarker(hit, isKill = false) {
 export function updateWeapons(dt) {
   if (cooldown > 0) cooldown -= dt;
   if (muzzle.intensity > 0) muzzle.intensity = Math.max(0, muzzle.intensity - dt * 30);
+  // Reload progress.
+  if (reloading) {
+    reloadTimer -= dt;
+    // Slight visual sag of the gun while reloading.
+    if (gunBody) gunBody.position.y = -0.18 - 0.06 * Math.sin(Math.PI * (1 - reloadTimer / WEAPONS[active].reloadTime));
+    if (reloadTimer <= 0) {
+      finishReload();
+      if (gunBody) gunBody.position.y = -0.18;
+    }
+  }
   // Auto-fire (rifle only) while held.
-  if (mouseDown && WEAPONS[active].auto && cooldown <= 0) tryFire();
+  if (mouseDown && WEAPONS[active].auto && cooldown <= 0 && !reloading) tryFire();
 }
 
 export function activeWeaponName() { return WEAPONS[active].name; }
+export function activeWeaponMeta() { return { name: WEAPONS[active].name, loaded: loaded[active] | 0, ammo: inv.get(WEAPONS[active].ammo) }; }
+// Allow main.js to drive weapon selection via the hotbar (1..3 etc).
+export function selectWeaponBySlot(slotIdx) {
+  if (slotIdx === 0) selectWeapon('pistol');
+  else if (slotIdx === 1) selectWeapon('rifle');
+  // Slots 2..8 = items / future weapons. main.js handles bandage etc.
+}
