@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Survival FPS v1</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; color: #ddd; font-family: system-ui, sans-serif; }
+    canvas { display: block; }
+
+    /* Crosshair */
+    #crosshair { position: fixed; top: 50%; left: 50%; width: 14px; height: 14px; transform: translate(-50%, -50%); pointer-events: none; }
+    #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255,255,255,0.85); }
+    #crosshair::before { left: 6px; top: 0;  width: 2px; height: 14px; }
+    #crosshair::after  { left: 0;  top: 6px; width: 14px; height: 2px; }
+
+    /* Hit marker */
+    #hitMarker { position: fixed; top: 50%; left: 50%; width: 24px; height: 24px; transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; opacity: 0; }
+    #hitMarker::before, #hitMarker::after { content: ''; position: absolute; background: #ff5050; }
+    #hitMarker::before { left: 11px; top: 0; width: 2px; height: 24px; }
+    #hitMarker::after  { left: 0; top: 11px; width: 24px; height: 2px; }
+
+    /* HP bar */
+    #hud { position: fixed; left: 16px; bottom: 16px; min-width: 220px; }
+    #hpLabel { font-size: 11px; letter-spacing: 2px; color: #aaa; margin-bottom: 4px; }
+    #hpBar { width: 100%; height: 16px; background: rgba(0,0,0,0.55); border: 1px solid #333; }
+    #hpFill { height: 100%; background: linear-gradient(90deg, #c93f3f, #f08a8a); transition: width 0.18s; }
+
+    /* FPS */
+    #fps { position: fixed; right: 12px; top: 10px; font-size: 12px; color: #8f8; background: rgba(0,0,0,0.45); padding: 4px 8px; font-family: monospace; }
+
+    /* Event log */
+    #log { position: fixed; left: 16px; top: 16px; max-width: 340px; font-size: 13px; line-height: 1.5; color: #ddd; }
+    #log .line { background: rgba(0,0,0,0.55); padding: 3px 8px; margin-bottom: 2px; opacity: 0.95; }
+
+    /* Damage flash */
+    #dmgFlash { position: fixed; inset: 0; background: rgba(180,0,0,0); pointer-events: none; transition: background 0.25s; }
+
+    /* Menu */
+    #menu { position: fixed; inset: 0; background: rgba(0,0,0,0.78); display: flex; align-items: center; justify-content: center; z-index: 10; }
+    #menu .panel { background: rgba(20,20,20,0.92); border: 1px solid #444; padding: 36px 44px; text-align: center; min-width: 320px; }
+    #menu h1 { margin: 0 0 6px 0; font-size: 28px; letter-spacing: 5px; color: #f0c060; }
+    #menu p.sub { margin: 0 0 22px 0; font-size: 13px; color: #888; letter-spacing: 1px; }
+    #menu button { background: #f0c060; color: #1a1a1a; border: none; padding: 12px 32px; font-size: 16px; font-weight: 600; letter-spacing: 2px; cursor: pointer; }
+    #menu button:hover { background: #ffd070; }
+    #menu .controls { margin-top: 22px; font-size: 12px; color: #888; line-height: 1.7; }
+    kbd { background: #333; color: #fff; padding: 1px 5px; border-radius: 2px; font-size: 11px; }
+
+    /* Death screen */
+    #death { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 9; }
+    #death.show { display: flex; }
+    #death .panel { background: rgba(20,0,0,0.92); border: 1px solid #722; padding: 40px 60px; text-align: center; }
+    #death h1 { margin: 0 0 18px 0; font-size: 36px; color: #ff5050; letter-spacing: 6px; }
+    #death button { background: #c93f3f; color: #fff; border: none; padding: 12px 28px; font-size: 15px; font-weight: 600; letter-spacing: 2px; cursor: pointer; }
+
+    /* Online counter */
+    #online { position: fixed; right: 12px; top: 36px; font-size: 12px; color: #8f8; background: rgba(0,20,0,0.45); padding: 3px 8px; font-family: monospace; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="crosshair"></div>
+  <div id="hitMarker"></div>
+  <div id="dmgFlash"></div>
+
+  <div id="hud">
+    <div id="hpLabel">VIDA</div>
+    <div id="hpBar"><div id="hpFill" style="width:100%"></div></div>
+  </div>
+
+  <div id="fps">-- FPS</div>
+  <div id="online">0 jugadores</div>
+  <div id="log"></div>
+
+  <div id="menu">
+    <div class="panel">
+      <h1>SURVIVAL FPS</h1>
+      <p class="sub">Multiplayer · v1</p>
+      <button id="playBtn">JUGAR</button>
+      <div class="controls">
+        <div><kbd>WASD</kbd> moverte · <kbd>SHIFT</kbd> correr</div>
+        <div><kbd>SPACE</kbd> saltar · <kbd>CLIC IZQ</kbd> disparar</div>
+        <div><kbd>1</kbd> pistola · <kbd>2</kbd> rifle · <kbd>ESC</kbd> menu</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="death">
+    <div class="panel">
+      <h1>HAS MUERTO</h1>
+      <button id="respawnBtn">REAPARECER</button>
+    </div>
+  </div>
+
+  <script type="module" src="./client/main.js"></script>
+</body>
+</html>
