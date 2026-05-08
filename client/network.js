@@ -35,6 +35,8 @@ class NetworkClient {
     this.onGrenade = null;
     this.onGrenadeBoom = null;
     this.onWave = null;
+    this.onDifficulty = null;
+    this.onWeather = null;
     this.onSupplyDrop = null;
     this._sendAccum = 0;
   }
@@ -61,6 +63,8 @@ class NetworkClient {
       for (const c of (msg.crates || [])) spawnCrate(c);
       this.onPeerCount?.(peers.size + 1);
       if (msg.hour != null) this.onTimeUpdate?.(msg.hour, !!msg.night);
+      if (msg.day != null) this.onDifficulty?.(msg.day, msg.diffMul ?? 1);
+      if (msg.weather) this.onWeather?.({ kind: msg.weather });
     } else if (msg.type === 'time') {
       this.onTimeUpdate?.(msg.h, !!msg.night);
     } else if (msg.type === 'peerJoin') {
@@ -140,6 +144,10 @@ class NetworkClient {
       this.onGrenadeBoom?.(msg);
     } else if (msg.type === 'wave') {
       this.onWave?.(msg.state);
+    } else if (msg.type === 'difficulty') {
+      this.onDifficulty?.(msg.day, msg.mul);
+    } else if (msg.type === 'weather') {
+      this.onWeather?.(msg);
     } else if (msg.type === 'supplyDrop') {
       this.onSupplyDrop?.(msg.x, msg.z);
     } else if (msg.type === 'fire') {

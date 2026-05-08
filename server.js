@@ -406,13 +406,17 @@ const AMBIENT_SPAWN_INTERVAL = 4.5;
 function makeEnemy(opts) {
   const cfg = ETYPES[opts.etype] || ETYPES.zombie;
   const id = nextEnemyId++;
+  // Difficulty scaling — animales pasivos NO escalan (son comida).
+  const scale = (cfg.passive) ? 1 : difficultyMul();
+  const id_ = id;
   const e = {
-    id,
+    id: id_,
     etype: opts.etype || 'zombie',
     x: opts.x, z: opts.z, y: heightAt(opts.x, opts.z),
     ry: opts.ry ?? Math.random() * Math.PI * 2,
-    hp: cfg.hp,
-    maxHp: cfg.hp,
+    hp: Math.round(cfg.hp * scale),
+    maxHp: Math.round(cfg.hp * scale),
+    dmgScale: scale,            // usado en sendTo(youHit) para escalar dmg
     attackCd: 0,
     sleeping: !!opts.sleeping,
     townId: opts.townId || null,
@@ -622,34 +626,36 @@ function spawnAmbientHostile(minDist = 38, maxDist = 80) {
       if (dx * dx + dz * dz < 60 * 60) { insideTown = true; break; }
     }
     if (insideTown) continue;
-    // Mix per night/day. By day mostly zombies, sprinkle of others. At
-    // night wolves, specials and predators salen más. Specials tienen
-    // chance baja para que se sientan eventos ocasionales y no farmable.
+    // Mix per night/day + escala con día. Día 1-2: mayoría zombies básicos.
+    // Día 3-5: más runners/specials. Día 6+: tanks, brutes, specials suben.
+    // El "specialBoost" suma a la chance de specials/elites con cada día.
     const isNight = isNightHour(gameHour);
+    const specialBoost = Math.min(0.20, (gameDay - 1) * 0.025);   // hasta +20%
+    const eliteBoost   = Math.min(0.15, (gameDay - 2) * 0.022);   // tanks/brutes
     let etype = 'zombie';
     const r2 = Math.random();
     if (isNight) {
-      if (r2 > 0.985)     etype = 'brute';     // 1.5%
-      else if (r2 > 0.96) etype = 'bear';
-      else if (r2 > 0.93) etype = 'exploder';  // 3%
-      else if (r2 > 0.90) etype = 'screamer';  // 3%
-      else if (r2 > 0.86) etype = 'spitter';   // 4%
-      else if (r2 > 0.80) etype = 'tank';
-      else if (r2 > 0.74) etype = 'boar';
-      else if (r2 > 0.50) etype = 'wolf';
-      else if (r2 > 0.25) etype = 'runner';
-      else                etype = 'zombie';
+      if      (r2 > 0.985 - eliteBoost)           etype = 'brute';
+      else if (r2 > 0.96  - eliteBoost)           etype = 'bear';
+      else if (r2 > 0.93  - specialBoost)         etype = 'exploder';
+      else if (r2 > 0.90  - specialBoost)         etype = 'screamer';
+      else if (r2 > 0.86  - specialBoost)         etype = 'spitter';
+      else if (r2 > 0.80  - eliteBoost)           etype = 'tank';
+      else if (r2 > 0.74)                         etype = 'boar';
+      else if (r2 > 0.50)                         etype = 'wolf';
+      else if (r2 > 0.25)                         etype = 'runner';
+      else                                        etype = 'zombie';
     } else {
-      if (r2 > 0.992)     etype = 'brute';     // 0.8%
-      else if (r2 > 0.98) etype = 'bear';
-      else if (r2 > 0.965)etype = 'exploder';  // 1.5%
-      else if (r2 > 0.95) etype = 'screamer';  // 1.5%
-      else if (r2 > 0.93) etype = 'spitter';   // 2%
-      else if (r2 > 0.89) etype = 'tank';
-      else if (r2 > 0.85) etype = 'boar';
-      else if (r2 > 0.80) etype = 'wolf';
-      else if (r2 > 0.72) etype = 'runner';
-      else                etype = 'zombie';
+      if      (r2 > 0.992 - eliteBoost)           etype = 'brute';
+      else if (r2 > 0.98  - eliteBoost)           etype = 'bear';
+      else if (r2 > 0.965 - specialBoost)         etype = 'exploder';
+      else if (r2 > 0.95  - specialBoost)         etype = 'screamer';
+      else if (r2 > 0.93  - specialBoost)         etype = 'spitter';
+      else if (r2 > 0.89  - eliteBoost)           etype = 'tank';
+      else if (r2 > 0.85)                         etype = 'boar';
+      else if (r2 > 0.80)                         etype = 'wolf';
+      else if (r2 > 0.72)                         etype = 'runner';
+      else                                        etype = 'zombie';
     }
     const e = makeEnemy({ etype, x, z, ambient: true });
     broadcast({ type: 'eSpawn', e: ePub(e) });
@@ -699,11 +705,23 @@ let supplyDropCountdown = 180;
 const DAY_LENGTH = 360;          // seconds per in-game day
 const NIGHT_FROM = 20, NIGHT_TO = 6;
 let gameHour = 8;                // start in the morning
+let gameDay = 1;                 // counter de días (sube al cruzar 06:00)
 function isNightHour(h) {
   if (NIGHT_FROM > NIGHT_TO) return h >= NIGHT_FROM || h < NIGHT_TO;
   return h >= NIGHT_FROM && h < NIGHT_TO;
 }
 let lastTimeBroadcast = 0;
+
+// =====================================================================
+// Difficulty scaling — sube con cada día. Día 1 = 1.0x, día 2 = 1.12x,
+// día 3 = 1.24x, …, día 8 ≈ 1.84x. Aplicado a HP y dmg de TODOS los
+// enemigos al spawn. El cap de zombies y composición de specials también
+// escalan (más specials a mayor día).
+// =====================================================================
+function difficultyMul() {
+  return 1 + 0.12 * Math.max(0, gameDay - 1);
+}
+function difficultyDay() { return gameDay; }
 
 // =====================================================================
 // AI tick — runs at 10 Hz. Dispatches per behavior (sleeping → wake,
@@ -713,6 +731,8 @@ const AI_HZ = 10;
 const AI_DT = 1 / AI_HZ;
 let ambientSpawnAccum = 0;
 let streamCheckAccum = 0;
+let weatherCheckAccum = 60; // primer tick de clima a los 30s
+let currentWeather = 'clear';
 
 // =====================================================================
 // Wave system — every WAVE_INTERVAL seconds (with jitter), the server
@@ -730,9 +750,10 @@ function announceWave() {
   waveEndsAt = Date.now() + 90 * 1000;
   broadcast({ type: 'banner', text: '⚠ OLEADA INMINENTE ⚠' });
   broadcast({ type: 'wave', state: 'start' });
-  // Burst spawn 10-14 hostiles around each player.
+  // Burst spawn 10-14 hostiles around each player. Más con cada día.
+  const dayBoost = Math.floor((gameDay - 1) * 1.5);
   for (const p of players.values()) {
-    const count = 10 + Math.floor(Math.random() * 5);
+    const count = 10 + Math.floor(Math.random() * 5) + dayBoost;
     for (let i = 0; i < count; i++) {
       // 50% wolves at night, 30% runners, 15% zombies, 5% tanks.
       const r = Math.random();
@@ -758,9 +779,84 @@ function announceWave() {
   }
 }
 
+// =====================================================================
+// Hordas nocturnas — desde día 3 en adelante, cada noche al cruzar las
+// 22:00 spawneamos una horda BIG de zombies cerca de cada jugador. Más
+// grande y mortal que las olas regulares: incluye specials (screamer +
+// brute) y mucha más cantidad. Anunciada con banner rojo.
+// =====================================================================
+let lastHordeNightDay = 0;
+function maybeTriggerNightHorde() {
+  if (gameDay < 3) return;
+  if (gameHour < 22 || gameHour >= 23) return;
+  if (lastHordeNightDay === gameDay) return;
+  lastHordeNightDay = gameDay;
+  triggerNightHorde();
+}
+function triggerNightHorde() {
+  const dayBoost = Math.floor((gameDay - 2) * 2.5);  // día 3 +2, día 5 +7, día 8 +15
+  broadcast({ type: 'banner', text: `★★★ HORDA NOCTURNA — DIA ${gameDay} ★★★` });
+  broadcast({ type: 'wave', state: 'start' });
+  waveActive = true;
+  waveEndsAt = Date.now() + 120 * 1000;
+  for (const p of players.values()) {
+    const count = 12 + Math.floor(Math.random() * 6) + dayBoost;
+    let screamerSpawned = false, bruteSpawned = false;
+    for (let i = 0; i < count; i++) {
+      const r = Math.random();
+      let etype = 'zombie';
+      // Asegurar al menos 1 screamer y 1 brute por horda desde día 4.
+      if (gameDay >= 4 && !screamerSpawned && i === 2) { etype = 'screamer'; screamerSpawned = true; }
+      else if (gameDay >= 5 && !bruteSpawned && i === 4) { etype = 'brute'; bruteSpawned = true; }
+      else if (r > 0.97) etype = 'tank';
+      else if (r > 0.93) etype = 'spitter';
+      else if (r > 0.90) etype = 'exploder';
+      else if (r > 0.55) etype = 'runner';
+      else               etype = 'zombie';
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 30 + Math.random() * 25;
+      const x = p.x + Math.cos(angle) * dist;
+      const z = p.z + Math.sin(angle) * dist;
+      if (Math.abs(x) > WORLD_HALF || Math.abs(z) > WORLD_HALF) continue;
+      const e = makeEnemy({ etype, x, z, ambient: true });
+      broadcast({ type: 'eSpawn', e: ePub(e) });
+    }
+  }
+}
+
 setInterval(() => {
   // Advance day/night clock. 1 tick = 0.1 s real → DAY_LENGTH s = full day.
+  const prev = gameHour;
   gameHour = (gameHour + (24 / DAY_LENGTH) * AI_DT) % 24;
+  // Roll de día — al cruzar las 06:00 (amanecer) sumamos un día.
+  if (prev > 22 && gameHour < 1) {
+    // Cruzó medianoche (mantenemos por compat).
+  }
+  if (prev < 6 && gameHour >= 6 && gameHour < 7) {
+    gameDay++;
+    broadcast({ type: 'banner', text: `★ DIA ${gameDay} — La amenaza crece` });
+    broadcast({ type: 'difficulty', day: gameDay, mul: +difficultyMul().toFixed(2) });
+  }
+  // Trigger horda nocturna desde día 3 al cruzar las 22:00.
+  if (players.size > 0) maybeTriggerNightHorde();
+
+  // Clima: cada 90s real chequeamos si cambia. Lluvia 25%, niebla 15%
+  // (solo de noche), clear el resto. Anuncia con banner sutil.
+  weatherCheckAccum += AI_DT;
+  if (weatherCheckAccum >= 90) {
+    weatherCheckAccum = 0;
+    const r = Math.random();
+    let next = 'clear';
+    if (isNightHour(gameHour) && r < 0.30) next = 'fog';
+    else if (r < 0.25) next = 'rain';
+    if (next !== currentWeather) {
+      currentWeather = next;
+      broadcast({ type: 'weather', kind: next });
+      if (next === 'rain')      broadcast({ type: 'banner', text: '☂ Empezó a llover' });
+      else if (next === 'fog')  broadcast({ type: 'banner', text: '✦ Niebla densa' });
+      else                      broadcast({ type: 'banner', text: '☀ Cielo despejado' });
+    }
+  }
 
   // Wave countdown.
   if (players.size > 0) {
@@ -849,7 +945,9 @@ setInterval(() => {
   // Ambient (out-of-town) spawn ticker. At night spawn faster + cap higher.
   const night = isNightHour(gameHour);
   const spawnInterval = night ? AMBIENT_SPAWN_INTERVAL * 0.55 : AMBIENT_SPAWN_INTERVAL;
-  const cap = night ? MAX_AMBIENT_ZOMBIES + 12 : MAX_AMBIENT_ZOMBIES;
+  // Cap escala con el día. Día 1 base, día 2 +3, día 5 +12, día 8 +21.
+  const dayBonus = Math.floor((gameDay - 1) * 3);
+  const cap = (night ? MAX_AMBIENT_ZOMBIES + 12 : MAX_AMBIENT_ZOMBIES) + dayBonus;
   ambientSpawnAccum += AI_DT;
   if (ambientSpawnAccum >= spawnInterval && players.size > 0) {
     let ambientCount = 0;
@@ -946,8 +1044,9 @@ setInterval(() => {
       // Fire when in range.
       if (d < cfg.range && e.attackCd <= 0) {
         e.attackCd = cfg.cd;
-        nearest.hp = Math.max(0, nearest.hp - cfg.dmg);
-        sendTo(nearest, { type: 'youHit', dmg: cfg.dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+        const dmg = Math.round(cfg.dmg * (e.dmgScale || 1));
+        nearest.hp = Math.max(0, nearest.hp - dmg);
+        sendTo(nearest, { type: 'youHit', dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
         broadcast({ type: 'eShoot', id: e.id, tx: nearest.x, ty: nearest.y, tz: nearest.z });
       }
     } else if (cfg.special === 'exploder') {
@@ -976,8 +1075,9 @@ setInterval(() => {
         e.ry = Math.atan2(dx, dz);
       } else if (e.attackCd <= 0) {
         e.attackCd = cfg.cd;
-        nearest.hp = Math.max(0, nearest.hp - cfg.dmg);
-        sendTo(nearest, { type: 'youHit', dmg: cfg.dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+        const dmg = Math.round(cfg.dmg * (e.dmgScale || 1));
+        nearest.hp = Math.max(0, nearest.hp - dmg);
+        sendTo(nearest, { type: 'youHit', dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
         broadcast({ type: 'eAttack', id: e.id });
       }
       if (e._screamCd <= 0) {
@@ -994,8 +1094,9 @@ setInterval(() => {
         e.ry = Math.atan2(dx, dz);
       } else if (e.attackCd <= 0) {
         e.attackCd = cfg.cd;
-        nearest.hp = Math.max(0, nearest.hp - cfg.dmg);
-        sendTo(nearest, { type: 'youHit', dmg: cfg.dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+        const dmg = Math.round(cfg.dmg * (e.dmgScale || 1));
+        nearest.hp = Math.max(0, nearest.hp - dmg);
+        sendTo(nearest, { type: 'youHit', dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
         broadcast({ type: 'eAttack', id: e.id });
       }
     }
@@ -1086,6 +1187,9 @@ wss.on('connection', (ws) => {
     worldHalf: WORLD_HALF,
     hour: +gameHour.toFixed(2),
     night: isNightHour(gameHour),
+    day: gameDay,
+    diffMul: +difficultyMul().toFixed(2),
+    weather: currentWeather,
     peers: [...players.values()].filter(p => p.id !== id).map(pPub),
     enemies: [...enemies.values()].map(ePub),
     towns: TOWNS.map(t => ({

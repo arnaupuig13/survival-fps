@@ -382,6 +382,61 @@ export function refreshTraderScrap(scrap) {
   if (traderScrapEl) traderScrapEl.textContent = scrap;
 }
 
+// ----------------------------------------------------------------------
+// Perks modal
+// ----------------------------------------------------------------------
+const perksPanel = document.getElementById('perksPanel');
+const perksList  = document.getElementById('perksList');
+const perkBadge  = document.getElementById('perkBadge');
+let _perksOpen = false;
+export function isPerksOpen() { return _perksOpen; }
+export function openPerksPanel(options, onChoose) {
+  _perksOpen = true;
+  if (!perksPanel || !perksList) return;
+  perksList.innerHTML = '';
+  for (const p of options) {
+    const card = document.createElement('div');
+    card.className = 'perkCard';
+    card.innerHTML = `<div class="pkName">${p.name}</div><div class="pkDesc">${p.desc}</div>`;
+    card.addEventListener('click', () => { onChoose(p.id); });
+    perksList.appendChild(card);
+  }
+  perksPanel.classList.remove('hidden');
+}
+export function closePerksPanel() {
+  _perksOpen = false;
+  if (perksPanel) perksPanel.classList.add('hidden');
+}
+export function setPerkPending(n) {
+  if (!perkBadge) return;
+  perkBadge.classList.toggle('hidden', n <= 0);
+  perkBadge.textContent = n > 1 ? `★ ${n} PERKS DISPONIBLES [K]` : '★ PERK DISPONIBLE [K]';
+}
+
+// ----------------------------------------------------------------------
+// Difficulty + weather HUD
+// ----------------------------------------------------------------------
+const diffBadge = document.getElementById('difficultyBadge');
+export function setDifficulty(day, mul) {
+  if (diffBadge) diffBadge.textContent = `DIA ${day} · DIF x${mul.toFixed ? mul.toFixed(2) : mul}`;
+}
+const weatherEl = document.getElementById('weatherOverlay');
+export function setWeather(kind) {
+  if (!weatherEl) return;
+  weatherEl.className = '';
+  if (kind === 'rain' || kind === 'fog') weatherEl.classList.add(kind);
+}
+
+// ----------------------------------------------------------------------
+// Peso de mochila
+// ----------------------------------------------------------------------
+const weightRow = document.getElementById('weightRow');
+const weightVal = document.getElementById('weightVal');
+export function setWeightHud(current, cap, overweight) {
+  if (weightRow) weightRow.classList.toggle('overweight', !!overweight);
+  if (weightVal) weightVal.textContent = `${current.toFixed(1)}/${cap}`;
+}
+
 export function setOnlineCount(n) {
   onlineEl.textContent = `${n} jugador${n === 1 ? '' : 'es'}`;
 }

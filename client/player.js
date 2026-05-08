@@ -88,7 +88,9 @@ export const player = {
     // Armor reduction. Vest 25%, helmet 25% — combined 50%. Read from
     // inventory at hit time (cheap; no caching needed at this scale).
     const armorReduction = (this.armorState?.vest ? 0.25 : 0) + (this.armorState?.helmet ? 0.25 : 0);
-    const after = Math.max(1, Math.round(dmg * (1 - armorReduction)));
+    // Perk: thick_skin agrega 10% adicional.
+    const totalReduction = Math.min(0.85, armorReduction + (this.dmgReduction || 0));
+    const after = Math.max(1, Math.round(dmg * (1 - totalReduction)));
     this.hp = Math.max(0, this.hp - after);
     this.lastHitAt = performance.now() / 1000;
   },
@@ -114,7 +116,8 @@ export const player = {
     if (this.hp > 0 && this.hp < max) {
       const now = performance.now() / 1000;
       if (now - (this.lastHitAt || 0) >= 5 && this.hunger > 10 && this.thirst > 10) {
-        this.hp = Math.min(max, this.hp + 4 * dt);
+        const rate = 4 * (this.regenMult || 1);
+        this.hp = Math.min(max, this.hp + rate * dt);
       }
     }
   },
@@ -122,17 +125,21 @@ export const player = {
   // damage continuo hasta que coma / beba / se caliente. Llamado desde main loop.
   tickSurvival(dt, isNight) {
     if (this.invulnerable || this.godMode || this.hp <= 0) return;
-    // Hunger and thirst tick down slowly. Realistic rates: ~0.6 / s would
-    // empty a stat in ~3 minutes. We use 0.5 to keep early game forgiving.
-    this.hunger = Math.max(0, this.hunger - 0.5 * dt);
-    this.thirst = Math.max(0, this.thirst - 0.7 * dt);   // sed más rápida
+    // Hunger and thirst tick down slowly. Perks pueden ralentizar el drain.
+    const hungerMul = (this.hungerDrainMult || 1);
+    const thirstMul = (this.thirstDrainMult || 1);
+    // Lluvia hace que la sed drene 50% menos pero el calor 2x más rápido.
+    const isRaining = (this.weatherKind === 'rain');
+    this.hunger = Math.max(0, this.hunger - 0.5 * hungerMul * dt);
+    this.thirst = Math.max(0, this.thirst - 0.7 * thirstMul * (isRaining ? 0.5 : 1) * dt);
     // Warmth depends on the time of day + proximity to fire.
-    if (this.nearFire) {
+    if (this.warmthImmune) {
+      this.warmth = 100;
+    } else if (this.nearFire) {
       this.warmth = Math.min(100, this.warmth + 12 * dt);
     } else if (isNight) {
-      this.warmth = Math.max(0, this.warmth - 1.2 * dt);
+      this.warmth = Math.max(0, this.warmth - (isRaining ? 2.4 : 1.2) * dt);
     } else {
-      // Sun keeps you warm during the day.
       this.warmth = Math.min(100, this.warmth + 0.6 * dt);
     }
     // Damage when stats reach 0 — slow to give the player a chance to fix it.
@@ -192,7 +199,9 @@ export function updatePlayer(dt) {
   }
   const crouchMul = player.crouching ? CROUCH_MULT : 1;
   const godMul = player.godMode ? 10 : 1;
-  const speed = WALK_SPEED * sprint * crouchMul * godMul;
+  // Sobrepeso (lo setea main.js cada frame leyendo inv.getCurrentWeight()).
+  const overweightMul = player.overweight ? 0.55 : 1;
+  const speed = WALK_SPEED * sprint * crouchMul * godMul * overweightMul;
   // Smooth eye height transition for crouch.
   const targetEye = player.crouching ? CROUCH_HEIGHT : EYE_HEIGHT;
   player.eyeHeightCurrent += (targetEye - player.eyeHeightCurrent) * (1 - Math.exp(-12 * dt));

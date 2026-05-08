@@ -18,6 +18,8 @@ import {
   setCompass, setSurvival,
   setXp, setStatus, renderQuests,
   openTrader, closeTrader, isTraderOpen, refreshTraderScrap,
+  openPerksPanel, closePerksPanel, isPerksOpen, setPerkPending,
+  setDifficulty, setWeather, setWeightHud,
 } from './hud.js';
 import * as survival from './survival.js';
 import * as tools from './tools.js';
@@ -44,6 +46,7 @@ import * as quests from './quests.js';
 import * as status from './status.js';
 import * as traps from './traps.js';
 import * as trader from './trader.js';
+import * as perks from './perks.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -94,6 +97,27 @@ quests.onChange((s) => renderQuests(s.quests));
 
 // Status: pinta indicadores de sangrado / infección.
 status.onChange((s) => setStatus(s.bleeding, s.infected));
+
+// Perks: refresca badge + abre modal cuando hay pendiente al subir nivel.
+perks.onChange((s) => setPerkPending(s.pending));
+
+// Engancho level-up de progression para que dé perk pendiente cada 3 niveles.
+const _origAddXp = progression.addXp;
+progression.onChange((s) => {
+  // Side-effect: detectar si subió de nivel reciente. Lo manejamos en el
+  // wrapper de addXp más abajo (override directo para capturar leveledUp).
+});
+// Wrap addXp para detectar level-up sin tocar progression.js.
+const _addXp = progression.addXp;
+let _lastLevel = progression.getLevel();
+function _checkLevelUp() {
+  const cur = progression.getLevel();
+  while (_lastLevel < cur) {
+    _lastLevel++;
+    perks.onLevelUp(_lastLevel);
+  }
+}
+progression.onChange(_checkLevelUp);
 
 // Track harvest / craft — observamos deltas positivos de wood/stone para
 // asumir que vinieron de talar/picar. Si vinieron de loot también cuenta
@@ -291,6 +315,13 @@ network.onPeerCount = setOnlineCount;
 network.onBanner = (text) => {
   showBanner(text);
   if (text.includes('DOCTOR') && text.includes('LABORATORIO')) sfx.playBossSting();
+};
+network.onDifficulty = (day, mul) => {
+  setDifficulty(day, mul);
+};
+network.onWeather = (msg) => {
+  setWeather(msg.kind);
+  player.weatherKind = msg.kind;
 };
 network.onEnemyDead = (id, msg) => {
   const e = enemies.get(id);
@@ -620,6 +651,31 @@ addEventListener('keydown', (e) => {
       showBanner('mortal', 1200);
     }
   } else if (e.code === 'KeyK' && !e.repeat) {
+    // Abrir / cerrar panel de perks. Solo si hay perks pendientes O ya
+    // está abierto (para poder cerrarlo).
+    if (isPerksOpen()) {
+      closePerksPanel();
+      if (player.hp > 0) {
+        setTimeout(() => { _voluntaryUnlock = false; renderer.domElement.requestPointerLock?.(); }, 60);
+      }
+    } else if (perks.getPendingCount() > 0) {
+      const opts = perks.pickThreeOptions();
+      _voluntaryUnlock = true;
+      document.exitPointerLock?.();
+      openPerksPanel(opts, (id) => {
+        perks.choosePerk(id);
+        // Si quedan más perks pendientes, re-render con nuevas opciones.
+        if (perks.getPendingCount() > 0) {
+          openPerksPanel(perks.pickThreeOptions(), (id2) => perks.choosePerk(id2));
+        } else {
+          closePerksPanel();
+          if (player.hp > 0) setTimeout(() => { _voluntaryUnlock = false; renderer.domElement.requestPointerLock?.(); }, 60);
+        }
+      });
+    } else {
+      logLine('No hay perks disponibles. Subí de nivel.');
+    }
+  } else if (e.code === 'KeyY' && !e.repeat) {
     // Dev: visualize obstacle colliders as wireframes (yellow box, blue circle).
     const on = toggleColliderDebug();
     logLine(on ? 'Colliders ON (debug)' : 'Colliders OFF');
@@ -802,6 +858,11 @@ function frame(now) {
   status.tick(dt);             // sangrado / infección
   traps.update(dt);            // cepos chequean enemigos cercanos
   trader.update(dt, player.pos);
+  // Sobrepeso: si llevás más que tu capacidad, tu velocidad cae.
+  const _curW = inv.getCurrentWeight();
+  const _capW = inv.getCapacity(player);
+  player.overweight = _curW > _capW;
+  setWeightHud(_curW, _capW, player.overweight);
   setHP(player.hp);
   setSurvival(player.hunger, player.thirst, player.warmth);
   setCompass(player.yaw());

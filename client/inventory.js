@@ -17,47 +17,51 @@ export const RARITY = {
   legendary: { color: '#f0c040' },
 };
 
+// `weight`: peso unitario en "kg" abstractos. La capacidad base del jugador
+// es 30; el perk `sharp_senses` agrega +5. Sobrepeso = movimiento más lento.
 export const ITEMS = {
   // Ammo.
-  bullet_p:        { label: 'BALAS PISTOLA',  max: 99, rarity: 'common' },
-  bullet_r:        { label: 'BALAS RIFLE',    max: 99, rarity: 'common' },
-  bullet_smg:      { label: 'BALAS SMG',      max: 99, rarity: 'common' },
-  shell:           { label: 'CARTUCHOS',      max: 60, rarity: 'uncommon' },
-  sniper_round:    { label: 'CAL .50',        max: 30, rarity: 'rare' },
+  bullet_p:        { label: 'BALAS PISTOLA',  max: 99, rarity: 'common', weight: 0.02 },
+  bullet_r:        { label: 'BALAS RIFLE',    max: 99, rarity: 'common', weight: 0.03 },
+  bullet_smg:      { label: 'BALAS SMG',      max: 99, rarity: 'common', weight: 0.025 },
+  shell:           { label: 'CARTUCHOS',      max: 60, rarity: 'uncommon', weight: 0.06 },
+  sniper_round:    { label: 'CAL .50',        max: 30, rarity: 'rare', weight: 0.12 },
   // Consumables.
-  bandage:         { label: 'VENDAJES',       max: 9,  rarity: 'uncommon' },
-  grenade:         { label: 'GRANADAS',       max: 6,  rarity: 'rare' },
+  bandage:         { label: 'VENDAJES',       max: 9,  rarity: 'uncommon', weight: 0.15 },
+  grenade:         { label: 'GRANADAS',       max: 6,  rarity: 'rare', weight: 0.6 },
   // Weapons (oneTime — pickup unlocks the slot).
-  rifle_pickup:    { label: 'RIFLE',          max: 1, oneTime: true, rarity: 'rare' },
-  shotgun_pickup:  { label: 'ESCOPETA',       max: 1, oneTime: true, rarity: 'epic' },
-  smg_pickup:      { label: 'SMG',            max: 1, oneTime: true, rarity: 'rare' },
-  sniper_pickup:   { label: 'RIFLE FRANCOTIRADOR', max: 1, oneTime: true, rarity: 'legendary' },
-  axe:             { label: 'HACHA',          max: 1, oneTime: true, rarity: 'uncommon' },
-  pickaxe:         { label: 'PICO',           max: 1, oneTime: true, rarity: 'uncommon' },
+  rifle_pickup:    { label: 'RIFLE',          max: 1, oneTime: true, rarity: 'rare', weight: 4 },
+  shotgun_pickup:  { label: 'ESCOPETA',       max: 1, oneTime: true, rarity: 'epic', weight: 4 },
+  smg_pickup:      { label: 'SMG',            max: 1, oneTime: true, rarity: 'rare', weight: 3 },
+  sniper_pickup:   { label: 'RIFLE FRANCOTIRADOR', max: 1, oneTime: true, rarity: 'legendary', weight: 6 },
+  axe:             { label: 'HACHA',          max: 1, oneTime: true, rarity: 'uncommon', weight: 2 },
+  pickaxe:         { label: 'PICO',           max: 1, oneTime: true, rarity: 'uncommon', weight: 2 },
   // Attachments (oneTime).
-  scope:           { label: 'MIRILLA',        max: 1, oneTime: true, rarity: 'rare' },
-  silencer:        { label: 'SILENCIADOR',    max: 1, oneTime: true, rarity: 'epic' },
-  ext_mag:         { label: 'CARGADOR EXT.',  max: 1, oneTime: true, rarity: 'rare' },
+  scope:           { label: 'MIRILLA',        max: 1, oneTime: true, rarity: 'rare', weight: 0.3 },
+  silencer:        { label: 'SILENCIADOR',    max: 1, oneTime: true, rarity: 'epic', weight: 0.4 },
+  ext_mag:         { label: 'CARGADOR EXT.',  max: 1, oneTime: true, rarity: 'rare', weight: 0.5 },
   // Armor (oneTime).
-  vest_armor:      { label: 'CHALECO',        max: 1, oneTime: true, rarity: 'rare' },
-  helmet_armor:    { label: 'CASCO',          max: 1, oneTime: true, rarity: 'epic' },
+  vest_armor:      { label: 'CHALECO',        max: 1, oneTime: true, rarity: 'rare', weight: 4 },
+  helmet_armor:    { label: 'CASCO',          max: 1, oneTime: true, rarity: 'epic', weight: 1.5 },
   // Survival.
-  meat_raw:        { label: 'CARNE CRUDA',    max: 9,  rarity: 'common' },
-  meat_cooked:     { label: 'CARNE COCIDA',   max: 9,  rarity: 'uncommon' },
-  berry:           { label: 'BAYAS',          max: 20, rarity: 'common' },
-  water_bottle:    { label: 'BOTELLA AGUA',   max: 5,  rarity: 'common' },
+  meat_raw:        { label: 'CARNE CRUDA',    max: 9,  rarity: 'common', weight: 0.4 },
+  meat_cooked:     { label: 'CARNE COCIDA',   max: 9,  rarity: 'uncommon', weight: 0.3 },
+  berry:           { label: 'BAYAS',          max: 20, rarity: 'common', weight: 0.05 },
+  water_bottle:    { label: 'BOTELLA AGUA',   max: 5,  rarity: 'common', weight: 0.5 },
   // Resources.
-  wood:            { label: 'MADERA',         max: 50, rarity: 'common' },
-  stone:           { label: 'PIEDRA',         max: 30, rarity: 'common' },
-  scrap:           { label: 'CHATARRA',       max: 99, rarity: 'common' },
-  campfire:        { label: 'HOGUERAS',       max: 5,  rarity: 'uncommon' },
-  wall_piece:      { label: 'PARED',          max: 30, rarity: 'common' },
-  bedroll_item:    { label: 'CAMA',           max: 3,  rarity: 'uncommon' },
+  wood:            { label: 'MADERA',         max: 50, rarity: 'common', weight: 0.3 },
+  stone:           { label: 'PIEDRA',         max: 30, rarity: 'common', weight: 0.5 },
+  scrap:           { label: 'CHATARRA',       max: 99, rarity: 'common', weight: 0.1 },
+  campfire:        { label: 'HOGUERAS',       max: 5,  rarity: 'uncommon', weight: 1.5 },
+  wall_piece:      { label: 'PARED',          max: 30, rarity: 'common', weight: 0.8 },
+  bedroll_item:    { label: 'CAMA',           max: 3,  rarity: 'uncommon', weight: 2 },
   // Meds raros.
-  antibiotics:     { label: 'ANTIBIOTICOS',   max: 5,  rarity: 'rare' },
+  antibiotics:     { label: 'ANTIBIOTICOS',   max: 5,  rarity: 'rare', weight: 0.1 },
   // Trampas.
-  bear_trap:       { label: 'CEPO',           max: 5,  rarity: 'uncommon' },
+  bear_trap:       { label: 'CEPO',           max: 5,  rarity: 'uncommon', weight: 3 },
 };
+
+export const BASE_WEIGHT_CAPACITY = 30;
 
 const state = {
   bullet_p: 12,
@@ -100,6 +104,20 @@ export function onChange(fn) { listeners.add(fn); fn(state); return () => listen
 export function get(item) { return state[item] | 0; }
 export function getState() { return state; }
 export function has(item, n = 1) { return get(item) >= n; }
+// Suma del peso total que llevás. Usado para overweight slowdown.
+export function getCurrentWeight() {
+  let w = 0;
+  for (const k of Object.keys(state)) {
+    const meta = ITEMS[k];
+    if (!meta) continue;
+    w += (state[k] | 0) * (meta.weight || 0);
+  }
+  return w;
+}
+// Capacidad base + bonus de perks (sharp_senses).
+export function getCapacity(player) {
+  return BASE_WEIGHT_CAPACITY + (player?.weightCapBonus || 0);
+}
 export function add(item, n) {
   if (!ITEMS[item]) return;
   const max = ITEMS[item].max;
@@ -133,9 +151,11 @@ export function bumpKills() {
 }
 
 export function useBandage(player) {
-  if (player.hp >= 100 || player.hp <= 0) return false;
+  const max = player.maxHp || 100;
+  if (player.hp >= max || player.hp <= 0) return false;
   if (!consume('bandage', 1)) return false;
-  player.hp = Math.min(100, player.hp + 30);
+  const heal = 30 + (player.bandageBonus || 0);
+  player.hp = Math.min(max, player.hp + heal);
   setHP(player.hp);
   return true;
 }

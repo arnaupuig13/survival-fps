@@ -204,8 +204,10 @@ function tryFire() {
     }
   }
 
-  // Final damage with headshot bonus (x2). Sniper headshot oneshots casi todo.
-  const finalDmg = isHeadshot ? Math.round(cfg.dmg * 2.0) : cfg.dmg;
+  // Final damage. Perks: gunDamageMult (gunslinger), headshotMult (eagle_eye).
+  const hsMul = (player.headshotMult || 2.0);
+  const gunMul = (player.gunDamageMult || 1);
+  const finalDmg = Math.round((isHeadshot ? cfg.dmg * hsMul : cfg.dmg) * gunMul);
   network.shoot(_origin, _dir, hitId, finalDmg);
 
   // Damage number floats up at impact.
