@@ -172,9 +172,11 @@ const ETYPES = {
   // muy alto, persigue con aggro infinito (patrol-like). Drop boss-tier.
   alpha:        { hp: 220, speed: 2.5, dmg: 50, range: 2.8, cd: 1.4, aggro: 80, ranged: false, special: 'alpha', isBoss: false },
   // Three scientist variants. Same lab coat but different weapon profile.
-  scientist:    { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 40, ranged: true,  weapon: 'rifle'   },
-  sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 22, range: 12,  cd: 1.5, aggro: 30, ranged: true,  weapon: 'shotgun' },
-  sci_sniper:   { hp: 16,  speed: 1.0, dmg: 32, range: 60,  cd: 2.4, aggro: 60, ranged: true,  weapon: 'sniper'  },
+  // Aggro subido para que detecten al player desde más lejos en el mapa
+  // grande (era 30-60, ahora 60-90).
+  scientist:    { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 60, ranged: true,  weapon: 'rifle'   },
+  sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 22, range: 12,  cd: 1.5, aggro: 50, ranged: true,  weapon: 'shotgun' },
+  sci_sniper:   { hp: 16,  speed: 1.0, dmg: 32, range: 60,  cd: 2.4, aggro: 90, ranged: true,  weapon: 'sniper'  },
   boss:         { hp: 240, speed: 1.7, dmg: 16, range: 32,  cd: 0.55, aggro: 50, ranged: true, weapon: 'ak', isBoss: true },
   // Hostile wildlife — bear is a slow tank with huge melee damage; boar is
   // a sprinter that charges and bowls the player over.
@@ -203,19 +205,22 @@ function genTownBuildings(centerX, centerZ, count, seed) {
   let s = seed;
   const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
   const buildings = [];
-  // Bigger cell for cities (>=12 buildings) so the compound feels spacious.
+  // Cell separation aumentado (12→16 town, 13→17 city) para evitar que
+  // las puertas de unas casas queden contra paredes de otras.
   const isCity = count >= 12;
-  const cell = isCity ? 13 : 12;
+  const cell = isCity ? 17 : 16;
   const cols = Math.ceil(Math.sqrt(count));
   for (let i = 0; i < count; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const ox = (col - (cols - 1) / 2) * cell + (rng() - 0.5) * 4;
-    const oz = (row - (cols - 1) / 2) * cell + (rng() - 0.5) * 4;
-    // Cities have slightly bigger lab buildings (8-11 m) vs town cabins (5-8 m).
+    const ox = (col - (cols - 1) / 2) * cell + (rng() - 0.5) * 3;  // jitter más chico
+    const oz = (row - (cols - 1) / 2) * cell + (rng() - 0.5) * 3;
     const w = isCity ? 7.5 + rng() * 3.0 : 5.5 + rng() * 2.5;
     const h = isCity ? 7.5 + rng() * 3.0 : 5.5 + rng() * 2.5;
-    const ry = (rng() < 0.25) ? Math.PI / 2 : 0;
+    // Rotación: ahora siempre 0 (puerta a +Z) para evitar que el doorway
+    // quede mirando contra otra casa. La variabilidad visual viene del
+    // tamaño + posición.
+    const ry = 0;
     buildings.push({ dx: ox, dz: oz, w, h, ry });
   }
   return buildings;
@@ -441,6 +446,35 @@ function rollLoot(tableKey) {
     }
   }
   return out;
+}
+
+// =====================================================================
+// FACTIONS — los enemigos pelean entre sí.
+//   zombie: zombie/runner/tank/spitter/screamer/exploder/brute/alpha
+//   human:  scientist/sci_shotgun/sci_sniper/boss
+//   wild:   wolf/bear/boar (animales hostiles)
+//   passive: deer/rabbit (huyen, no atacan)
+// Reglas:
+//   zombie ↔ human: se atacan mutuamente
+//   wild → todos los humanos (player y scientists)
+//   wild → players solamente (no atacan zombies — los animales y los
+//          zombies se ignoran; los lobos no son tan tontos)
+// =====================================================================
+function factionOf(e) {
+  const t = e.etype;
+  if (t === 'scientist' || t === 'sci_shotgun' || t === 'sci_sniper' || t === 'boss') return 'human';
+  if (t === 'wolf' || t === 'bear' || t === 'boar') return 'wild';
+  if (t === 'deer' || t === 'rabbit') return 'passive';
+  return 'zombie';
+}
+// ¿La faction A trata como enemigo a la faction B?
+function isHostile(a, b) {
+  if (a === 'passive' || b === 'passive') return false;
+  if (a === b) return false;
+  // wild ataca solo humanos (no zombies).
+  if (a === 'wild' && b !== 'human') return false;
+  if (b === 'wild' && a !== 'human') return false;
+  return true;
 }
 
 // =====================================================================
@@ -1405,15 +1439,30 @@ setInterval(() => {
       e._burnUntil = 0;
     }
 
-    // Find nearest alive player. Players dentro de humo son invisibles
-    // para el AI (los enemies pierden el target).
+    // Find nearest target — players + enemigos de faction opuesta.
+    // Players dentro de humo son invisibles. nearestKind dice si el
+    // target es 'player' o 'enemy' (otro NPC).
     let nearest = null, nd2 = Infinity;
+    let nearestKind = 'player';
+    const myFaction = factionOf(e);
     for (const p of players.values()) {
       if (p.hp <= 0) continue;
       if (isInSmoke(p.x, p.z)) continue;
       const dx = p.x - e.x, dz = p.z - e.z;
       const d2 = dx * dx + dz * dz;
-      if (d2 < nd2) { nd2 = d2; nearest = p; }
+      if (d2 < nd2) { nd2 = d2; nearest = p; nearestKind = 'player'; }
+    }
+    // Considerar otros NPCs como targets si son hostiles.
+    if (myFaction !== 'passive') {
+      for (const o of enemies.values()) {
+        if (o.id === e.id) continue;
+        if (o.hp <= 0) continue;
+        if (o.sleeping) continue;       // no atacar dormidos
+        if (!isHostile(myFaction, factionOf(o))) continue;
+        const dx = o.x - e.x, dz = o.z - e.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < nd2) { nd2 = d2; nearest = o; nearestKind = 'enemy'; }
+      }
     }
     if (!nearest) continue;
     const d = Math.sqrt(nd2);
@@ -1455,22 +1504,24 @@ setInterval(() => {
     }
 
     // Patrulla de scientists o aggro boost (por scream / disparo no
-     // silenciado) ignora el aggro range normal.
+    // silenciado) ignora el aggro range normal.
     const aggroBoosted = e._aggroBoostUntil && Date.now() < e._aggroBoostUntil;
     const isScientist = e.etype === 'scientist' || e.etype === 'sci_shotgun' || e.etype === 'sci_sniper';
     if (!e.patrol && !aggroBoosted && d > cfg.aggro) {
-      // IDLE WANDER para scientists del lab — patrullan cerca de su
-      // posición de spawn (en el town de helix-lab) con heading aleatorio.
-      if (isScientist && e.townId === 'helix-lab') {
+      // IDLE WANDER para TODOS los scientists (no solo helix-lab) —
+      // patrullan cerca de su posición de spawn. Antes solo se aplicaba
+      // a helix-lab, dejando guards de bunkers/heli/poi congelados.
+      if (isScientist) {
         if (e._idleAnchor == null) e._idleAnchor = { x: e.x, z: e.z };
         if (e._idleHeading == null) e._idleHeading = { angle: Math.random() * Math.PI * 2, t: 0 };
         e._idleHeading.t -= AI_DT;
         if (e._idleHeading.t <= 0) {
           e._idleHeading.t = 2 + Math.random() * 3;
           e._idleHeading.angle += (Math.random() - 0.5) * 1.6;
-          // Si se alejaron mucho del ancla, redirigir hacia el ancla.
           const dxa = e.x - e._idleAnchor.x, dza = e.z - e._idleAnchor.z;
-          if (Math.hypot(dxa, dza) > 8) e._idleHeading.angle = Math.atan2(-dxa, -dza);
+          // Bunker/heli guards mantienen radio chico (5m), helix-lab más amplio (10m).
+          const radius = (e.townId === 'helix-lab') ? 10 : 5;
+          if (Math.hypot(dxa, dza) > radius) e._idleHeading.angle = Math.atan2(-dxa, -dza);
         }
         const speed = cfg.speed * 0.4;
         e.x += Math.sin(e._idleHeading.angle) * speed * AI_DT;
@@ -1521,7 +1572,12 @@ setInterval(() => {
         e.attackCd = cfg.cd;
         const dmg = Math.round(cfg.dmg * (e.dmgScale || 1));
         nearest.hp = Math.max(0, nearest.hp - dmg);
-        sendTo(nearest, { type: 'youHit', dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+        if (nearestKind === 'player') {
+          sendTo(nearest, { type: 'youHit', dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+        } else {
+          broadcast({ type: 'eHit', id: nearest.id, hp: nearest.hp });
+          if (nearest.hp <= 0) killEnemy(nearest, e.id);
+        }
         broadcast({ type: 'eShoot', id: e.id, tx: nearest.x, ty: nearest.y, tz: nearest.z });
       }
     } else if (cfg.special === 'exploder') {
@@ -1552,7 +1608,12 @@ setInterval(() => {
         e.attackCd = cfg.cd;
         const dmg = Math.round(cfg.dmg * (e.dmgScale || 1));
         nearest.hp = Math.max(0, nearest.hp - dmg);
-        sendTo(nearest, { type: 'youHit', dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+        if (nearestKind === 'player') {
+          sendTo(nearest, { type: 'youHit', dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+        } else {
+          broadcast({ type: 'eHit', id: nearest.id, hp: nearest.hp });
+          if (nearest.hp <= 0) killEnemy(nearest, e.id);
+        }
         broadcast({ type: 'eAttack', id: e.id });
       }
       if (e._screamCd <= 0) {
@@ -1560,7 +1621,7 @@ setInterval(() => {
         triggerScream(e, nearest);
       }
     } else {
-      // Melee: chase + bite.
+      // Melee: chase + bite. nearest puede ser player o NPC enemy.
       if (d > cfg.range) {
         const dx = nearest.x - e.x, dz = nearest.z - e.z;
         e.x += (dx / d) * cfg.speed * nightMul * AI_DT;
@@ -1571,7 +1632,12 @@ setInterval(() => {
         e.attackCd = cfg.cd;
         const dmg = Math.round(cfg.dmg * (e.dmgScale || 1));
         nearest.hp = Math.max(0, nearest.hp - dmg);
-        sendTo(nearest, { type: 'youHit', dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+        if (nearestKind === 'player') {
+          sendTo(nearest, { type: 'youHit', dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+        } else {
+          broadcast({ type: 'eHit', id: nearest.id, hp: nearest.hp });
+          if (nearest.hp <= 0) killEnemy(nearest, e.id);
+        }
         broadcast({ type: 'eAttack', id: e.id });
       }
     }
