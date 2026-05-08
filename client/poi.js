@@ -221,6 +221,28 @@ function buildBunker(p) {
   const stencil = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.18, 0.04),
     new THREE.MeshStandardMaterial({ color: 0xfff080, emissive: 0xc0a020, emissiveIntensity: 0.8 }));
   stencil.position.set(0, wallH * 0.7, h / 2 + 0.22); g.add(stencil);
+  // Rampa de hormigón al frente — escalones descendentes simulando que
+  // el bunker continúa bajo tierra (visual). 4 escalones cada vez más
+  // bajos, sumando profundidad detrás de la puerta.
+  const stepMat = concreteMat;
+  for (let s = 0; s < 4; s++) {
+    const step = new THREE.Mesh(
+      new THREE.BoxGeometry(2.6, 0.4, 0.6), stepMat,
+    );
+    step.position.set(0, -0.15 - s * 0.3, h / 2 + 1.0 + s * 0.6);
+    g.add(step);
+  }
+  // Sacos terreros laterales a la entrada — props militares que
+  // refuerzan el feel de fortaleza.
+  const sandMat = new THREE.MeshStandardMaterial({ color: 0x8a7a4a, roughness: 0.95 });
+  for (const sx of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const bag = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.32, 0.7), sandMat);
+      bag.position.set(sx * (w / 2 + 0.5), 0.16 + i * 0.32, h / 2 + 0.6 - i * 0.2);
+      bag.rotation.y = Math.random() * 0.2;
+      g.add(bag);
+    }
+  }
   // Crates pre-renderizados via loot.js — el server los spawnea con
   // posiciones cerca de p.cx, p.cz. Acá no agregamos nada extra.
   // Colliders de las paredes.

@@ -147,12 +147,24 @@ export function setHotbarLocked(_slotIdx, _locked) { /* deprecated */ }
 // Active-weapon big counter at bottom-right.
 const activeWeaponName = document.getElementById('activeWeaponName');
 const activeAmmoNum    = document.getElementById('activeAmmoNum');
-export function setActiveWeapon(name, ammo) {
-  if (activeWeaponName) activeWeaponName.textContent = name;
+export function setActiveWeapon(name, ammo, opts = {}) {
+  if (activeWeaponName) {
+    activeWeaponName.textContent = name;
+    // Tier color del arma activa.
+    activeWeaponName.style.color = opts.tierColor || '';
+  }
   if (activeAmmoNum) {
     activeAmmoNum.textContent = ammo == null ? '—' : (ammo | 0);
     activeAmmoNum.classList.toggle('empty', ammo === 0);
   }
+}
+
+// Tipo de munición activo (NORMAL/AP/INC).
+const activeAmmoType = document.getElementById('activeAmmoType');
+export function setAmmoType(type, label) {
+  if (!activeAmmoType) return;
+  activeAmmoType.className = type || 'normal';
+  activeAmmoType.textContent = label || '';
 }
 
 // Reload indicator.

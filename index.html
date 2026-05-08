@@ -237,6 +237,10 @@
     /* Active-weapon ammo counter — big at bottom right */
     #activeAmmo { position: fixed; right: 18px; bottom: 18px; text-align: right; font-family: monospace; pointer-events: none; }
     #activeWeaponName { font-size: 12px; letter-spacing: 3px; color: #aaa; }
+    #activeAmmoType { font-size: 10px; letter-spacing: 2px; color: #80c0ff; margin-top: 2px; }
+    #activeAmmoType.normal { color: #aaa; }
+    #activeAmmoType.ap { color: #f0c060; }
+    #activeAmmoType.inc { color: #ff8040; text-shadow: 0 0 4px rgba(255,128,64,0.5); }
     #activeAmmoNum { font-size: 42px; font-weight: 700; color: #f0c060; line-height: 1; margin-top: 2px; text-shadow: 0 0 8px rgba(240,192,96,0.45); }
     #activeAmmoNum.empty { color: #ff5050; text-shadow: 0 0 8px rgba(255,80,80,0.5); }
 
@@ -577,6 +581,7 @@
   <!-- Big active-weapon ammo counter at the bottom-right -->
   <div id="activeAmmo">
     <div id="activeWeaponName">PISTOLA</div>
+    <div id="activeAmmoType"></div>
     <div id="activeAmmoNum">12</div>
   </div>
 

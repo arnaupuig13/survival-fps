@@ -1201,8 +1201,15 @@ setInterval(() => {
   }
   if (prev < 6 && gameHour >= 6 && gameHour < 7) {
     gameDay++;
+    // Fase lunar — ciclo de 8 días. day%8 = 0 luna nueva, day%8 = 4 luna llena.
+    const moonPhase = ((gameDay - 1) % 8) / 8;   // 0..1
     broadcast({ type: 'banner', text: `★ DIA ${gameDay} — La amenaza crece` });
-    broadcast({ type: 'difficulty', day: gameDay, mul: +difficultyMul().toFixed(2) });
+    broadcast({ type: 'difficulty', day: gameDay, mul: +difficultyMul().toFixed(2), moonPhase });
+    // Luna llena: anuncio especial.
+    const isFullMoon = ((gameDay - 1) % 8) === 4;
+    if (isFullMoon) {
+      broadcast({ type: 'banner', text: '🌕 LUNA LLENA — esta noche habrá más zombis' });
+    }
   }
   // Trigger horda nocturna desde día 3 al cruzar las 22:00.
   if (players.size > 0) {
@@ -1351,7 +1358,10 @@ setInterval(() => {
   const spawnInterval = night ? AMBIENT_SPAWN_INTERVAL * 0.55 : AMBIENT_SPAWN_INTERVAL;
   // Cap escala con el día. Día 1 base, día 2 +3, día 5 +12, día 8 +21.
   const dayBonus = Math.floor((gameDay - 1) * 3);
-  const cap = (night ? MAX_AMBIENT_ZOMBIES + 12 : MAX_AMBIENT_ZOMBIES) + dayBonus;
+  // Luna llena (día % 8 == 4) → +50% cap de noche.
+  const isFullMoon = ((gameDay - 1) % 8) === 4;
+  const moonMul = (night && isFullMoon) ? 1.5 : 1.0;
+  const cap = Math.round(((night ? MAX_AMBIENT_ZOMBIES + 12 : MAX_AMBIENT_ZOMBIES) + dayBonus) * moonMul);
   ambientSpawnAccum += AI_DT;
   if (ambientSpawnAccum >= spawnInterval && players.size > 0) {
     let ambientCount = 0;

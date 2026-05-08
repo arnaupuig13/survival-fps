@@ -22,6 +22,7 @@ import {
   setDifficulty, setWeather,
   openStash, closeStash, isStashOpen,
   openStats, closeStats, isStatsOpen,
+  setAmmoType,
 } from './hud.js';
 import * as survival from './survival.js';
 import * as tools from './tools.js';
@@ -64,6 +65,10 @@ import * as convoyPlane from './convoy-plane.js';
 import * as stashPersonal from './stash-personal.js';
 import * as nvg from './nvg.js';
 import * as fishing from './fishing.js';
+import * as screenShake from './screen-shake.js';
+import * as magDrop from './mag-drop.js';
+import * as weaponTiers from './weapon-tiers.js';
+import { spawnAmbientProps, spawnDust, tickDust } from './ambient-props.js';
 import { setPeerPvP } from './entities.js';
 
 // Day/night state — interpolated locally between server `time` updates.
@@ -378,11 +383,16 @@ function destroyGrenadeMesh(id) {
 // Network wiring.
 // =====================================================================
 network.connect(player);
+
+// Spawn ambient props (autos abandonados + cadáveres civiles + dust).
+spawnAmbientProps();
+spawnDust();
 network.onYouHit = (dmg, src, source) => {
   player.takeDamage(dmg);
   setHP(player.hp);
   flashDamage();
   sfx.playPlayerHurt();
+  screenShake.bump(Math.min(0.6, dmg / 50));
   // Status effects según fuente del daño.
   const kind = (source === 'animal') ? 'animal'
              : (source === 'zombie' || source === 'enemy') ? 'melee'
@@ -527,6 +537,8 @@ network.onEnemyDead = (id, msg) => {
   if (lastShotWithinKillWindow(id)) {
     flashHitMarker(true);
     sfx.playKill();
+    screenShake.bump(msg.isBoss ? 0.7 : 0.35);
+    screenShake.showKillFeedback(msg.isBoss ? '★ BOSS DOWN ★' : '✗');
   }
   if (msg.isBoss) {
     logLine('★ EL DOCTOR HA CAIDO — loot legendario disponible');
@@ -541,6 +553,8 @@ network.onLootGranted = (loot, crateId) => {
   // XP por cofre + tracking de quest. Cada cofre da 5 XP base.
   progression.addXp(5, 'cofre');
   quests.track('open_crates', 1);
+  // Tier rolling para cualquier weapon_pickup recibido.
+  weaponTiers.applyLootTiers(loot);
   // Quests específicos por tier — el id de crate del server tiene prefix.
   if (typeof crateId === 'string' && crateId.startsWith('city')) quests.track('open_city_crate', 1);
 };
@@ -716,12 +730,14 @@ addEventListener('keydown', (e) => {
     openChat();
     return;
   }
-  // Throw grenade — G. Throw direction = camera forward + a bit of arc.
+  // Cocinar granada — G keydown empieza cocinado, keyup la tira con la
+  // mecha proporcionalmente más corta. Si pasan 3.5s sin tirar, te
+  // explota en la mano.
   if (e.code === 'KeyG' && player.locked && !e.repeat) {
-    if (inv.consume?.('grenade', 1)) {
-      const dir = new THREE.Vector3();
-      camera.getWorldDirection(dir);
-      network.throwGrenade(dir.x, dir.y + 0.2, dir.z);
+    if (inv.has('grenade', 1)) {
+      _cookingGrenade = true;
+      _cookingStart = performance.now() / 1000;
+      logLine('Granada cocinándose... soltá G para tirar');
       sfx.playEmpty?.();
     }
     return;
@@ -1195,6 +1211,24 @@ function frame(now) {
   tickCorpses(dt);
   nvg.tick();
   fishing.tick();
+  magDrop.tick(dt);
+  screenShake.tick(dt);
+  tickDust(dt, player.pos);
+  // Cocinar granada — si llega a COOK_MAX, te explota en la mano.
+  if (_cookingGrenade) {
+    const cookT = performance.now() / 1000 - _cookingStart;
+    if (cookT >= COOK_MAX) {
+      _cookingGrenade = false;
+      if (inv.consume?.('grenade', 1)) {
+        player.takeDamage(80);
+        setHP(player.hp);
+        flashDamage();
+        screenShake.bump(0.9);
+        logLine('★★★ Te explotó la granada en la mano ★★★');
+        sfx.playKill?.();
+      }
+    }
+  }
   setHP(player.hp);
   setSurvival(player.hunger, player.thirst, player.warmth);
   setCompass(player.yaw());
@@ -1298,7 +1332,14 @@ function frame(now) {
 
   // Active weapon HUD + hotbar visual.
   const meta = activeWeaponMeta();
-  setActiveWeapon(meta.name, meta.loaded);
+  // Tier color del arma activa.
+  const activeName = getActiveWeapon();
+  const tierMeta = activeName ? weaponTiers.getTierMeta(activeName) : null;
+  setActiveWeapon(meta.name, meta.loaded, { tierColor: tierMeta?.color });
+  // Ammo type HUD.
+  const ammoMetaActive = activeName ? ammoTypes.getActiveAmmo(activeName) : null;
+  if (ammoMetaActive) setAmmoType(ammoMetaActive.type, ammoMetaActive.label);
+  else setAmmoType('normal', '');
   // setHotbarActive ahora se llama desde handleHotbarSlot al seleccionar
   // un slot — no forzamos slots fijos por arma (todo es configurable).
   showReload(isReloading());
@@ -1390,6 +1431,25 @@ function frame(now) {
 let _combatMusic = false;
 let _ambientAccum = 0;
 let _nextAmbientAt = 6;
+let _cookingGrenade = false;
+let _cookingStart = 0;
+const COOK_MAX = 3.5;
+const COOK_FUSE_BASE = 2.4;
+
+addEventListener('keyup', (e) => {
+  if (e.code === 'KeyG' && _cookingGrenade) {
+    _cookingGrenade = false;
+    if (inv.consume?.('grenade', 1)) {
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      const cookT = performance.now() / 1000 - _cookingStart;
+      const yArc = Math.max(0.05, 0.25 - cookT * 0.05);
+      network.throwGrenade(dir.x, dir.y + yArc, dir.z);
+      sfx.playEmpty?.();
+      logLine(`Granada lanzada (cocinada ${cookT.toFixed(1)}s)`);
+    }
+  }
+});
 let _recoilKick = 0;
 
 // =====================================================================

@@ -14,6 +14,8 @@ import { scene as worldScene } from './three-setup.js';
 import * as ammoTypes from './ammo-types.js';
 import { getActiveTool } from './tools.js';
 import * as attachments from './attachments.js';
+import * as weaponTiers from './weapon-tiers.js';
+import { spawnMagDrop } from './mag-drop.js';
 
 // Each weapon names the inventory key it consumes per shot. magazineSize
 // caps the loaded round count; reload pulls from the inventory pool.
@@ -180,19 +182,32 @@ function startReload() {
   if (reloading) return;
   const cfg = WEAPONS[active];
   if (!cfg) return;
-  if ((loaded[active] | 0) >= cfg.magazineSize) return; // already full
+  const cap = magCap();
+  if ((loaded[active] | 0) >= cap) return;              // already full
   if (!inv.has(cfg.ammo, 1)) return;                    // no ammo to load
   reloading = true;
   // Perk INGENIERO acorta tiempo de recarga (reloadSpeedMult <1).
   reloadTimer = cfg.reloadTime * (player.reloadSpeedMult || 1);
   sfx.playEmpty?.(); // mechanical click stand-in
+  // Visual: mag drop al iniciar.
+  spawnMagDrop();
+}
+
+// Capacidad de cargador efectiva — base * tier multiplier (legendario
+// +50%) * ext_mag attachment bonus (+50%).
+function magCap() {
+  if (!active) return 0;
+  const cfg = WEAPONS[active];
+  let cap = cfg.magazineSize * weaponTiers.getMagMul(active);
+  if (attachments.has(active, 'ext_mag')) cap *= 1.5;
+  return Math.round(cap);
 }
 function cancelReload() { reloading = false; reloadTimer = 0; }
 function finishReload() {
   const cfg = WEAPONS[active];
   if (!cfg) return;
   // Extended-mag attachment increases capacity by 50%.
-  const cap = attachments.has(active, 'ext_mag') ? Math.round(cfg.magazineSize * 1.5) : cfg.magazineSize;
+  const cap = magCap();
   const need = cap - (loaded[active] | 0);
   const got = Math.min(need, inv.get(cfg.ammo));
   if (got > 0) {
@@ -342,10 +357,12 @@ function tryFire() {
 
   // Final damage. Perks: gunDamageMult (gunslinger), headshotMult (eagle_eye).
   // Munición especial: AP +30% dmg, INC marca burn al server.
+  // Tier de arma: legendario +30%, raro +15%, común +0%.
   const hsMul = (player.headshotMult || 2.0);
   const gunMul = (player.gunDamageMult || 1);
   const ammoDmgMul = ammoMeta.dmgMul || 1;
-  const finalDmg = Math.round((isHeadshot ? cfg.dmg * hsMul : cfg.dmg) * gunMul * ammoDmgMul);
+  const tierMul = weaponTiers.getDmgMul(active);
+  const finalDmg = Math.round((isHeadshot ? cfg.dmg * hsMul : cfg.dmg) * gunMul * ammoDmgMul * tierMul);
   // Manda flags al server: incendiary (DoT), silenced (sigilo).
   const silencedShot = silent;
   network.shoot(_origin, _dir, hitId, finalDmg, {
@@ -457,7 +474,7 @@ export function activeWeaponName() { return active ? WEAPONS[active].name : '—
 export function activeWeaponMeta() {
   if (!active) return { name: '—', loaded: 0, ammo: 0, cap: 0 };
   const cfg = WEAPONS[active];
-  const cap = attachments.has(active, 'ext_mag') ? Math.round(cfg.magazineSize * 1.5) : cfg.magazineSize;
+  const cap = magCap();
   return { name: cfg.name, loaded: loaded[active] | 0, ammo: inv.get(cfg.ammo), cap };
 }
 // Allow main.js to drive weapon selection via the hotbar.
