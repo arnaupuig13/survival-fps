@@ -87,15 +87,14 @@ export function setPlayerName(name) {
 // =====================================================================
 // Hotbar — 6 slots configurables. Cada slot tiene un itemKey o null.
 // El usuario asigna items dragueando desde el inventario. Las teclas 1-6
-// activan el slot. Render se nutre de inventory.js + hotbar.js.
+// activan el slot. Hay DOS sets de .hbslot: el HUD de afuera + el mirror
+// dentro del modal del inventario. Pintamos AMBOS sincronizadamente.
 // =====================================================================
-const hotbarSlots = Array.from(document.querySelectorAll('.hbslot'));
 let _activeSlot = -1;
 export function setHotbarActive(slotIdx) {
   _activeSlot = slotIdx;
-  for (const el of hotbarSlots) el.classList.remove('active');
-  const el = hotbarSlots[slotIdx];
-  if (el) el.classList.add('active');
+  for (const el of document.querySelectorAll('.hbslot')) el.classList.remove('active');
+  for (const el of document.querySelectorAll(`.hbslot[data-slot="${slotIdx}"]`)) el.classList.add('active');
 }
 
 // Override de labels — los items de munición representan al arma cuando
@@ -113,31 +112,28 @@ const HOTBAR_LABEL_OVERRIDE = {
   sniper_round: 'SNIPER',
 };
 
-// Pinta el slot `idx` con el item asignado (o vacío). Lee `count` desde
-// el inventario para mostrar stack. Si oneTime y count=0, marca disabled.
+// Pinta TODOS los slots con data-slot=idx (HUD principal + modal mirror).
 export function paintHotbarSlot(idx, itemKey, count, itemMeta) {
-  const slot = hotbarSlots[idx];
-  if (!slot) return;
-  const labelEl = slot.querySelector('.hblabel');
-  const countEl = slot.querySelector('.hbcount');
-  slot.classList.remove('empty', 'disabled');
-  if (!itemKey) {
-    slot.classList.add('empty');
-    if (labelEl) labelEl.textContent = '';
-    if (countEl) countEl.textContent = '';
-    return;
+  const slots = document.querySelectorAll(`.hbslot[data-slot="${idx}"]`);
+  for (const slot of slots) {
+    const labelEl = slot.querySelector('.hblabel');
+    const countEl = slot.querySelector('.hbcount');
+    slot.classList.remove('empty', 'disabled');
+    if (!itemKey) {
+      slot.classList.add('empty');
+      if (labelEl) labelEl.textContent = '';
+      if (countEl) countEl.textContent = '';
+      continue;
+    }
+    const label = HOTBAR_LABEL_OVERRIDE[itemKey] || itemMeta?.label || itemKey;
+    if (labelEl) labelEl.textContent = label.slice(0, 9);
+    if (countEl) {
+      if (itemMeta?.oneTime) countEl.textContent = '';
+      else countEl.textContent = (count | 0) > 0 ? (count | 0) : '';
+    }
+    if (itemMeta?.oneTime && (count | 0) === 0) slot.classList.add('disabled');
+    else if (!itemMeta?.oneTime && (count | 0) === 0) slot.classList.add('disabled');
   }
-  const label = HOTBAR_LABEL_OVERRIDE[itemKey] || itemMeta?.label || itemKey;
-  if (labelEl) labelEl.textContent = label.slice(0, 9);
-  // Items oneTime no muestran count (siempre 1 si lo tenés). Munición y
-  // consumibles sí muestran cantidad.
-  if (countEl) {
-    if (itemMeta?.oneTime) countEl.textContent = '';
-    else countEl.textContent = (count | 0) > 0 ? (count | 0) : '';
-  }
-  // Disabled si oneTime y no lo tenés todavía, o si stack 0 sin oneTime.
-  if (itemMeta?.oneTime && (count | 0) === 0) slot.classList.add('disabled');
-  else if (!itemMeta?.oneTime && (count | 0) === 0) slot.classList.add('disabled');
 }
 
 // Backwards-compat: setHotbarCount y setHotbarLocked siguen exportados

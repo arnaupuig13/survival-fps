@@ -1137,7 +1137,8 @@ function frame(now) {
   // Active weapon HUD + hotbar visual.
   const meta = activeWeaponMeta();
   setActiveWeapon(meta.name, meta.loaded);
-  setHotbarActive(getActiveWeapon() === 'rifle' ? 1 : 0);
+  // setHotbarActive ahora se llama desde handleHotbarSlot al seleccionar
+  // un slot — no forzamos slots fijos por arma (todo es configurable).
   showReload(isReloading());
 
   // Stamina HUD bar.

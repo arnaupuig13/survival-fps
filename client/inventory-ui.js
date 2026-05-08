@@ -577,24 +577,19 @@ async function useItem(key) {
 }
 
 // =====================================================================
-// Paperdoll mini-hotbar (read-only summary).
+// Hotbar dentro del modal — slots con clase .hbslot que SE CONSIDERAN
+// los mismos del hotbar real (mismo data-slot). El drop handler busca
+// .hbslot, así que arrastrar al modal o al hotbar de afuera funciona.
+// hud.paintHotbarSlot pinta TODOS los .hbslot[data-slot=N] en sincronía.
 // =====================================================================
-const HOTBAR_LABELS = [
-  { key: '1', label: 'PISTOLA' },
-  { key: '2', label: 'RIFLE' },
-  { key: '3', label: 'VENDA' },
-  { key: '4', label: 'GRAN.' },
-  { key: '5', label: 'CUCHIL.' },
-  { key: '6', label: 'HACHA' },
-];
-
 function buildPaperdollHotbar() {
   if (!paperdollHotbar) return;
   paperdollHotbar.innerHTML = '';
-  for (const h of HOTBAR_LABELS) {
+  for (let i = 0; i < 6; i++) {
     const slot = document.createElement('div');
-    slot.className = 'pdSlot';
-    slot.innerHTML = `<span class="pdKey">${h.key}</span><span class="pdLabel">${h.label}</span>`;
+    slot.className = 'pdSlot hbslot empty';
+    slot.dataset.slot = String(i);
+    slot.innerHTML = `<span class="pdKey hbkey">${i + 1}</span><span class="hblabel"></span><span class="hbcount"></span>`;
     paperdollHotbar.appendChild(slot);
   }
 }

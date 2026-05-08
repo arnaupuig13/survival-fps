@@ -29,9 +29,10 @@ const WEAPONS = {
 };
 
 // =====================================================================
-// State
+// State — `active` arranca null: no hay arma equipada hasta que el
+// jugador la asigna desde el hotbar (o presiona la tecla del slot).
 // =====================================================================
-let active = 'pistol';
+let active = null;
 let cooldown = 0;
 let mouseDown = false;
 const loaded = { pistol: 12, rifle: 0, smg: 0, shotgun: 0, sniper: 0 };
@@ -167,8 +168,10 @@ function selectWeapon(name) {
   active = name; updateGunVisual();
 }
 export function getActive() { return active; }
-export function getLoaded() { return loaded[active] | 0; }
+export function getLoaded() { return active ? (loaded[active] | 0) : 0; }
 export function isReloading() { return reloading; }
+// Llamado al deseleccionar (drop del item del hotbar). Oculta el arma.
+export function deselectWeapon() { active = null; }
 
 function startReload() {
   if (reloading) return;
@@ -210,6 +213,7 @@ function updateGunVisual() {
 
 function tryFire() {
   if (!player.locked || player.hp <= 0) return;
+  if (!active) return;        // sin arma equipada → no disparo
   if (cooldown > 0 || reloading) return;
   // Si hay una herramienta melee activa (cuchillo/hacha/pico), NO disparamos
   // — ese click corresponde al swing manejado por tools.js. Esto evita
@@ -374,20 +378,19 @@ function flashHitMarker(hit, isKill = false) {
 // Per-frame
 // =====================================================================
 export function updateWeapons(dt) {
-  // Ocultar el arma de fuego cuando hay tool melee activa.
-  gunGroup.visible = !getActiveTool();
+  // Ocultar el arma de fuego cuando NO hay arma equipada o hay tool melee.
+  gunGroup.visible = !!active && !getActiveTool();
   // Lerp ADS: muever el grupo a posición AIM (centrada) cuando _aimTarget=1.
   _aimT += (_aimTarget - _aimT) * (1 - Math.exp(-12 * dt));
   gunGroup.position.x = HIP_POS.x + (AIM_POS.x - HIP_POS.x) * _aimT;
   gunGroup.position.y = HIP_POS.y + (AIM_POS.y - HIP_POS.y) * _aimT;
   gunGroup.position.z = HIP_POS.z + (AIM_POS.z - HIP_POS.z) * _aimT;
-  // Reflex sight visible solo si tenés `scope` y estás centrando armas
-  // de mano (no sniper, que tiene scope intrínseco).
-  reflexGroup.visible = attachments.has(active, 'scope');
+  // Reflex sight visible solo si hay arma activa y tiene scope equipado.
+  reflexGroup.visible = !!active && attachments.has(active, 'scope');
   if (cooldown > 0) cooldown -= dt;
   if (muzzle.intensity > 0) muzzle.intensity = Math.max(0, muzzle.intensity - dt * 30);
   // Reload progress.
-  if (reloading) {
+  if (reloading && active) {
     reloadTimer -= dt;
     // Slight visual sag of the gun while reloading.
     if (gunBody) gunBody.position.y = -0.18 - 0.06 * Math.sin(Math.PI * (1 - reloadTimer / WEAPONS[active].reloadTime));
@@ -397,11 +400,12 @@ export function updateWeapons(dt) {
     }
   }
   // Auto-fire (rifle only) while held.
-  if (mouseDown && WEAPONS[active].auto && cooldown <= 0 && !reloading) tryFire();
+  if (active && mouseDown && WEAPONS[active].auto && cooldown <= 0 && !reloading) tryFire();
 }
 
-export function activeWeaponName() { return WEAPONS[active].name; }
+export function activeWeaponName() { return active ? WEAPONS[active].name : '—'; }
 export function activeWeaponMeta() {
+  if (!active) return { name: '—', loaded: 0, ammo: 0, cap: 0 };
   const cfg = WEAPONS[active];
   const cap = attachments.has(active, 'ext_mag') ? Math.round(cfg.magazineSize * 1.5) : cfg.magazineSize;
   return { name: cfg.name, loaded: loaded[active] | 0, ammo: inv.get(cfg.ammo), cap };
