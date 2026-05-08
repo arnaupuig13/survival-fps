@@ -16,9 +16,8 @@ import * as inv from './inventory.js';
 const SLOT_COUNT = 6;
 const STORAGE_KEY = 'survival-fps-v1-hotbar';
 
-// Por defecto el hotbar arranca con una asignación útil para que el
-// jugador no tenga que configurar todo desde cero.
-const DEFAULT_SLOTS = ['bullet_p', null, 'bandage', 'grenade', null, null];
+// Default vacío — el jugador asigna lo que quiera arrastrando del inv.
+const DEFAULT_SLOTS = [null, null, null, null, null, null];
 
 const state = {
   slots: loadOrDefault(),

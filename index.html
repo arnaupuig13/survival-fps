@@ -210,7 +210,13 @@
     .hbcount { position: absolute; bottom: 2px; right: 4px; font-size: 11px; font-weight: 700; color: #f0c060; font-family: monospace; }
 
     /* === Rust-style inventory modal ============================== */
-    #inventoryPanel { position: fixed; inset: 0; background: rgba(15,18,22,0.78); display: flex; align-items: center; justify-content: center; z-index: 8; backdrop-filter: blur(2px); }
+    /* IMPORTANTE: pointer-events:none en el contenedor → permite que el
+       hotbar (que está debajo geográficamente pero fuera del panel en
+       el DOM) reciba drops cuando arrastrás un item. Las partes
+       interactuables del modal (.rustPanel, dialogs, ctx menu) ponen
+       pointer-events:auto explícitamente. */
+    #inventoryPanel { position: fixed; inset: 0; background: rgba(15,18,22,0.78); display: flex; align-items: center; justify-content: center; z-index: 8; backdrop-filter: blur(2px); pointer-events: none; }
+    #inventoryPanel .rustPanel { pointer-events: auto; }
     #inventoryPanel.hidden { display: none; }
     .rustPanel { background: linear-gradient(180deg, rgba(40,40,42,0.96), rgba(28,28,30,0.96)); border: 1px solid #444; min-width: 1080px; min-height: 620px; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,0.7); font-family: system-ui, sans-serif; }
     .rustToolbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 22px; background: rgba(0,0,0,0.3); border-bottom: 1px solid #555; }
@@ -303,7 +309,7 @@
     .dragGhost .dgCount { position: absolute; bottom: 3px; right: 5px; font: 700 13px monospace; color: #f0c060; }
 
     /* Drop quantity dialog */
-    .dropDialog { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 50; }
+    .dropDialog { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 50; pointer-events: auto; }
     .dropDialog.hidden { display: none; }
     .dropDialogPanel { background: rgba(28,28,30,0.98); border: 1px solid #555; padding: 22px 30px; min-width: 320px; }
     .ddTitle { color: #f0c060; font-size: 13px; letter-spacing: 3px; text-align: center; font-weight: 700; }
@@ -315,7 +321,7 @@
     .ddBtns button:hover { border-color: #f0c060; color: #f0c060; }
 
     /* Context menu */
-    .ctxMenu { position: fixed; background: rgba(28,28,30,0.98); border: 1px solid #555; padding: 4px 0; z-index: 60; min-width: 140px; box-shadow: 0 6px 20px rgba(0,0,0,0.7); font-family: system-ui; }
+    .ctxMenu { position: fixed; background: rgba(28,28,30,0.98); border: 1px solid #555; padding: 4px 0; z-index: 60; min-width: 140px; box-shadow: 0 6px 20px rgba(0,0,0,0.7); font-family: system-ui; pointer-events: auto; }
     .ctxMenu.hidden { display: none; }
     .ctxMenu button { display: block; width: 100%; padding: 8px 14px; background: transparent; border: 0; color: #ddd; text-align: left; font-size: 12px; cursor: pointer; letter-spacing: 1px; }
     .ctxMenu button:hover { background: rgba(40,30,10,0.5); color: #f0c060; }
