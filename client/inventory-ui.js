@@ -26,6 +26,7 @@ const $ = (id) => document.getElementById(id);
 const panel        = $('inventoryPanel');
 const rustPanel    = document.querySelector('.rustPanel');
 const grid         = $('rustInvGrid');
+const weaponAttachListEl = $('weaponAttachList');
 const recipesEl    = $('rustCraftList');
 const itemInfo     = $('rustItemInfo');
 const helmetSlot   = document.querySelector('.armorSlot.posHelmet');
@@ -192,6 +193,8 @@ function render(state) {
 
   // Refresh selected item info panel.
   renderItemInfo(state, selectedKey);
+  // Refresh sub-inventario de attachments por arma.
+  renderWeaponAttachments(state);
 }
 
 function renderItemInfo(state, key) {
@@ -207,28 +210,12 @@ function renderItemInfo(state, key) {
   const stats = buildStatsHTML(key, meta);
   const canDrop = !EQUIP_KEYS.has(key) && !meta.noDrop;
   const isUsable = USABLE.has(key);
-  const isAttachment = (key === 'scope' || key === 'silencer' || key === 'ext_mag');
-
-  // Para attachments, mostrar dónde está equipado y los botones de equipar.
+  const isAttachment = attachments.ATTACH_TYPES.includes(key);
+  // Para attachments, hint de "arrastralo a un arma" en lugar de los
+  // viejos botones EQUIPAR A: (ahora se hace por drag).
   let attachUI = '';
   if (isAttachment) {
-    const ATT_TARGETS = {
-      scope:    ['pistol','rifle','smg','shotgun','sniper'],
-      silencer: ['pistol','smg','rifle'],
-      ext_mag:  ['pistol','rifle','smg','shotgun','sniper'],
-    };
-    const labels = { pistol: 'PISTOLA', rifle: 'RIFLE', smg: 'SMG', shotgun: 'ESCOPETA', sniper: 'SNIPER' };
-    const owned = { pistol: 'pistol_pickup', rifle: 'rifle_pickup', smg: 'smg_pickup', shotgun: 'shotgun_pickup', sniper: 'sniper_pickup' };
-    const equipped = attachments.whereEquipped(key);
-    const buttons = ATT_TARGETS[key].map((w) => {
-      if (!inv.has(owned[w], 1)) return '';
-      const isOn = equipped === w;
-      return `<button class="attachBtn ${isOn ? 'attachOn' : ''}" data-equip="${w}">${labels[w]}${isOn ? ' ✓' : ''}</button>`;
-    }).join('');
-    attachUI = `
-      <div class="iiAttachLabel">EQUIPAR A:</div>
-      <div class="iiAttach">${buttons}</div>
-    `;
+    attachUI = `<div class="iiAttachLabel">↳ Arrastralo a un slot de arma para adjuntarlo</div>`;
   }
 
   itemInfo.innerHTML = `
@@ -251,22 +238,6 @@ function renderItemInfo(state, key) {
       if (act === 'drop') openDropDialog(key);
     });
   });
-  itemInfo.querySelectorAll('button[data-equip]').forEach((b) => {
-    b.addEventListener('click', () => {
-      const weapon = b.dataset.equip;
-      const where = attachments.whereEquipped(key);
-      if (where === weapon) {
-        attachments.unequip(weapon, key);
-        logLine(`${meta.label} desequipado de ${weapon}`);
-      } else {
-        attachments.equip(weapon, key);
-        logLine(`${meta.label} equipado en ${weapon}${where ? ` (movido desde ${where})` : ''}`);
-      }
-      sfx.playPickup?.();
-      // Refresh UI con el nuevo estado.
-      renderItemInfo(inv.getState(), key);
-    });
-  });
 }
 
 // Per-item key→value pairs shown in the info panel.
@@ -283,6 +254,57 @@ function buildStatsHTML(key, meta) {
   if (key === 'grenade')      { rows.push(['Daño', '120']); rows.push(['Radio', '5m']); }
   if (rows.length === 0) return '';
   return rows.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('');
+}
+
+// Render bloque de armas con sus 4 slots de attachments cada una.
+// Solo se muestran las armas que el player tiene (pickup en inv).
+function renderWeaponAttachments(state) {
+  if (!weaponAttachListEl) return;
+  weaponAttachListEl.innerHTML = '';
+  const weaponLabels = {
+    pistol: 'PISTOLA', rifle: 'RIFLE', smg: 'SMG',
+    shotgun: 'ESCOPETA', sniper: 'SNIPER', crossbow: 'BALLESTA',
+  };
+  const pickupKey = {
+    pistol: 'pistol_pickup', rifle: 'rifle_pickup', smg: 'smg_pickup',
+    shotgun: 'shotgun_pickup', sniper: 'sniper_pickup', crossbow: 'crossbow_pickup',
+  };
+  const attachLabels = {
+    scope: 'MIR', silencer: 'SIL', ext_mag: 'MAG', grip: 'GRP', laser_sight: 'LSR',
+  };
+  for (const w of attachments.WEAPONS) {
+    if (!inv.has(pickupKey[w], 1)) continue;     // solo armas que tenés
+    const row = document.createElement('div');
+    row.className = 'weaponRow';
+    const name = document.createElement('div');
+    name.className = 'weaponName';
+    name.textContent = weaponLabels[w];
+    row.appendChild(name);
+    const slotsEl = document.createElement('div');
+    slotsEl.className = 'weaponSlots';
+    const slots = attachments.getSlots(w);
+    for (let i = 0; i < slots.length; i++) {
+      const slot = document.createElement('div');
+      slot.className = 'attachSlot';
+      slot.dataset.weapon = w;
+      slot.dataset.slotIdx = String(i);
+      const item = slots[i];
+      if (item) {
+        slot.classList.add('has');
+        slot.dataset.itemKey = item;        // para drag-out al inv
+        slot.title = `${(inv.ITEMS[item]?.label || item)} — clic para quitar`;
+        const label = document.createElement('div');
+        label.className = 'aLabel';
+        label.textContent = attachLabels[item] || item.slice(0, 3).toUpperCase();
+        slot.appendChild(label);
+      } else {
+        slot.title = `Arrastrá un accesorio compatible al slot ${i + 1}`;
+      }
+      slotsEl.appendChild(slot);
+    }
+    row.appendChild(slotsEl);
+    weaponAttachListEl.appendChild(row);
+  }
 }
 
 function renderRecipes(state) {
@@ -359,7 +381,31 @@ function endDrag(e) {
     return;
   }
 
-  // Drop on a hotbar slot → asignar el item al cinturón.
+  // Drop sobre un slot de attachment de arma → adjuntar.
+  const attSlot = target?.closest?.('.attachSlot');
+  if (attSlot && attSlot.dataset.weapon) {
+    const weapon = attSlot.dataset.weapon;
+    const slotIdx = parseInt(attSlot.dataset.slotIdx, 10);
+    if (!Number.isNaN(slotIdx)) {
+      // Solo permite types attachment válidos.
+      if (!attachments.ATTACH_TYPES.includes(drag.itemKey)) {
+        logLine('Ese item no es un accesorio');
+        return;
+      }
+      if (!attachments.isCompatible(weapon, drag.itemKey)) {
+        logLine(`${inv.ITEMS[drag.itemKey].label} no es compatible con ${weapon}`);
+        return;
+      }
+      const ok = attachments.attach(weapon, slotIdx, drag.itemKey);
+      if (ok) {
+        logLine(`✓ ${inv.ITEMS[drag.itemKey].label} adjunto a ${weapon}`);
+        sfx.playPickup?.();
+      }
+    }
+    return;
+  }
+
+  // Drop sobre un hotbar slot → asignar el item al cinturón.
   const hbSlot = target?.closest?.('.hbslot');
   if (hbSlot && hbSlot.dataset.slot != null) {
     const idx = parseInt(hbSlot.dataset.slot, 10);
@@ -399,6 +445,21 @@ if (grid) {
     showCtxMenu(e.clientX, e.clientY, slot.dataset.itemKey);
   });
 }
+
+// Click sobre slot de attachment ocupado → desadjunta (vuelve al inv).
+document.addEventListener('click', (e) => {
+  if (!panel || panel.classList.contains('hidden')) return;
+  const slot = e.target.closest && e.target.closest('.attachSlot.has');
+  if (!slot) return;
+  if (e.shiftKey) return;       // shift+click reservado para otra acción
+  e.preventDefault();
+  const weapon = slot.dataset.weapon;
+  const idx = parseInt(slot.dataset.slotIdx, 10);
+  if (!weapon || Number.isNaN(idx)) return;
+  attachments.detach(weapon, idx);
+  logLine('Accesorio devuelto al inventario');
+  sfx.playPickup?.();
+});
 
 // Hotbar: click derecho sobre un slot lo limpia (quita el binding).
 // Event delegation en document para sobrevivir a re-renders + funciona

@@ -352,6 +352,8 @@ const LOOT_TABLES = {
     { item: 'flashbang',      chance: 0.10 },
     { item: 'fishing_rod',    chance: 0.12 },
     { item: 'seeds',          range: [0, 2] },
+    { item: 'grip',           chance: 0.08 },
+    { item: 'laser_sight',    chance: 0.06 },
   ],
   // MILITARY — POIs militares (helicópteros) custodiados por científicos.
   // Cantidad similar a town pero bias a armas/ammo/AP, no comida ni recursos.
@@ -403,6 +405,8 @@ const LOOT_TABLES = {
     { item: 'flashbang',     chance: 0.18 },
     { item: 'nvg',           chance: 0.20 },
     { item: 'fishing_rod',   chance: 0.15 },
+    { item: 'grip',          chance: 0.18 },
+    { item: 'laser_sight',   chance: 0.15 },
     { item: 'scrap',         range: [2, 6] },
   ],
   // Boss drop — guaranteed legendary plus full attachment kit.

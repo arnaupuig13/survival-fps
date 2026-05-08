@@ -50,6 +50,8 @@ export const ITEMS = {
   scope:           { label: 'MIRILLA',        max: 1, oneTime: true, rarity: 'rare', weight: 0.3 },
   silencer:        { label: 'SILENCIADOR',    max: 1, oneTime: true, rarity: 'epic', weight: 0.4 },
   ext_mag:         { label: 'CARGADOR EXT.',  max: 1, oneTime: true, rarity: 'rare', weight: 0.5 },
+  grip:            { label: 'GRIP',           max: 1, oneTime: true, rarity: 'uncommon', weight: 0.2 },
+  laser_sight:     { label: 'LASER',          max: 1, oneTime: true, rarity: 'rare', weight: 0.15 },
   // Armor (oneTime).
   vest_armor:      { label: 'CHALECO',        max: 1, oneTime: true, rarity: 'rare', weight: 4 },
   helmet_armor:    { label: 'CASCO',          max: 1, oneTime: true, rarity: 'epic', weight: 1.5 },
@@ -115,6 +117,8 @@ const state = {
   scope: 0,
   silencer: 0,
   ext_mag: 0,
+  grip: 0,
+  laser_sight: 0,
   vest_armor: 0,
   helmet_armor: 0,
   meat_raw: 0,
