@@ -1323,6 +1323,16 @@ function streamTowns() {
             sleeping: !isCity,         // town zombies start asleep
             townId: t.id,
           });
+          // Anclamos al enemigo a la footprint de su edificio para que
+          // su AI movement no lo deje atravesar paredes. El AI tick
+          // checkea bldgBox y los vuelve adentro si el chase del player
+          // los lleva fuera. Un poco de margen (1.0m) interno para que
+          // no queden pegados a la pared.
+          e._bldgBox = {
+            cx: b.wx, cz: b.wz,
+            hw: Math.max(0, b.w / 2 - 1.0),
+            hh: Math.max(0, b.h / 2 - 1.0),
+          };
           ts.enemyIds.add(e.id);
           broadcast({ type: 'eSpawn', e: ePub(e) });
         }
@@ -2281,6 +2291,18 @@ setInterval(() => {
       }
     }
 
+    // === BUILDING BOX CLAMP ===
+    // Enemigos spawneados dentro de un edificio se quedan dentro de su
+    // footprint — antes atravesaban paredes porque el server no tiene
+    // collision detection. Ahora chequeamos el _bldgBox del enemigo y lo
+    // metemos de vuelta si su movimiento lo dejo fuera.
+    if (e._bldgBox) {
+      const dxb = e.x - e._bldgBox.cx;
+      const dzb = e.z - e._bldgBox.cz;
+      if (Math.abs(dxb) > e._bldgBox.hw) e.x = e._bldgBox.cx + Math.sign(dxb) * e._bldgBox.hw;
+      if (Math.abs(dzb) > e._bldgBox.hh) e.z = e._bldgBox.cz + Math.sign(dzb) * e._bldgBox.hh;
+      e.y = heightAt(e.x, e.z);
+    }
     // === HELIX LAB CLAMP ===
     // Cientificos del lab NUNCA salen del muro perimetral. Si su
     // movimiento (chase del player o idle wander) los lleva fuera del

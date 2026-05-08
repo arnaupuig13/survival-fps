@@ -81,9 +81,17 @@ function buildBuilding(b, type) {
   const fullH = WALL_HEIGHT * floors;
 
   // Building con N pisos = paredes apiladas verticalmente.
-  // Back wall (-Z) — solid, alta. Ruined: silueta dentada.
+  // En ciudades los edificios estan apretados — algunos quedan con la
+  // puerta frontal contra la pared trasera del edificio de al lado. Para
+  // que TODOS los edificios sean entrables agregamos una segunda puerta
+  // en la pared trasera (-Z) y, si es ancho (>=12m), tambien en los
+  // lados (+X / -X). Asi siempre hay un acceso desde algun callejon.
+  const slabW = (w - DOOR_WIDTH) / 2;
+  const slabH = (h - DOOR_WIDTH) / 2;
+  const hasSideDoors = (w >= 12 || h >= 12) && !isRuined;
+
+  // Back wall (-Z) — con puerta en planta baja salvo ruined (que ya esta roto).
   if (isRuined) {
-    // Back wall en 3 segmentos de altura desigual (silueta de pared rota).
     const segs = [
       { x: -halfW * 0.6, w: w * 0.35, h: totalH * 0.95 },
       { x:  0,             w: w * 0.30, h: totalH * 0.65 },
@@ -95,22 +103,71 @@ function buildBuilding(b, type) {
       g.add(m);
     }
   } else {
-    const back = new THREE.Mesh(
-      new THREE.BoxGeometry(w, totalH, WALL_THICK), wallMat,
+    // Slabs flanqueando puerta trasera.
+    for (const sx of [-1, 1]) {
+      const slab = new THREE.Mesh(
+        new THREE.BoxGeometry(slabW, WALL_HEIGHT, WALL_THICK), wallMat,
+      );
+      slab.position.set(sx * (halfW - slabW / 2), WALL_HEIGHT / 2, -halfH + WALL_THICK / 2);
+      g.add(slab);
+    }
+    // Lintel trasero.
+    const backLintel = new THREE.Mesh(
+      new THREE.BoxGeometry(DOOR_WIDTH, WALL_HEIGHT - DOOR_HEIGHT, WALL_THICK), mats.trim,
     );
-    back.position.set(0, totalH / 2, -halfH + WALL_THICK / 2);
-    g.add(back);
+    backLintel.position.set(0, DOOR_HEIGHT + (WALL_HEIGHT - DOOR_HEIGHT) / 2, -halfH + WALL_THICK / 2);
+    g.add(backLintel);
+    // Pisos superiores: pared trasera solida (no puerta arriba).
+    if (floors > 1) {
+      for (let f = 1; f < floors; f++) {
+        const yBase = WALL_HEIGHT * f;
+        const upperBack = new THREE.Mesh(
+          new THREE.BoxGeometry(w, WALL_HEIGHT, WALL_THICK), wallMat,
+        );
+        upperBack.position.set(0, yBase + WALL_HEIGHT / 2, -halfH + WALL_THICK / 2);
+        g.add(upperBack);
+      }
+    }
   }
+  // Side walls (±X) — con puertas si es ancho (>= 12m), solido si no.
   for (const sx of [-1, 1]) {
     const sideH = isRuined ? totalH * (0.6 + Math.random() * 0.35) : totalH;
-    const side = new THREE.Mesh(
-      new THREE.BoxGeometry(WALL_THICK, sideH, h), wallMat,
-    );
-    side.position.set(sx * (halfW - WALL_THICK / 2), sideH / 2, 0);
-    g.add(side);
+    if (hasSideDoors) {
+      // 2 segmentos flanqueando puerta lateral en planta baja.
+      for (const sz of [-1, 1]) {
+        const slab = new THREE.Mesh(
+          new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, slabH), wallMat,
+        );
+        slab.position.set(sx * (halfW - WALL_THICK / 2), WALL_HEIGHT / 2, sz * (halfH - slabH / 2));
+        g.add(slab);
+      }
+      // Lintel lateral.
+      const sideLintel = new THREE.Mesh(
+        new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT - DOOR_HEIGHT, DOOR_WIDTH), mats.trim,
+      );
+      sideLintel.position.set(sx * (halfW - WALL_THICK / 2), DOOR_HEIGHT + (WALL_HEIGHT - DOOR_HEIGHT) / 2, 0);
+      g.add(sideLintel);
+      // Pisos superiores: pared lateral solida.
+      if (floors > 1) {
+        for (let f = 1; f < floors; f++) {
+          const yBase = WALL_HEIGHT * f;
+          const upperSide = new THREE.Mesh(
+            new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, h), wallMat,
+          );
+          upperSide.position.set(sx * (halfW - WALL_THICK / 2), yBase + WALL_HEIGHT / 2, 0);
+          g.add(upperSide);
+        }
+      }
+    } else {
+      // Pared lateral solida normal.
+      const side = new THREE.Mesh(
+        new THREE.BoxGeometry(WALL_THICK, sideH, h), wallMat,
+      );
+      side.position.set(sx * (halfW - WALL_THICK / 2), sideH / 2, 0);
+      g.add(side);
+    }
   }
   // Front: doorway en planta baja + slabs frontales en pisos superiores.
-  const slabW = (w - DOOR_WIDTH) / 2;
   // Planta baja frontal (con doorway).
   for (const sx of [-1, 1]) {
     const slab = new THREE.Mesh(
@@ -392,14 +449,32 @@ function buildBuilding(b, type) {
   // Each wall is a thin rotated AABB; player.js does closest-point
   // collision against them.
   // (slabW was computed above for the front-wall mesh slabs.)
-  const wallLocals = [
-    { lx: 0,                        lz: -halfH + WALL_THICK / 2, w: w,                          h: WALL_THICK },               // back
-    { lx: -halfW + WALL_THICK / 2,  lz: 0,                       w: WALL_THICK,                  h: h },                        // left
-    { lx:  halfW - WALL_THICK / 2,  lz: 0,                       w: WALL_THICK,                  h: h },                        // right
-    { lx: -halfW + slabW / 2,       lz:  halfH - WALL_THICK / 2, w: slabW,                       h: WALL_THICK },               // front-left slab
-    { lx:  halfW - slabW / 2,       lz:  halfH - WALL_THICK / 2, w: slabW,                       h: WALL_THICK },               // front-right slab
-    ...interiorColliders,    // muros internos divisores (rooms/flats)
-  ];
+  // Colliders — cada slab de pared separado por las puertas. Las puertas
+  // mismas son huecos sin collider para que el player camine por ahi.
+  const wallLocals = [];
+  // Back wall: 2 slabs flanqueando la puerta trasera (igual que front).
+  if (!isRuined) {
+    wallLocals.push({ lx: -halfW + slabW / 2, lz: -halfH + WALL_THICK / 2, w: slabW, h: WALL_THICK });
+    wallLocals.push({ lx:  halfW - slabW / 2, lz: -halfH + WALL_THICK / 2, w: slabW, h: WALL_THICK });
+  } else {
+    // Ruined: full back wall (closed despite being broken visually).
+    wallLocals.push({ lx: 0, lz: -halfH + WALL_THICK / 2, w: w, h: WALL_THICK });
+  }
+  // Side walls — si tienen puerta, 2 slabs cada uno; si no, full.
+  if (hasSideDoors) {
+    for (const sx of [-1, 1]) {
+      wallLocals.push({ lx: sx * (halfW - WALL_THICK / 2), lz: -halfH + slabH / 2, w: WALL_THICK, h: slabH });
+      wallLocals.push({ lx: sx * (halfW - WALL_THICK / 2), lz:  halfH - slabH / 2, w: WALL_THICK, h: slabH });
+    }
+  } else {
+    wallLocals.push({ lx: -halfW + WALL_THICK / 2, lz: 0, w: WALL_THICK, h: h });
+    wallLocals.push({ lx:  halfW - WALL_THICK / 2, lz: 0, w: WALL_THICK, h: h });
+  }
+  // Front wall — siempre tiene puerta.
+  wallLocals.push({ lx: -halfW + slabW / 2, lz: halfH - WALL_THICK / 2, w: slabW, h: WALL_THICK });
+  wallLocals.push({ lx:  halfW - slabW / 2, lz: halfH - WALL_THICK / 2, w: slabW, h: WALL_THICK });
+  // Interior dividing walls.
+  wallLocals.push(...interiorColliders);
   const cos = Math.cos(b.ry || 0), sin = Math.sin(b.ry || 0);
   const colliders = wallLocals.map(s => ({
     type: 'box',
