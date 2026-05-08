@@ -72,10 +72,10 @@ export const PERK_POOL = [
     apply(p) { p.headshotMult = (p.headshotMult || 2.0) + 0.25; },
   },
   {
-    id: 'sharp_senses',
-    name: 'SENTIDOS AGUDOS',
-    desc: '+5 slots de mochila',
-    apply(p) { p.weightCapBonus = (p.weightCapBonus || 0) + 5; },
+    id: 'engineer',
+    name: 'INGENIERO',
+    desc: 'Recargás 30% más rápido',
+    apply(p) { p.reloadSpeedMult = (p.reloadSpeedMult || 1) * 0.7; },
   },
   {
     id: 'thick_skin',

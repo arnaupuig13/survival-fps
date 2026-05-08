@@ -19,7 +19,7 @@ import {
   setXp, setStatus, renderQuests,
   openTrader, closeTrader, isTraderOpen, refreshTraderScrap,
   openPerksPanel, closePerksPanel, isPerksOpen, setPerkPending,
-  setDifficulty, setWeather, setWeightHud,
+  setDifficulty, setWeather,
 } from './hud.js';
 import * as survival from './survival.js';
 import * as tools from './tools.js';
@@ -858,11 +858,6 @@ function frame(now) {
   status.tick(dt);             // sangrado / infección
   traps.update(dt);            // cepos chequean enemigos cercanos
   trader.update(dt, player.pos);
-  // Sobrepeso: si llevás más que tu capacidad, tu velocidad cae.
-  const _curW = inv.getCurrentWeight();
-  const _capW = inv.getCapacity(player);
-  player.overweight = _curW > _capW;
-  setWeightHud(_curW, _capW, player.overweight);
   setHP(player.hp);
   setSurvival(player.hunger, player.thirst, player.warmth);
   setCompass(player.yaw());

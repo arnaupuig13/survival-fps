@@ -64,10 +64,6 @@
     /* Damage flash */
     #dmgFlash { position: fixed; inset: 0; background: rgba(180,0,0,0); pointer-events: none; transition: background 0.25s; }
 
-    #weightRow { font-family: monospace; font-size: 11px; color: #aaa; letter-spacing: 1px; margin-top: 2px; }
-    #weightRow.overweight { color: #ff5050; animation: pulseWeight 1s infinite; }
-    @keyframes pulseWeight { 0%,100% { opacity: 0.85; } 50% { opacity: 1; } }
-
     /* XP / nivel row */
     #xpRow { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-family: monospace; font-size: 11px; color: #aaa; letter-spacing: 1px; }
     #xpBar { flex: 1; height: 6px; background: rgba(0,0,0,0.6); border: 1px solid #444; }
@@ -406,8 +402,6 @@
       <div id="xpBar"><div id="xpFill" style="width:0%"></div></div>
       <span id="xpText" class="ammoLabel">0 / 80 XP</span>
     </div>
-    <!-- Peso de mochila -->
-    <div id="weightRow"><span class="ammoLabel">PESO</span> <span id="weightVal">0/30</span></div>
     <!-- Indicadores de status (sangrado / infección) -->
     <div id="statusRow" class="hidden">
       <span class="statusBleed hidden" id="statusBleed">★ SANGRANDO</span>

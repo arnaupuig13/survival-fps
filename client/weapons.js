@@ -98,7 +98,8 @@ function startReload() {
   if ((loaded[active] | 0) >= cfg.magazineSize) return; // already full
   if (!inv.has(cfg.ammo, 1)) return;                    // no ammo to load
   reloading = true;
-  reloadTimer = cfg.reloadTime;
+  // Perk INGENIERO acorta tiempo de recarga (reloadSpeedMult <1).
+  reloadTimer = cfg.reloadTime * (player.reloadSpeedMult || 1);
   sfx.playEmpty?.(); // mechanical click stand-in
 }
 function cancelReload() { reloading = false; reloadTimer = 0; }

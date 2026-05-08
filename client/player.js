@@ -199,9 +199,7 @@ export function updatePlayer(dt) {
   }
   const crouchMul = player.crouching ? CROUCH_MULT : 1;
   const godMul = player.godMode ? 10 : 1;
-  // Sobrepeso (lo setea main.js cada frame leyendo inv.getCurrentWeight()).
-  const overweightMul = player.overweight ? 0.55 : 1;
-  const speed = WALK_SPEED * sprint * crouchMul * godMul * overweightMul;
+  const speed = WALK_SPEED * sprint * crouchMul * godMul;
   // Smooth eye height transition for crouch.
   const targetEye = player.crouching ? CROUCH_HEIGHT : EYE_HEIGHT;
   player.eyeHeightCurrent += (targetEye - player.eyeHeightCurrent) * (1 - Math.exp(-12 * dt));
