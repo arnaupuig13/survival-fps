@@ -20,11 +20,7 @@ const STAMINA_REGEN = 14;
 const STAMINA_REGEN_DELAY = 0.8;
 
 export const keys = Object.create(null);
-addEventListener('keydown', (e) => {
-  keys[e.code] = true;
-  // Toggle crouch with C — non-repeating.
-  if (e.code === 'KeyC' && !e.repeat) player.crouching = !player.crouching;
-});
+addEventListener('keydown', (e) => { keys[e.code] = true; });
 addEventListener('keyup',   (e) => { keys[e.code] = false; });
 
 // =====================================================================
@@ -186,8 +182,10 @@ export function updatePlayer(dt) {
   // Stamina-gated sprint: holding shift drains stamina; if it hits 0 the
   // sprint multiplier drops to 1 until enough has regenerated.
   const sprintHeld = (keys['ShiftLeft'] || keys['ShiftRight']) && (keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD']);
-  // Sprint cancels crouch (you can't sprint and crouch at the same time).
-  if (sprintHeld && player.crouching) player.crouching = false;
+  // Hold-to-crouch — Ctrl mientras se aprieta. En god mode Ctrl es "bajar
+  // volando" así que no agacha.
+  const ctrlHeld = (keys['ControlLeft'] || keys['ControlRight']);
+  player.crouching = !player.godMode && ctrlHeld && !sprintHeld;
   let sprint = 1;
   if (sprintHeld && player.stamina > 1 && !player.crouching) {
     sprint = SPRINT_MULT;
