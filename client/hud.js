@@ -358,12 +358,14 @@ export function setXp(level, xpThisLevel, xpNeeded) {
 const statusRow    = document.getElementById('statusRow');
 const statusBleed  = document.getElementById('statusBleed');
 const statusInfect = document.getElementById('statusInfect');
-export function setStatus(bleeding, infected) {
+const statusPoison = document.getElementById('statusPoison');
+export function setStatus(bleeding, infected, poisoned = false) {
   if (!statusRow) return;
-  const any = bleeding || infected;
+  const any = bleeding || infected || poisoned;
   statusRow.classList.toggle('hidden', !any);
   statusBleed?.classList.toggle('hidden', !bleeding);
   statusInfect?.classList.toggle('hidden', !infected);
+  statusPoison?.classList.toggle('hidden', !poisoned);
 }
 
 // ----------------------------------------------------------------------
@@ -466,6 +468,25 @@ export function setPerkPending(n) {
 const diffBadge = document.getElementById('difficultyBadge');
 export function setDifficulty(day, mul) {
   if (diffBadge) diffBadge.textContent = `DIA ${day} · DIF x${mul.toFixed ? mul.toFixed(2) : mul}`;
+}
+const biomeBadge = document.getElementById('biomeBadge');
+const BIOME_LABELS = {
+  forest: '🌳 BOSQUE',
+  snow:   '❄ NIEVE',
+  desert: '🏜 DESIERTO',
+  burnt:  '🔥 QUEMADO',
+};
+let _curBiome = null;
+export function setBiomeBadge(biome) {
+  if (!biomeBadge) return;
+  if (_curBiome === biome) return;
+  _curBiome = biome;
+  biomeBadge.textContent = BIOME_LABELS[biome] || biome;
+  biomeBadge.className = '';
+  if (biome === 'forest') biomeBadge.classList.add('bForest');
+  if (biome === 'snow')   biomeBadge.classList.add('bSnow');
+  if (biome === 'desert') biomeBadge.classList.add('bDesert');
+  if (biome === 'burnt')  biomeBadge.classList.add('bBurnt');
 }
 const weatherEl = document.getElementById('weatherOverlay');
 export function setWeather(kind) {

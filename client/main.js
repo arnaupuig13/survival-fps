@@ -19,7 +19,7 @@ import {
   setXp, setStatus, renderQuests,
   openTrader, closeTrader, isTraderOpen, refreshTraderScrap,
   openPerksPanel, closePerksPanel, isPerksOpen, setPerkPending,
-  setDifficulty, setWeather,
+  setDifficulty, setWeather, setBiomeBadge,
   openStash, closeStash, isStashOpen,
   openStats, closeStats, isStatsOpen,
   setAmmoType,
@@ -72,6 +72,7 @@ import { spawnAmbientProps, spawnDust, tickDust } from './ambient-props.js';
 import * as farming from './farming.js';
 import * as tutorial from './tutorial.js';
 import { initBiomeParticles, tick as tickBiomeParticles } from './biome-particles.js';
+import * as bileProjectile from './bile-projectile.js';
 import { setPeerPvP } from './entities.js';
 
 // Day/night state — interpolated locally between server `time` updates.
@@ -123,8 +124,8 @@ progression.onChange((s) => {
 // Quests: refresca el panel cuando cambia el progreso.
 quests.onChange((s) => renderQuests(s.quests));
 
-// Status: pinta indicadores de sangrado / infección.
-status.onChange((s) => setStatus(s.bleeding, s.infected));
+// Status: pinta indicadores de sangrado / infección / veneno.
+status.onChange((s) => setStatus(s.bleeding, s.infected, s.poisoned));
 
 // Achievement chequeo en cambio de inventario — scrap acumulado, primera
 // arma, primer cofre boss, etc.
@@ -398,7 +399,8 @@ network.onYouHit = (dmg, src, source) => {
   sfx.playPlayerHurt();
   screenShake.bump(Math.min(0.6, dmg / 50));
   // Status effects según fuente del daño.
-  const kind = (source === 'animal') ? 'animal'
+  const kind = (source === 'bilebomber' || source === 'bile') ? 'bile'
+             : (source === 'animal') ? 'animal'
              : (source === 'zombie' || source === 'enemy') ? 'melee'
              : 'gunshot';
   status.onDamage(dmg, kind);
@@ -453,6 +455,9 @@ network.onConvoy = (msg) => {
   if (msg && msg.dirX != null) {
     convoyPlane.spawn(msg.x, msg.z, msg.dirX, msg.dirZ);
   }
+};
+network.onEnemyShoot = (msg) => {
+  bileProjectile.onEnemyShoot(msg);
 };
 network.onLightning = (msg) => {
   // White flash overlay (similar al flashbang pero más corto + sound).
@@ -1220,6 +1225,7 @@ function frame(now) {
   survival.updateSurvival(dt);
   player.nearFire = survival.isNearAnyFire(player.pos.x, player.pos.z);
   player.biome = biomeAt(player.pos.x, player.pos.z);
+  setBiomeBadge(player.biome);
   player.tickSurvival(dt, isNightServer);
   player.regen(dt);
   status.tick(dt);             // sangrado / infección
@@ -1239,6 +1245,7 @@ function frame(now) {
   screenShake.tick(dt);
   tickDust(dt, player.pos);
   tickBiomeParticles(dt, player.pos);
+  bileProjectile.tick(dt);
   farming.tick();
   // Cocinar granada — si llega a COOK_MAX, te explota en la mano.
   if (_cookingGrenade) {

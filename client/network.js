@@ -41,6 +41,7 @@ class NetworkClient {
     this.onStorm = null;
     this.onFlashbang = null;
     this.onConvoy = null;
+    this.onEnemyShoot = null;
     this.onLightning = null;
     this.onPvpStatus = null;
     this.onPeerPvp = null;
@@ -103,9 +104,10 @@ class NetworkClient {
     } else if (msg.type === 'eAttack' || msg.type === 'zAttack') {
       triggerEnemyAttack(msg.id);
     } else if (msg.type === 'eShoot') {
-      // Visual: shooter fires at (tx,tz). Could spawn a tracer in v1.2.
-      // For now, just trigger the attack anim cue.
       triggerEnemyAttack(msg.id);
+      // Notificá main.js para que dispare visual (ej. bola verde del
+      // bilebomber, tracer del scientist, etc).
+      this.onEnemyShoot?.(msg);
     } else if (msg.type === 'eWake') {
       wakeEnemy(msg.id);
     } else if (msg.type === 'snapshot') {

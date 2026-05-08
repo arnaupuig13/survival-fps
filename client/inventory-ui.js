@@ -680,6 +680,86 @@ function buildPaperdollHotbar() {
 }
 
 // =====================================================================
+// Tabs — switching entre INVENTARIO / EQUIPO / APRENDIZAJE / ITEMS admin.
+// =====================================================================
+let currentTab = 'inv';
+function showTab(tabName) {
+  currentTab = tabName;
+  for (const btn of document.querySelectorAll('.rustToolbar .rustTab')) {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  }
+  for (const pane of document.querySelectorAll('.tabPane')) {
+    pane.classList.toggle('hidden', pane.dataset.tab !== tabName);
+  }
+  // Renders específicos por tab.
+  if (tabName === 'learn') renderLearnTab();
+  if (tabName === 'admin') renderAdminTab();
+}
+// Click en botones de tab.
+for (const btn of document.querySelectorAll('.rustToolbar .rustTab')) {
+  btn.addEventListener('click', () => showTab(btn.dataset.tab));
+}
+
+// Tab APRENDIZAJE: perks activos + tier de armas.
+async function renderLearnTab() {
+  const perksEl = document.getElementById('learnPerks');
+  const tiersEl = document.getElementById('learnTiers');
+  if (perksEl) {
+    const perks = await import('./perks.js');
+    perksEl.innerHTML = '';
+    for (const p of perks.PERK_POOL) {
+      const isOn = perks.getState().taken.has(p.id);
+      const row = document.createElement('div');
+      row.className = 'lRow ' + (isOn ? 'on' : 'off');
+      row.innerHTML = `<span>${p.name}${isOn ? ' ✓' : ''}</span><span>${p.desc}</span>`;
+      perksEl.appendChild(row);
+    }
+  }
+  if (tiersEl) {
+    const wt = await import('./weapon-tiers.js');
+    tiersEl.innerHTML = '';
+    const labels = { pistol: 'PISTOLA', rifle: 'RIFLE', smg: 'SMG', shotgun: 'ESCOPETA', sniper: 'SNIPER', crossbow: 'BALLESTA' };
+    const owned = { pistol: 'pistol_pickup', rifle: 'rifle_pickup', smg: 'smg_pickup', shotgun: 'shotgun_pickup', sniper: 'sniper_pickup', crossbow: 'crossbow_pickup' };
+    for (const w of Object.keys(labels)) {
+      if (!inv.has(owned[w], 1)) continue;
+      const tier = wt.getTier(w);
+      const meta = wt.getTierMeta(w);
+      const row = document.createElement('div');
+      row.className = 'lRow lTier-' + tier;
+      row.innerHTML = `<span>${labels[w]}</span><span>${meta.label} · +${Math.round((meta.dmgMul - 1) * 100)}% dmg</span>`;
+      tiersEl.appendChild(row);
+    }
+    if (tiersEl.children.length === 0) {
+      tiersEl.innerHTML = '<div class="lRow off">Sin armas (excepto pistola)</div>';
+    }
+  }
+}
+
+// Tab ADMIN: spawner — todos los items. Click → +1 al inv.
+function renderAdminTab() {
+  const grid = document.getElementById('adminItemsGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const allKeys = Object.keys(inv.ITEMS);
+  for (const key of allKeys) {
+    const meta = inv.ITEMS[key];
+    const slot = document.createElement('div');
+    slot.className = 'invSlot has rare-' + (meta.rarity || 'common');
+    slot.innerHTML = `<div class="iLabel">${meta.label}</div><div class="iCount">+1</div>`;
+    slot.title = `${meta.label} — clic para añadir 1 al inventario`;
+    slot.addEventListener('click', () => {
+      inv.add(key, 1);
+      logLine(`[ADMIN] +1 ${meta.label}`);
+      sfx.playPickup?.();
+    });
+    grid.appendChild(slot);
+  }
+}
+
+export function setActiveTab(tab) { showTab(tab); }
+export function getActiveTab() { return currentTab; }
+
+// =====================================================================
 // Public API
 // =====================================================================
 export function refresh() {

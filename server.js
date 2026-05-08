@@ -456,7 +456,31 @@ const LOOT_TABLES = {
   ],
 };
 
-function rollLoot(tableKey) {
+// Loot bonus por bioma — se aplica encima del tier base.
+//   forest: +bayas, +seeds (vegetación abundante)
+//   snow:   +meat (animales para cazar), +bandage extra (frío hiere)
+//   desert: +water_bottle, +scrap (cosas perdidas en arena)
+//   burnt:  +bullet_r_inc (incendiarias), bilebomber chance scrap
+const BIOME_BONUS = {
+  forest: [
+    { item: 'berry', range: [1, 3] },
+    { item: 'seeds', chance: 0.30 },
+  ],
+  snow: [
+    { item: 'meat_raw', range: [1, 2] },
+    { item: 'bandage',  chance: 0.40 },
+  ],
+  desert: [
+    { item: 'water_bottle', range: [1, 2] },
+    { item: 'scrap', range: [1, 3] },
+  ],
+  burnt: [
+    { item: 'bullet_r_inc', range: [0, 4] },
+    { item: 'antibiotics',  chance: 0.20 },
+  ],
+};
+
+function rollLoot(tableKey, x, z) {
   const out = {};
   const table = LOOT_TABLES[tableKey] || [];
   for (const row of table) {
@@ -466,6 +490,20 @@ function rollLoot(tableKey) {
       const [a, b] = row.range;
       const n = a + Math.floor(Math.random() * (b - a + 1));
       if (n > 0) out[row.item] = (out[row.item] || 0) + n;
+    }
+  }
+  // Bonus por bioma — solo si el crate está dentro del map (x,z válidos).
+  if (Number.isFinite(x) && Number.isFinite(z)) {
+    const biome = biomeAt(x, z);
+    const bonus = BIOME_BONUS[biome] || [];
+    for (const row of bonus) {
+      if (row.chance != null) {
+        if (Math.random() < row.chance) out[row.item] = (out[row.item] || 0) + 1;
+      } else {
+        const [a, b] = row.range;
+        const n = a + Math.floor(Math.random() * (b - a + 1));
+        if (n > 0) out[row.item] = (out[row.item] || 0) + n;
+      }
     }
   }
   return out;
@@ -1920,7 +1958,7 @@ wss.on('connection', (ws) => {
       const dx = player.x - c.x, dz = player.z - c.z;
       if (dx * dx + dz * dz > 5 * 5) return;
       c.taken = true;
-      const loot = rollLoot(c.tableKey);
+      const loot = rollLoot(c.tableKey, c.x, c.z);
       sendTo(player, { type: 'lootGranted', crateId: c.id, loot });
       broadcast({ type: 'crateTaken', id: c.id, by: id });
     }

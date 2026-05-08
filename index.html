@@ -76,7 +76,8 @@
     #statusRow.hidden { display: none; }
     .statusBleed  { background: rgba(80,0,0,0.85); color: #ff7070; padding: 2px 8px; border: 1px solid #722; animation: pulseBleed 1s infinite; }
     .statusInfect { background: rgba(40,60,0,0.85); color: #b0e070; padding: 2px 8px; border: 1px solid #4a6; }
-    .statusBleed.hidden, .statusInfect.hidden { display: none; }
+    .statusPoison { background: rgba(20,60,20,0.85); color: #80ff40; padding: 2px 8px; border: 1px solid #4a8; animation: pulseBleed 0.7s infinite; }
+    .statusBleed.hidden, .statusInfect.hidden, .statusPoison.hidden { display: none; }
     @keyframes pulseBleed { 0%,100% { opacity: 0.85; } 50% { opacity: 1; box-shadow: 0 0 6px rgba(255,80,80,0.6); } }
 
     /* Quest panel — top right under minimap */
@@ -112,6 +113,12 @@
 
     /* Difficulty badge — junto al day counter */
     #difficultyBadge { position: fixed; right: 12px; top: 332px; background: rgba(40,8,8,0.7); color: #ff7060; padding: 3px 10px; font-size: 11px; letter-spacing: 2px; font-family: monospace; border: 1px solid #722; }
+    /* Biome badge — encima del difficulty */
+    #biomeBadge { position: fixed; right: 12px; top: 358px; padding: 3px 10px; font-size: 11px; letter-spacing: 2px; font-family: monospace; border: 1px solid #444; background: rgba(20,30,18,0.7); color: #aae0aa; transition: background 0.3s, color 0.3s, border-color 0.3s; }
+    #biomeBadge.bForest  { background: rgba(20,40,18,0.75); color: #a0e070; border-color: #486; }
+    #biomeBadge.bSnow    { background: rgba(28,38,52,0.75); color: #c0e0ff; border-color: #468; }
+    #biomeBadge.bDesert  { background: rgba(50,38,16,0.75); color: #f0c060; border-color: #864; }
+    #biomeBadge.bBurnt   { background: rgba(28,18,12,0.85); color: #c0a080; border-color: #644; }
 
     /* NVG overlay — tinte verde + scanlines sutiles */
     #nvgOverlay { position: fixed; inset: 0; background: rgba(40, 200, 60, 0.18); pointer-events: none; z-index: 6; opacity: 0; transition: opacity 0.2s; }
@@ -272,7 +279,26 @@
     #inventoryPanel .rustPanel { pointer-events: auto; }
     #inventoryPanel.hidden { display: none; }
     .rustPanel { background: linear-gradient(180deg, rgba(40,40,42,0.96), rgba(28,28,30,0.96)); border: 1px solid #444; min-width: 1080px; min-height: 620px; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,0.7); font-family: system-ui, sans-serif; }
-    .rustToolbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 22px; background: rgba(0,0,0,0.3); border-bottom: 1px solid #555; }
+    .rustToolbar { display: flex; align-items: center; gap: 4px; padding: 0; background: rgba(0,0,0,0.4); border-bottom: 1px solid #555; }
+    .rustToolbar .rustTab { background: transparent; border: 0; border-bottom: 2px solid transparent; color: #888; padding: 12px 18px; font-family: system-ui; font-size: 12px; letter-spacing: 2px; cursor: pointer; transition: color 0.1s, border-color 0.1s, background 0.1s; }
+    .rustToolbar .rustTab:hover { color: #ddd; background: rgba(40,30,10,0.3); }
+    .rustToolbar .rustTab.active { color: #f0c060; border-bottom-color: #f0c060; background: rgba(40,30,10,0.5); }
+    .rustToolbar .rustHint { margin-left: auto; padding-right: 18px; color: #aaa; font-size: 11px; letter-spacing: 1px; }
+    .tabPane.hidden { display: none; }
+    .rustContent.invTab { display: grid; grid-template-columns: 1fr; padding: 18px 22px; flex: 1; }
+    .rustContent.equipTab { display: grid; grid-template-columns: 280px 1fr; gap: 18px; padding: 18px 22px; flex: 1; }
+    .rustContent.learnTab { display: grid; grid-template-columns: 1fr 320px; gap: 18px; padding: 18px 22px; flex: 1; }
+    .rustContent.adminTab { display: grid; grid-template-columns: 1fr; padding: 18px 22px; flex: 1; }
+    .rustLearnCol { background: rgba(0,0,0,0.3); border: 1px solid #333; padding: 12px; }
+    .learnList { display: flex; flex-direction: column; gap: 4px; font-family: monospace; font-size: 11px; color: #ddd; }
+    .learnList .lRow { display: flex; justify-content: space-between; padding: 4px 6px; border-radius: 2px; }
+    .learnList .lRow.on { background: rgba(120,60,200,0.15); border-left: 3px solid #b090ff; color: #fff; }
+    .learnList .lRow.off { color: #666; }
+    .learnList .lTier-common    { color: #bbb; }
+    .learnList .lTier-rare      { color: #4a90e0; }
+    .learnList .lTier-legendary { color: #f0c040; }
+    /* Admin items grid — un slot por cada item del juego */
+    #adminItemsGrid { grid-template-columns: repeat(8, 1fr); }
     .rustTab { color: #f0c060; font-size: 14px; font-weight: 700; letter-spacing: 6px; }
     .rustHint { color: #888; font-size: 11px; letter-spacing: 1px; }
     .rustContent { display: grid; grid-template-columns: 280px 1fr 290px; gap: 18px; padding: 18px 22px; flex: 1; }
@@ -496,10 +522,11 @@
       <div id="xpBar"><div id="xpFill" style="width:0%"></div></div>
       <span id="xpText" class="ammoLabel">0 / 80 XP</span>
     </div>
-    <!-- Indicadores de status (sangrado / infección) -->
+    <!-- Indicadores de status (sangrado / infección / veneno) -->
     <div id="statusRow" class="hidden">
       <span class="statusBleed hidden" id="statusBleed">★ SANGRANDO</span>
       <span class="statusInfect hidden" id="statusInfect">☣ INFECTADO</span>
+      <span class="statusPoison hidden" id="statusPoison">☠ ENVENENADO</span>
     </div>
   </div>
 
@@ -582,6 +609,7 @@
   <div id="online">0 jugadores</div>
   <div id="clock">--:--</div>
   <div id="dayCounter">DIA 1</div>
+  <div id="biomeBadge">🌳 BOSQUE</div>
   <div id="difficultyBadge">DIFICULTAD x1.00</div>
   <div id="perkBadge" class="hidden">★ PERK DISPONIBLE [K]</div>
   <div id="weatherOverlay"></div>
@@ -609,78 +637,108 @@
     <div class="hbslot empty" data-slot="5"><span class="hbkey">6</span><span class="hblabel"></span><span class="hbcount" id="hbcount5"></span></div>
   </div>
 
-  <!-- Inventory panel — Rust-style layout. Toggled with TAB. -->
+  <!-- Inventory panel — tabbed layout. Toggled with TAB. -->
   <div id="inventoryPanel" class="hidden">
     <div class="rustPanel">
-      <!-- Header bar -->
+      <!-- Tab toolbar -->
       <div class="rustToolbar">
-        <span class="rustTab active">ELABORACIÓN</span>
+        <button class="rustTab active" data-tab="inv">INVENTARIO</button>
+        <button class="rustTab" data-tab="equip">EQUIPO Y SALUD</button>
+        <button class="rustTab" data-tab="learn">APRENDIZAJE</button>
+        <button class="rustTab" data-tab="admin">ITEMS [admin]</button>
         <span class="rustHint">[TAB] cerrar</span>
       </div>
 
-      <div class="rustContent">
-        <!-- LEFT column: paperdoll + equipment + vitals -->
-        <aside class="rustPaperdollCol">
-          <div class="paperdollName" id="paperdollName">P1</div>
-          <div class="paperdollCanvas">
-            <!-- silhouette body -->
-            <div class="paperdollBody">
-              <div class="pdHead"></div>
-              <div class="pdTorso"></div>
-              <div class="pdArmL"></div>
-              <div class="pdArmR"></div>
-              <div class="pdLegL"></div>
-              <div class="pdLegR"></div>
+      <!-- TAB: Inventario (grid + item info + hotbar) -->
+      <div class="tabPane" data-tab="inv">
+        <div class="rustContent invTab">
+          <section class="rustCenterCol">
+            <div class="rustItemInfo" id="rustItemInfo">
+              <div class="iiEmpty">Selecciona un item para ver detalles</div>
             </div>
-            <!-- equipment slots positioned around the body -->
-            <div class="armorSlot posHelmet"  data-slot="helmet_armor"></div>
-            <div class="armorSlot posVest"    data-slot="vest_armor"></div>
-            <!-- resistance percentages -->
-            <div class="resStack">
-              <div class="resRow"><span class="resIcon resBullet"></span><span id="resBullet">0%</span></div>
-              <div class="resRow"><span class="resIcon resBite"></span><span id="resBite">0%</span></div>
-              <div class="resRow"><span class="resIcon resRad"></span><span id="resRad">0%</span></div>
+            <div class="rustInvBlock">
+              <div class="rustSectionLabel">INVENTARIO</div>
+              <div id="rustInvGrid" class="rustInvGrid"></div>
             </div>
-          </div>
-          <!-- vitals -->
-          <div class="paperdollVitals">
-            <span class="vital vHp"><span class="dot"></span><span id="vitHp">100</span></span>
-            <span class="vital vHun"><span class="dot"></span><span id="vitHun">100</span></span>
-            <span class="vital vThi"><span class="dot"></span><span id="vitThi">100</span></span>
-          </div>
-          <!-- ARMAS — 4 slots de attachments por arma -->
-          <div class="weaponAttachBlock">
-            <div class="rustSectionLabel">ARMAS · ACCESORIOS</div>
-            <div id="weaponAttachList"></div>
-          </div>
-        </aside>
+            <div class="rustHotbarBlock">
+              <div class="rustSectionLabel">HOTBAR</div>
+              <div class="paperdollHotbar" id="paperdollHotbar"></div>
+            </div>
+          </section>
+        </div>
+      </div>
 
-        <!-- CENTER column: item info on top + inventory grid + hotbar abajo -->
-        <section class="rustCenterCol">
-          <div class="rustItemInfo" id="rustItemInfo">
-            <div class="iiEmpty">Selecciona un item para ver detalles</div>
-          </div>
-          <div class="rustInvBlock">
-            <div class="rustSectionLabel">INVENTARIO</div>
-            <div id="rustInvGrid" class="rustInvGrid"></div>
-          </div>
-          <!-- mini hotbar abajo del inventario -->
-          <div class="rustHotbarBlock">
-            <div class="rustSectionLabel">HOTBAR</div>
-            <div class="paperdollHotbar" id="paperdollHotbar"></div>
-          </div>
-        </section>
+      <!-- TAB: Equipo y Salud (paperdoll + vitals + armor + weapons attach) -->
+      <div class="tabPane hidden" data-tab="equip">
+        <div class="rustContent equipTab">
+          <aside class="rustPaperdollCol">
+            <div class="paperdollName" id="paperdollName">P1</div>
+            <div class="paperdollCanvas">
+              <div class="paperdollBody">
+                <div class="pdHead"></div>
+                <div class="pdTorso"></div>
+                <div class="pdArmL"></div>
+                <div class="pdArmR"></div>
+                <div class="pdLegL"></div>
+                <div class="pdLegR"></div>
+              </div>
+              <div class="armorSlot posHelmet" data-slot="helmet_armor"></div>
+              <div class="armorSlot posVest"   data-slot="vest_armor"></div>
+              <div class="resStack">
+                <div class="resRow"><span class="resIcon resBullet"></span><span id="resBullet">0%</span></div>
+                <div class="resRow"><span class="resIcon resBite"></span><span id="resBite">0%</span></div>
+                <div class="resRow"><span class="resIcon resRad"></span><span id="resRad">0%</span></div>
+              </div>
+            </div>
+            <div class="paperdollVitals">
+              <span class="vital vHp"><span class="dot"></span><span id="vitHp">100</span></span>
+              <span class="vital vHun"><span class="dot"></span><span id="vitHun">100</span></span>
+              <span class="vital vThi"><span class="dot"></span><span id="vitThi">100</span></span>
+            </div>
+          </aside>
+          <section class="rustCenterCol">
+            <div class="weaponAttachBlock">
+              <div class="rustSectionLabel">ARMAS · ACCESORIOS (4 slots c/u)</div>
+              <div id="weaponAttachList"></div>
+            </div>
+            <div style="color:#888;font-size:11px;margin-top:14px;letter-spacing:1px;line-height:1.6;">
+              Arrastrá un accesorio (mirilla, silenciador, cargador ext., grip, laser) desde la pestaña INVENTARIO al slot de un arma.
+            </div>
+          </section>
+        </div>
+      </div>
 
-        <!-- RIGHT column: quick craft recipes -->
-        <aside class="rustRecipesCol">
-          <div class="rustSectionLabel">ELABORACIÓN RÁPIDA</div>
-          <div id="rustCraftList" class="rustRecipesGrid"></div>
-        </aside>
+      <!-- TAB: Aprendizaje (recetas + perks + tier de armas) -->
+      <div class="tabPane hidden" data-tab="learn">
+        <div class="rustContent learnTab">
+          <section class="rustLearnCol">
+            <div class="rustSectionLabel">CRAFTING — todas las recetas</div>
+            <div id="rustCraftList" class="rustRecipesGrid"></div>
+          </section>
+          <aside class="rustLearnCol">
+            <div class="rustSectionLabel">PERKS ACTIVOS</div>
+            <div id="learnPerks" class="learnList"></div>
+            <div class="rustSectionLabel" style="margin-top:14px;">TIER DE ARMAS</div>
+            <div id="learnTiers" class="learnList"></div>
+          </aside>
+        </div>
+      </div>
+
+      <!-- TAB: Items admin (spawner para dev) -->
+      <div class="tabPane hidden" data-tab="admin">
+        <div class="rustContent adminTab">
+          <section class="rustCenterCol">
+            <div style="color:#ff8040;font-size:11px;letter-spacing:2px;margin-bottom:10px;">
+              ⚠ MODO DEV — clic en cualquier item para añadirlo a tu inventario
+            </div>
+            <div id="adminItemsGrid" class="rustInvGrid"></div>
+          </section>
+        </div>
       </div>
 
       <div class="rustFooter">
         <div class="rustHints">
-          <kbd>1</kbd>-<kbd>9</kbd> hotbar · <kbd>R</kbd> recargar · <kbd>CTRL</kbd> agacharse · <kbd>H</kbd> venda · <kbd>J</kbd> comer · <kbd>U</kbd> beber · <kbd>F</kbd> buggy · <kbd>G</kbd> granada · <kbd>B</kbd> hoguera
+          <kbd>1</kbd>-<kbd>6</kbd> hotbar · <kbd>R</kbd> recargar · <kbd>CTRL</kbd> agacharse · <kbd>H</kbd> venda · <kbd>J</kbd> comer · <kbd>U</kbd> beber · <kbd>F</kbd> buggy · <kbd>G</kbd> granada · <kbd>V</kbd> humo · <kbd>X</kbd> flashbang · <kbd>O</kbd> linterna
         </div>
       </div>
     </div>
