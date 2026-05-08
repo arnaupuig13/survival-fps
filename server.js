@@ -2169,10 +2169,10 @@ setInterval(() => {
       }
     }
     if (!e.patrol && !aggroBoosted && !cityForceAggro && d > cfg.aggro) {
-      // IDLE WANDER para TODOS los scientists (no solo helix-lab) —
-      // patrullan cerca de su posición de spawn. Antes solo se aplicaba
-      // a helix-lab, dejando guards de bunkers/heli/poi congelados.
-      if (isScientist) {
+      // IDLE WANDER — cientificos de bunkers/heli/poi patrullan en radio
+      // pequeño (5m). Cientificos de helix-lab NO patrullan (se quedan
+      // estacionarios en su building para no atravesar paredes).
+      if (isScientist && e.townId !== 'helix-lab') {
         if (e._idleAnchor == null) e._idleAnchor = { x: e.x, z: e.z };
         if (e._idleHeading == null) e._idleHeading = { angle: Math.random() * Math.PI * 2, t: 0 };
         e._idleHeading.t -= AI_DT;
@@ -2180,9 +2180,7 @@ setInterval(() => {
           e._idleHeading.t = 2 + Math.random() * 3;
           e._idleHeading.angle += (Math.random() - 0.5) * 1.6;
           const dxa = e.x - e._idleAnchor.x, dza = e.z - e._idleAnchor.z;
-          // Bunker/heli guards mantienen radio chico (5m), helix-lab más amplio (10m).
-          const radius = (e.townId === 'helix-lab') ? 10 : 5;
-          if (Math.hypot(dxa, dza) > radius) e._idleHeading.angle = Math.atan2(-dxa, -dza);
+          if (Math.hypot(dxa, dza) > 5) e._idleHeading.angle = Math.atan2(-dxa, -dza);
         }
         const speed = cfg.speed * 0.4;
         e.x += Math.sin(e._idleHeading.angle) * speed * AI_DT;
@@ -2224,17 +2222,24 @@ setInterval(() => {
 
     if (cfg.ranged) {
       // Shooter: keep optimal distance ~70% of range; circle-strafe slightly.
-      const desired = cfg.range * 0.65;
-      if (d > desired + 2) {
-        const dx = nearest.x - e.x, dz = nearest.z - e.z;
-        e.x += (dx / d) * cfg.speed * AI_DT;
-        e.z += (dz / d) * cfg.speed * AI_DT;
-      } else if (d < desired - 2) {
-        const dx = nearest.x - e.x, dz = nearest.z - e.z;
-        e.x -= (dx / d) * cfg.speed * AI_DT * 0.7;
-        e.z -= (dz / d) * cfg.speed * AI_DT * 0.7;
+      // ESTACIONARIO si esta en helix-lab — no se mueve, solo apunta y dispara.
+      // Esto evita 100% que atraviesen paredes (era imposible de clampear bien
+      // con tantos buildings y enemigos). Se quedan en su edificio/posicion
+      // spawn y disparan desde ahi. Boss + elites tampoco se mueven (anclados).
+      const isHelixStationary = e.townId === 'helix-lab' && (isAnyScientist(e.etype) || e.isBoss);
+      if (!isHelixStationary) {
+        const desired = cfg.range * 0.65;
+        if (d > desired + 2) {
+          const dx = nearest.x - e.x, dz = nearest.z - e.z;
+          e.x += (dx / d) * cfg.speed * AI_DT;
+          e.z += (dz / d) * cfg.speed * AI_DT;
+        } else if (d < desired - 2) {
+          const dx = nearest.x - e.x, dz = nearest.z - e.z;
+          e.x -= (dx / d) * cfg.speed * AI_DT * 0.7;
+          e.z -= (dz / d) * cfg.speed * AI_DT * 0.7;
+        }
+        e.y = heightAt(e.x, e.z);
       }
-      e.y = heightAt(e.x, e.z);
       e.ry = Math.atan2(nearest.x - e.x, nearest.z - e.z);
       // Fire when in range.
       if (d < cfg.range && e.attackCd <= 0) {
