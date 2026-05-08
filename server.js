@@ -126,6 +126,11 @@ const TOWN_FLAT = [
   { cx: -260, cz:  100, r: 8, transition: 5 },
   { cx:  340, cz:   40, r: 8, transition: 5 },
   { cx: -100, cz:  340, r: 8, transition: 5 },
+  // Cuevas
+  { cx: -260, cz:  340, r: 12, transition: 7 },
+  { cx:  280, cz:  260, r: 12, transition: 7 },
+  { cx:  340, cz: -200, r: 12, transition: 7 },
+  { cx: -260, cz: -340, r: 12, transition: 7 },
 ];
 
 // =====================================================================
@@ -304,19 +309,27 @@ const POIS = [
   { id: 'bunker-a',  kind: 'bunker',     cx:  150, cz:    0, ry: 0 },
   { id: 'bunker-b',  kind: 'bunker',     cx: -240, cz:  240, ry: Math.PI / 4 },
   { id: 'bunker-c',  kind: 'bunker',     cx:  100, cz: -260, ry: Math.PI / 2 },
+  // CUEVAS — entradas rocosas con sala interior. Boss-tier loot custodiado
+  // por 2-3 zombies dormidos. 1 cueva por bioma.
+  { id: 'cave-forest', kind: 'cave', cx: -260, cz:  340, ry: 0 },
+  { id: 'cave-snow',   kind: 'cave', cx:  280, cz:  260, ry: Math.PI / 4 },
+  { id: 'cave-desert', kind: 'cave', cx:  340, cz: -200, ry: -Math.PI / 4 },
+  { id: 'cave-burnt',  kind: 'cave', cx: -260, cz: -340, ry: Math.PI },
 ];
 
 const POI_GUARDS = {
   helicopter: ['scientist', 'sci_shotgun', 'scientist'],
   gas:        ['zombie', 'runner', 'zombie'],
   cabin:      ['zombie', 'zombie'],
-  bunker:     ['scientist', 'sci_shotgun', 'sci_sniper', 'scientist'],  // 4 guards
+  bunker:     ['scientist', 'sci_shotgun', 'sci_sniper', 'scientist'],
+  cave:       ['zombie', 'tank', 'zombie'],          // 3 dormidos
 };
 const POI_CRATES = {
   helicopter: { count: 3, tier: 'military' },
   gas:        { count: 2, tier: 'town' },
   cabin:      { count: 2, tier: 'town' },
-  bunker:     { count: 3, tier: 'boss' },   // ¡loot legendary!
+  bunker:     { count: 3, tier: 'boss' },
+  cave:       { count: 2, tier: 'boss' },            // 2 boss-tier
 };
 const poiState = new Map();
 for (const p of POIS) poiState.set(p.id, { spawned: false, enemyIds: new Set() });
@@ -1907,6 +1920,16 @@ wss.on('connection', (ws) => {
       player.pvp = !player.pvp;
       sendTo(player, { type: 'pvpStatus', on: !!player.pvp });
       broadcast({ type: 'peerPvp', id, on: !!player.pvp });
+    } else if (msg.type === 'voiceSignal') {
+      // Reenvía signaling SDP/ICE al peer destinatario.
+      const target = players.get(msg.to);
+      if (target && target.ws && target.ws.readyState === 1) {
+        target.ws.send(JSON.stringify({
+          type: 'voiceSignal',
+          from: id,
+          payload: msg.payload,
+        }));
+      }
     } else if (msg.type === 'pvpAttack') {
       // Player atacando a otro player. Solo procede si AMBOS tienen PvP on.
       const target = players.get(msg.targetId);

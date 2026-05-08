@@ -267,6 +267,89 @@ function buildBunker(p) {
 }
 
 // =====================================================================
+// CAVE — caverna rocosa. Entrada arco oscuro con stalactitas + sala
+// interior con luces verdes/azules tenues. 2 cofres boss-tier dentro
+// custodiados por zombies dormidos.
+// =====================================================================
+function buildCave(p) {
+  const g = new THREE.Group();
+  const w = 9.0, h = 9.0, wallH = 4.2, wallThick = 1.2;     // paredes gruesas (roca)
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x3a3530, roughness: 0.95 });
+  const darkRockMat = new THREE.MeshStandardMaterial({ color: 0x1e1a18, roughness: 0.98 });
+  const moss = new THREE.MeshStandardMaterial({ color: 0x2a3a1c, roughness: 0.95, emissive: 0x103018, emissiveIntensity: 0.4 });
+  // Paredes con bumps — varias rocas grandes formando perímetro irregular.
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const r = 4.5 + Math.random() * 0.8;
+    const sz = 0.9 + Math.random() * 0.6;
+    // Skip dos rocas en frente para crear la entrada.
+    const isFront = (a > Math.PI * 0.4 && a < Math.PI * 0.6);
+    if (isFront && Math.abs(a - Math.PI / 2) < 0.25) continue;
+    const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(sz, 0), rockMat);
+    rock.position.set(Math.cos(a) * r, sz * 0.6, Math.sin(a) * r);
+    rock.rotation.set(Math.random(), Math.random(), Math.random());
+    rock.scale.y = 1.6 + Math.random() * 0.8;
+    g.add(rock);
+  }
+  // Arco de entrada — dos rocas grandes a los lados + dintel.
+  const archL = new THREE.Mesh(new THREE.BoxGeometry(1.2, 3.0, 1.2), rockMat);
+  archL.position.set(-1.6, 1.5, 4.5); g.add(archL);
+  const archR = new THREE.Mesh(new THREE.BoxGeometry(1.2, 3.0, 1.2), rockMat);
+  archR.position.set(1.6, 1.5, 4.5); g.add(archR);
+  const archTop = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.8, 1.4), darkRockMat);
+  archTop.position.set(0, 3.4, 4.5); g.add(archTop);
+  // Techo bajo — bloque oscuro encima de la sala.
+  const ceiling = new THREE.Mesh(new THREE.BoxGeometry(w + 1, 0.4, h + 1), darkRockMat);
+  ceiling.position.set(0, wallH - 0.2, 0); g.add(ceiling);
+  // Estalactitas colgando del techo.
+  for (let i = 0; i < 5; i++) {
+    const sx = (Math.random() * 2 - 1) * 3;
+    const sz_ = (Math.random() * 2 - 1) * 3;
+    const stal = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.7 + Math.random() * 0.5, 5), darkRockMat);
+    stal.rotation.x = Math.PI;
+    stal.position.set(sx, wallH - 0.5, sz_);
+    g.add(stal);
+  }
+  // Musgo en algunas rocas + 2 luces interior tenues.
+  for (let i = 0; i < 3; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = 2.5 + Math.random() * 1.5;
+    const blob = new THREE.Mesh(new THREE.SphereGeometry(0.4, 6, 5), moss);
+    blob.position.set(Math.cos(a) * r, 0.2, Math.sin(a) * r);
+    blob.scale.y = 0.4;
+    g.add(blob);
+  }
+  const lampA = new THREE.PointLight(0x60c060, 1.6, 12, 2);
+  lampA.position.set(-2.5, 2.5, -2.0); g.add(lampA);
+  const lampB = new THREE.PointLight(0x4080c0, 1.2, 10, 2);
+  lampB.position.set(2.5, 2.5, 1.5); g.add(lampB);
+  // Stencil entrance — emissive verde tenue arriba del arco.
+  const stencil = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0x60ff60, emissive: 0x40c040, emissiveIntensity: 1.0 }));
+  stencil.position.set(0, 3.4, 4.6); g.add(stencil);
+  // Colliders — paredes laterales + back wall (sin frontal donde está la entrada).
+  const colliders = [];
+  const cos = Math.cos(p.ry || 0), sin = Math.sin(p.ry || 0);
+  function addBoxCollider(lx, lz, hw, hh) {
+    colliders.push({
+      type: 'box',
+      cx: p.cx + cos * lx - sin * lz,
+      cz: p.cz + sin * lx + cos * lz,
+      hw, hh, ry: p.ry || 0,
+    });
+  }
+  // Back wall (-z), left, right, frente parcial dejando 3m de paso central.
+  addBoxCollider(0, -h / 2, w / 2, wallThick / 2);                  // back
+  addBoxCollider(-w / 2, 0, wallThick / 2, h / 2);                   // left
+  addBoxCollider(w / 2, 0, wallThick / 2, h / 2);                    // right
+  // Front-left + front-right slabs con doorway de 3m.
+  const slabW = (w - 3.0) / 2;
+  addBoxCollider(-(w / 2 - slabW / 2), h / 2, slabW / 2, wallThick / 2);
+  addBoxCollider(  w / 2 - slabW / 2,  h / 2, slabW / 2, wallThick / 2);
+  return { group: g, colliders };
+}
+
+// =====================================================================
 // Public — main.js calls setPoiLayouts after welcome.
 // =====================================================================
 const _poiSmokes = [];
@@ -279,6 +362,7 @@ export function setPoiLayouts(pois) {
     else if (p.kind === 'gas') built = buildGasStation(p);
     else if (p.kind === 'cabin') built = buildCabin(p);
     else if (p.kind === 'bunker') built = buildBunker(p);
+    else if (p.kind === 'cave') built = buildCave(p);
     if (!built) continue;
     built.group.position.set(p.cx, heightAt(p.cx, p.cz), p.cz);
     built.group.rotation.y = p.ry || 0;

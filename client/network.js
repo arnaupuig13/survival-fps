@@ -39,6 +39,10 @@ class NetworkClient {
     this.onWeather = null;
     this.onHeliTrader = null;
     this.onStorm = null;
+    this.onVoiceSignal = null;
+    this.onPeerJoinHook = null;
+    this.onPeerLeaveHook = null;
+    this.onWelcome = null;
     this.onFlashbang = null;
     this.onConvoy = null;
     this.onEnemyShoot = null;
@@ -63,6 +67,7 @@ class NetworkClient {
 
     if (msg.type === 'welcome') {
       this.selfId = msg.you;
+      this.onWelcome?.(msg.you);
       if (msg.towns) setTownLayouts(msg.towns);
       if (msg.pois) setPoiLayouts(msg.pois);
       for (const peer of msg.peers) spawnPeer(peer);
@@ -78,9 +83,11 @@ class NetworkClient {
     } else if (msg.type === 'peerJoin') {
       spawnPeer(msg.p);
       this.onPeerCount?.(peers.size + 1);
+      this.onPeerJoinHook?.(msg.p.id);
     } else if (msg.type === 'peerLeave') {
       removePeer(msg.id);
       this.onPeerCount?.(peers.size + 1);
+      this.onPeerLeaveHook?.(msg.id);
     } else if (msg.type === 'eSpawn' || msg.type === 'zSpawn') {
       const info = msg.e || msg.z;
       spawnEnemy(info);
@@ -163,6 +170,8 @@ class NetworkClient {
       this.onHeliTrader?.(msg);
     } else if (msg.type === 'storm') {
       this.onStorm?.(msg);
+    } else if (msg.type === 'voiceSignal') {
+      this.onVoiceSignal?.(msg.from, msg.payload);
     } else if (msg.type === 'flashbang') {
       this.onFlashbang?.(msg);
     } else if (msg.type === 'convoy') {

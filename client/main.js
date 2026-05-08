@@ -73,7 +73,10 @@ import * as farming from './farming.js';
 import * as tutorial from './tutorial.js';
 import { initBiomeParticles, tick as tickBiomeParticles } from './biome-particles.js';
 import * as bileProjectile from './bile-projectile.js';
+import * as voice from './voice.js';
+import { spawnLandmarks, tick as tickLandmarks } from './landmarks.js';
 import { setPeerPvP } from './entities.js';
+import { peers } from './entities.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -388,10 +391,24 @@ function destroyGrenadeMesh(id) {
 // =====================================================================
 network.connect(player);
 
+// Voice WebRTC: hooks de signaling + peer join/leave.
+network.onVoiceSignal = (fromId, payload) => voice.onSignal(fromId, payload);
+network.onPeerJoinHook = (peerId) => voice.onPeerAdded(peerId);
+network.onPeerLeaveHook = (peerId) => voice.onPeerRemoved(peerId);
+network.onWelcome = (selfId) => {
+  // Cuando llega welcome, inicializamos voice + anunciamos a peers existentes.
+  voice.init(network, selfId).then(() => {
+    voice.setNetwork(network, selfId);
+    // Iniciar conexión con peers ya conectados.
+    for (const [pid] of peers) voice.onPeerAdded(pid);
+  });
+};
+
 // Spawn ambient props (autos abandonados + cadáveres civiles + dust).
 spawnAmbientProps();
 spawnDust();
 initBiomeParticles();
+spawnLandmarks();
 network.onYouHit = (dmg, src, source) => {
   player.takeDamage(dmg);
   setHP(player.hp);
@@ -880,6 +897,9 @@ addEventListener('keydown', (e) => {
   } else if (e.code === 'F2' && !e.repeat) {
     // PvP toggle — ambos players con PvP on pueden dañarse entre sí.
     network.togglePvP();
+  } else if (e.code === 'KeyY' && !e.repeat) {
+    // Mute/unmute mic de voice proximity.
+    voice.toggleMute();
   } else if (e.code === 'F3' && !e.repeat) {
     // Stats panel — totales locales de la partida + perfil.
     e.preventDefault();
@@ -951,7 +971,7 @@ addEventListener('keydown', (e) => {
     } else {
       logLine('No hay perks disponibles. Subí de nivel.');
     }
-  } else if (e.code === 'KeyY' && !e.repeat) {
+  } else if (e.code === 'F4' && !e.repeat) {
     // Dev: visualize obstacle colliders as wireframes (yellow box, blue circle).
     const on = toggleColliderDebug();
     logLine(on ? 'Colliders ON (debug)' : 'Colliders OFF');
@@ -1246,6 +1266,8 @@ function frame(now) {
   tickDust(dt, player.pos);
   tickBiomeParticles(dt, player.pos);
   bileProjectile.tick(dt);
+  voice.tick();
+  tickLandmarks(dt);
   farming.tick();
   // Cocinar granada — si llega a COOK_MAX, te explota en la mano.
   if (_cookingGrenade) {

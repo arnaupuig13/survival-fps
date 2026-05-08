@@ -40,6 +40,10 @@ const MAP_POIS = [
   { x:  150, z:    0, kind: 'bunker' },
   { x: -240, z:  240, kind: 'bunker' },
   { x:  100, z: -260, kind: 'bunker' },
+  { x: -260, z:  340, kind: 'cave' },
+  { x:  280, z:  260, kind: 'cave' },
+  { x:  340, z: -200, kind: 'cave' },
+  { x: -260, z: -340, kind: 'cave' },
 ];
 
 let mapEl = null, ctx = null;
@@ -113,7 +117,8 @@ function paintMap() {
     const [px, py] = world2px(p.x, p.z);
     ctx.fillStyle = p.kind === 'helicopter' ? '#90c0ff'
                   : p.kind === 'gas' ? '#f08040'
-                  : p.kind === 'bunker' ? '#ff5040' : '#a08070';
+                  : p.kind === 'bunker' ? '#ff5040'
+                  : p.kind === 'cave' ? '#60c060' : '#a08070';
     ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.4)';
     ctx.lineWidth = 1;
