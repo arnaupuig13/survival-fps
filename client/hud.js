@@ -288,7 +288,98 @@ let frameCount = 0;
 let frameAccum = 0;
 
 export function setHP(hp) {
-  hpFill.style.width = `${Math.max(0, Math.min(100, hp))}%`;
+  // Soporta player.maxHp > 100 cuando hay level-ups.
+  const max = (typeof window !== 'undefined' && window.__playerMaxHp) || 100;
+  hpFill.style.width = `${Math.max(0, Math.min(100, (hp / max) * 100))}%`;
+}
+
+// ----------------------------------------------------------------------
+// XP / nivel HUD
+// ----------------------------------------------------------------------
+const lvlNum   = document.getElementById('lvlNum');
+const xpFillEl = document.getElementById('xpFill');
+const xpTextEl = document.getElementById('xpText');
+export function setXp(level, xpThisLevel, xpNeeded) {
+  if (lvlNum)   lvlNum.textContent = level;
+  if (xpFillEl) xpFillEl.style.width = `${Math.min(100, (xpThisLevel / xpNeeded) * 100)}%`;
+  if (xpTextEl) xpTextEl.textContent = `${xpThisLevel | 0} / ${xpNeeded} XP`;
+}
+
+// ----------------------------------------------------------------------
+// Status (sangrado / infección)
+// ----------------------------------------------------------------------
+const statusRow    = document.getElementById('statusRow');
+const statusBleed  = document.getElementById('statusBleed');
+const statusInfect = document.getElementById('statusInfect');
+export function setStatus(bleeding, infected) {
+  if (!statusRow) return;
+  const any = bleeding || infected;
+  statusRow.classList.toggle('hidden', !any);
+  statusBleed?.classList.toggle('hidden', !bleeding);
+  statusInfect?.classList.toggle('hidden', !infected);
+}
+
+// ----------------------------------------------------------------------
+// Quests HUD
+// ----------------------------------------------------------------------
+const questList = document.getElementById('questList');
+export function renderQuests(quests) {
+  if (!questList) return;
+  questList.innerHTML = '';
+  for (const q of quests) {
+    const div = document.createElement('div');
+    div.className = 'qItem' + (q.completed ? ' done' : '');
+    const pct = Math.min(100, ((q.progress | 0) / q.goal) * 100);
+    div.innerHTML = `
+      <span class="qProg">${q.progress | 0}/${q.goal}</span>
+      <span class="qLabel">${q.label}</span>
+      <div class="qBar"><div class="qBarFill" style="width:${pct}%"></div></div>
+    `;
+    questList.appendChild(div);
+  }
+}
+
+// ----------------------------------------------------------------------
+// Trader panel
+// ----------------------------------------------------------------------
+const traderPanel    = document.getElementById('traderPanel');
+const traderShopList = document.getElementById('traderShopList');
+const traderBuyList  = document.getElementById('traderBuyList');
+const traderScrapEl  = document.getElementById('traderScrap');
+let _traderOpen = false;
+export function isTraderOpen() { return _traderOpen; }
+export function openTrader(shop, buy, scrap, onBuy, onSell, hasItem) {
+  _traderOpen = true;
+  if (!traderPanel) return;
+  traderPanel.classList.remove('hidden');
+  // Compras
+  traderShopList.innerHTML = '';
+  for (const o of shop) {
+    const row = document.createElement('div');
+    const owned = o.oneTime && hasItem(o);
+    const can = !owned && scrap >= o.cost;
+    row.className = 'traderRow' + (can ? '' : ' unaffordable');
+    row.innerHTML = `<span>${o.label}${owned ? ' (poseído)' : ''}</span><span class="trCost">${o.cost}</span>`;
+    if (can) row.addEventListener('click', () => onBuy(o.id));
+    traderShopList.appendChild(row);
+  }
+  // Ventas
+  traderBuyList.innerHTML = '';
+  for (const o of buy) {
+    const row = document.createElement('div');
+    row.className = 'traderRow';
+    row.innerHTML = `<span>${o.label}</span><span class="trCost">+${o.payScrap}</span>`;
+    row.addEventListener('click', () => onSell(o.id));
+    traderBuyList.appendChild(row);
+  }
+  if (traderScrapEl) traderScrapEl.textContent = scrap;
+}
+export function closeTrader() {
+  _traderOpen = false;
+  if (traderPanel) traderPanel.classList.add('hidden');
+}
+export function refreshTraderScrap(scrap) {
+  if (traderScrapEl) traderScrapEl.textContent = scrap;
 }
 
 export function setOnlineCount(n) {

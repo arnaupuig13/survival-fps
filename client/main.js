@@ -16,6 +16,8 @@ import {
   setDay, setPlayerName, setHotbarActive, setHotbarCount, setHotbarLocked,
   setActiveWeapon, showReload, toggleInventory, isInventoryOpen, renderInventory,
   setCompass, setSurvival,
+  setXp, setStatus, renderQuests,
+  openTrader, closeTrader, isTraderOpen, refreshTraderScrap,
 } from './hud.js';
 import * as survival from './survival.js';
 import * as tools from './tools.js';
@@ -37,6 +39,11 @@ import {
 import { updateEffects, spawnBloodDecal, spawnGoreBurst } from './effects.js';
 import { enemies } from './entities.js';
 import * as vehicle from './vehicle.js';
+import * as progression from './progression.js';
+import * as quests from './quests.js';
+import * as status from './status.js';
+import * as traps from './traps.js';
+import * as trader from './trader.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -75,6 +82,30 @@ inv.onChange((state) => {
 // Conecta el handler de crafting al panel Rust-style.
 inventoryUI.setCraftHandler(tryCraft);
 
+// Progresión: cada cambio actualiza barra XP/nivel y expone maxHp para HP bar.
+progression.onChange((s) => {
+  const need = progression.xpForNext(s.level);
+  setXp(s.level, s.xpThisLevel, need);
+  if (typeof window !== 'undefined') window.__playerMaxHp = player.maxHp || 100;
+});
+
+// Quests: refresca el panel cuando cambia el progreso.
+quests.onChange((s) => renderQuests(s.quests));
+
+// Status: pinta indicadores de sangrado / infección.
+status.onChange((s) => setStatus(s.bleeding, s.infected));
+
+// Track harvest / craft — observamos deltas positivos de wood/stone para
+// asumir que vinieron de talar/picar. Si vinieron de loot también cuenta
+// (no distinguimos — es OK para quest tracking).
+let _lastWood = 0, _lastStone = 0;
+inv.onChange((s) => {
+  const w = s.wood | 0, st = s.stone | 0;
+  if (w > _lastWood) quests.track('harvest_wood', w - _lastWood);
+  if (st > _lastStone) quests.track('harvest_stone', st - _lastStone);
+  _lastWood = w; _lastStone = st;
+});
+
 // Crafting handler — exposed to hud.js via the inventory render args.
 function tryCraft(recipeId) {
   const result = inv.craft(recipeId, { nearFire: player.nearFire, nearWater: false });
@@ -83,6 +114,7 @@ function tryCraft(recipeId) {
   } else {
     logLine(`+ ${result}`);
     sfx.playPickup?.();
+    quests.track('craft', 1);
   }
 }
 
@@ -142,6 +174,39 @@ chatInput?.addEventListener('keydown', (e) => {
   if (e.code === 'Enter') { e.preventDefault(); closeChat(true); }
   else if (e.code === 'Escape') { e.preventDefault(); closeChat(false); }
 });
+// Trader panel — abre el modal con el catálogo del comerciante. Libera el
+// mouse mientras está abierto. Refresh manual cada vez que abrimos para
+// reflejar cambios en scrap.
+function openTraderPanel() {
+  _voluntaryUnlock = true;
+  document.exitPointerLock?.();
+  openTrader(
+    trader.SHOP, trader.BUY, inv.get('scrap'),
+    (offerId) => {
+      trader.tryBuy(offerId);
+      // Refresh: re-render el panel con el nuevo scrap.
+      openTrader(trader.SHOP, trader.BUY, inv.get('scrap'),
+        (id2) => { trader.tryBuy(id2); refreshTraderScrap(inv.get('scrap')); },
+        (id2) => { trader.trySell(id2); refreshTraderScrap(inv.get('scrap')); },
+        (o) => { for (const k of Object.keys(o.give || {})) if (inv.ITEMS[k]?.oneTime && inv.has(k, 1)) return true; return false; });
+    },
+    (offerId) => {
+      trader.trySell(offerId);
+      refreshTraderScrap(inv.get('scrap'));
+    },
+    (o) => { for (const k of Object.keys(o.give || {})) if (inv.ITEMS[k]?.oneTime && inv.has(k, 1)) return true; return false; },
+  );
+}
+function closeTraderPanel() {
+  closeTrader();
+  if (player.hp > 0) {
+    setTimeout(() => {
+      _voluntaryUnlock = false;
+      renderer.domElement.requestPointerLock?.();
+    }, 60);
+  }
+}
+
 function appendChatLog(name, text) {
   const div = document.createElement('div');
   div.className = 'cline';
@@ -197,6 +262,11 @@ network.onYouHit = (dmg, src, source) => {
   setHP(player.hp);
   flashDamage();
   sfx.playPlayerHurt();
+  // Status effects según fuente del daño.
+  const kind = (source === 'animal') ? 'animal'
+             : (source === 'zombie' || source === 'enemy') ? 'melee'
+             : 'gunshot';
+  status.onDamage(dmg, kind);
   // Directional arrow — angle from camera forward to source position.
   if (src && Number.isFinite(src.x) && Number.isFinite(src.z)) {
     const yaw = player.yaw();
@@ -232,6 +302,25 @@ network.onEnemyDead = (id, msg) => {
   // Persist total kills.
   profile.totalKills = (profile.totalKills | 0) + 1;
   saveProfile(profile);
+  // XP por kill — el etype del cliente nos da el tipo (zombie/runner/tank/wolf/...).
+  const kind = e ? (e.etype || 'zombie') : 'zombie';
+  progression.awardKillXp(kind, !!msg.isBoss);
+  // Track de quests por tipo de enemigo.
+  if (!msg.isBoss) {
+    if (kind === 'zombie' || kind === 'runner' || kind === 'tank') quests.track('kill_zombies', 1);
+    if (kind === 'runner') quests.track('kill_runners', 1);
+    if (kind === 'tank')   quests.track('kill_tank', 1);
+    if (kind === 'scientist') quests.track('kill_scientists', 1);
+    if (kind === 'wolf' || kind === 'boar' || kind === 'bear' || kind === 'deer' || kind === 'rabbit') {
+      quests.track('kill_animals', 1);
+    }
+  }
+  // Drop random de chatarra: 30% en humanoides, 60% en científicos.
+  if (kind === 'scientist' || msg.isBoss) {
+    if (Math.random() < 0.7) inv.add('scrap', 1 + Math.floor(Math.random() * 3));
+  } else if (['zombie','runner','tank'].includes(kind)) {
+    if (Math.random() < 0.3) inv.add('scrap', 1);
+  }
   // Achievement milestones.
   if (profile.totalKills === 1)   unlockAchievement('first_kill', 'Primera baja');
   if (profile.totalKills === 10)  unlockAchievement('ten_kills', '10 enemigos eliminados');
@@ -254,10 +343,15 @@ network.onEnemyDead = (id, msg) => {
     unlockAchievement('boss_down', 'El Doctor cayó');
   }
 };
-network.onLootGranted = (loot) => {
+network.onLootGranted = (loot, crateId) => {
   const lines = inv.applyLoot(loot);
-  for (const l of lines) logLine(l);
+  for (const l of lines) logLine(typeof l === 'string' ? l : `+ ${l.text.replace(/^\+\s*/, '')}`);
   sfx.playPickup();
+  // XP por cofre + tracking de quest. Cada cofre da 5 XP base.
+  progression.addXp(5, 'cofre');
+  quests.track('open_crates', 1);
+  // Quests específicos por tier — el id de crate del server tiene prefix.
+  if (typeof crateId === 'string' && crateId.startsWith('city')) quests.track('open_city_crate', 1);
 };
 let isNightServer = false;
 network.onChat = (id, name, text) => {
@@ -377,6 +471,7 @@ let nearbyCrate = null;
 let nearbyBush = null;
 let nearbyPlant = null;
 let nearbyLake = null;
+let nearbyTrader = null;
 
 // Player.js applies player.mouseSensitivity if present (default 0.0022).
 // We just need the field to exist so applySettings can override it.
@@ -444,6 +539,11 @@ addEventListener('keydown', (e) => {
     }
     nearbyCrate = null;
     hideInteract();
+  } else if (e.code === 'KeyE' && nearbyTrader && !isTraderOpen()) {
+    openTraderPanel();
+    hideInteract();
+  } else if (e.code === 'KeyE' && isTraderOpen()) {
+    closeTraderPanel();
   } else if (e.code === 'KeyE' && nearbyBush) {
     const got = survival.harvestBush(nearbyBush);
     if (got > 0) {
@@ -474,8 +574,22 @@ addEventListener('keydown', (e) => {
   } else if (e.code === 'KeyH') {
     if (inv.useBandage(player)) {
       logLine('+30 HP (vendaje usado)');
+      status.stopBleeding();
       sfx.playPickup();
     }
+  } else if (e.code === 'KeyN' && !e.repeat) {
+    // Colocar cepo en el suelo (frente al jugador).
+    if (inv.consume('bear_trap', 1)) {
+      const yaw = player.yaw();
+      const fx = player.pos.x + Math.sin(yaw) * -1.5;
+      const fz = player.pos.z + Math.cos(yaw) * -1.5;
+      traps.placeTrap(fx, fz);
+    } else {
+      logLine('Necesitás un cepo (crafteable: 4 piedra + 2 madera + 3 chatarra)');
+    }
+  } else if (e.code === 'KeyP' && !e.repeat) {
+    // Antibióticos — cura infección.
+    status.tryAntibiotics();
   } else if (e.code === 'KeyF') {
     if (vehicle.isDriving()) {
       vehicle.exit();
@@ -516,11 +630,11 @@ addEventListener('keydown', (e) => {
     if (inv.consume('meat_cooked', 1)) { player.eat('meat_cooked'); ate = 'CARNE COCIDA'; }
     else if (inv.consume('berry', 1))  { player.eat('berry'); ate = 'BAYAS'; }
     else if (inv.consume('meat_raw', 1)) { player.eat('meat_raw'); ate = 'CARNE CRUDA (-5 HP)'; }
-    if (ate) { logLine(`+ ${ate}`); sfx.playPickup?.(); }
+    if (ate) { logLine(`+ ${ate}`); sfx.playPickup?.(); quests.track('eat_food', 1); }
     else logLine('Sin comida');
   } else if (e.code === 'KeyU' && !e.repeat) {
     // Quick-drink water bottle.
-    if (inv.consume('water_bottle', 1)) { player.drink(); logLine('+ AGUA'); sfx.playPickup?.(); }
+    if (inv.consume('water_bottle', 1)) { player.drink(); logLine('+ AGUA'); sfx.playPickup?.(); quests.track('drink_water', 1); }
     else logLine('Sin agua');
   }
   // NOTE: Build (Z) / Map (M) / Stash (X) están deshabilitados por ahora.
@@ -677,6 +791,9 @@ function frame(now) {
   player.nearFire = survival.isNearAnyFire(player.pos.x, player.pos.z);
   player.tickSurvival(dt, isNightServer);
   player.regen(dt);
+  status.tick(dt);             // sangrado / infección
+  traps.update(dt);            // cepos chequean enemigos cercanos
+  trader.update(dt, player.pos);
   setHP(player.hp);
   setSurvival(player.hunger, player.thirst, player.warmth);
   setCompass(player.yaw());
@@ -722,14 +839,16 @@ function frame(now) {
     }
   }
 
-  // Interaction prompt — priority: crate > plant > bush > lake > vehicle.
+  // Interaction prompt — priority: crate > trader > plant > bush > lake > vehicle.
   if (player.locked && player.hp > 0) {
     const c = nearestInRange(player.pos);
-    const plant = !c ? survival.nearestPlantInRange(player.pos) : null;
-    const bush = (!c && !plant) ? survival.nearestBushInRange(player.pos) : null;
-    const lake = (!c && !plant && !bush) ? survival.nearestLakeInRange(player.pos) : null;
-    const vp = (!c && !plant && !bush && !lake) ? vehicle.nearbyVehiclePrompt(player.pos) : null;
+    const tr = !c ? trader.nearestInRange(player.pos) : null;
+    const plant = (!c && !tr) ? survival.nearestPlantInRange(player.pos) : null;
+    const bush = (!c && !tr && !plant) ? survival.nearestBushInRange(player.pos) : null;
+    const lake = (!c && !tr && !plant && !bush) ? survival.nearestLakeInRange(player.pos) : null;
+    const vp = (!c && !tr && !plant && !bush && !lake) ? vehicle.nearbyVehiclePrompt(player.pos) : null;
     nearbyCrate = c || null;
+    nearbyTrader = tr || null;
     nearbyPlant = plant || null;
     nearbyBush = bush || null;
     nearbyLake = lake || null;
@@ -740,7 +859,8 @@ function frame(now) {
                 : c.tableKey === 'animal' ? 'restos del animal'
                 : 'cofre';
       showInteract(c.localLoot ? `recoger ${tier}` : `abrir ${tier}`);
-    } else if (plant) showInteract('recoger planta medicinal');
+    } else if (tr) showInteract('hablar con el comerciante');
+    else if (plant) showInteract('recoger planta medicinal');
     else if (bush) showInteract('recoger bayas');
     else if (lake) showInteract('rellenar botella');
     else if (vp) showInteract(vp.replace('[F]', '').trim());
@@ -758,6 +878,10 @@ function frame(now) {
     profile.daysSurvived = (profile.daysSurvived | 0) + 1;
     saveProfile(profile);
     logLine(`★ DIA ${inSessionDay}`);
+  }
+  // Survive-night tracking — al amanecer (06:00) marcamos quest.
+  if (_lastClockHour < 6 && h >= 6 && h < 7) {
+    quests.track('survive_night', 1);
   }
   _lastClockHour = h;
   setDay(inSessionDay);

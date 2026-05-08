@@ -49,9 +49,14 @@ export const ITEMS = {
   // Resources.
   wood:            { label: 'MADERA',         max: 50, rarity: 'common' },
   stone:           { label: 'PIEDRA',         max: 30, rarity: 'common' },
+  scrap:           { label: 'CHATARRA',       max: 99, rarity: 'common' },
   campfire:        { label: 'HOGUERAS',       max: 5,  rarity: 'uncommon' },
   wall_piece:      { label: 'PARED',          max: 30, rarity: 'common' },
   bedroll_item:    { label: 'CAMA',           max: 3,  rarity: 'uncommon' },
+  // Meds raros.
+  antibiotics:     { label: 'ANTIBIOTICOS',   max: 5,  rarity: 'rare' },
+  // Trampas.
+  bear_trap:       { label: 'CEPO',           max: 5,  rarity: 'uncommon' },
 };
 
 const state = {
@@ -79,9 +84,12 @@ const state = {
   water_bottle: 1,
   wood: 0,
   stone: 0,
+  scrap: 0,
   campfire: 0,
   wall_piece: 0,
   bedroll_item: 0,
+  antibiotics: 0,
+  bear_trap: 0,
   kills: 0,
 };
 
@@ -142,6 +150,7 @@ export const RECIPES = [
   { id: 'craft_bandage', label: 'VENDA',          requires: { wood: 2 },            produces: { bandage: 1 } },
   { id: 'craft_campfire',label: 'HOGUERA',        requires: { wood: 5, stone: 2 },  produces: { campfire: 1 } },
   { id: 'craft_grenade', label: 'GRANADA',        requires: { stone: 3, wood: 1 },  produces: { grenade: 1 } },
+  { id: 'craft_bear_trap', label: 'CEPO',         requires: { stone: 4, wood: 2, scrap: 3 }, produces: { bear_trap: 1 } },
   { id: 'craft_water',   label: 'BOTELLA AGUA',   requires: {},                     produces: {}, special: 'fillWater' },
 ];
 

@@ -204,8 +204,8 @@ function tryFire() {
     }
   }
 
-  // Final damage with headshot bonus.
-  const finalDmg = isHeadshot ? Math.round(cfg.dmg * 1.6) : cfg.dmg;
+  // Final damage with headshot bonus (x2). Sniper headshot oneshots casi todo.
+  const finalDmg = isHeadshot ? Math.round(cfg.dmg * 2.0) : cfg.dmg;
   network.shoot(_origin, _dir, hitId, finalDmg);
 
   // Damage number floats up at impact.

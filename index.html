@@ -64,6 +64,50 @@
     /* Damage flash */
     #dmgFlash { position: fixed; inset: 0; background: rgba(180,0,0,0); pointer-events: none; transition: background 0.25s; }
 
+    /* XP / nivel row */
+    #xpRow { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-family: monospace; font-size: 11px; color: #aaa; letter-spacing: 1px; }
+    #xpBar { flex: 1; height: 6px; background: rgba(0,0,0,0.6); border: 1px solid #444; }
+    #xpFill { height: 100%; background: linear-gradient(90deg, #f0c060, #ffd070); transition: width 0.3s; }
+    #xpRow #lvlNum { color: #f0c060; font-weight: 700; }
+    #xpText { font-size: 10px; color: #888; }
+
+    /* Status indicators (bleeding, infection) */
+    #statusRow { display: flex; gap: 6px; margin-top: 4px; font-family: monospace; font-size: 10px; letter-spacing: 1px; }
+    #statusRow.hidden { display: none; }
+    .statusBleed  { background: rgba(80,0,0,0.85); color: #ff7070; padding: 2px 8px; border: 1px solid #722; animation: pulseBleed 1s infinite; }
+    .statusInfect { background: rgba(40,60,0,0.85); color: #b0e070; padding: 2px 8px; border: 1px solid #4a6; }
+    .statusBleed.hidden, .statusInfect.hidden { display: none; }
+    @keyframes pulseBleed { 0%,100% { opacity: 0.85; } 50% { opacity: 1; box-shadow: 0 0 6px rgba(255,80,80,0.6); } }
+
+    /* Quest panel — top right under minimap */
+    #questPanel { position: fixed; right: 12px; top: 200px; width: 220px; background: rgba(10,12,18,0.7); border: 1px solid #2a2a2c; padding: 8px 10px; font-family: monospace; font-size: 11px; color: #ccc; pointer-events: none; }
+    .questHeader { color: #f0c060; font-weight: 700; letter-spacing: 2px; font-size: 10px; margin-bottom: 6px; }
+    .qItem { margin-bottom: 5px; padding: 3px 0; border-top: 1px dashed #333; }
+    .qItem:first-child { border-top: 0; }
+    .qItem .qLabel { color: #ddd; }
+    .qItem .qProg { color: #f0c060; font-weight: 700; float: right; font-size: 10px; }
+    .qItem.done .qLabel { color: #48d068; text-decoration: line-through; opacity: 0.7; }
+    .qItem.done .qProg { color: #48d068; }
+    .qItem .qBar { height: 3px; background: rgba(0,0,0,0.5); margin-top: 3px; }
+    .qItem .qBarFill { height: 100%; background: #f0c060; transition: width 0.3s; }
+    .qItem.done .qBarFill { background: #48d068; }
+
+    /* Trader modal */
+    #traderPanel { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 9; backdrop-filter: blur(2px); }
+    #traderPanel.hidden { display: none; }
+    .traderModal { background: linear-gradient(180deg, rgba(40,28,18,0.95), rgba(28,20,14,0.95)); border: 1px solid #6a4a22; min-width: 720px; min-height: 480px; font-family: system-ui, sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,0.7); }
+    .traderHeader { display: flex; justify-content: space-between; align-items: center; padding: 10px 18px; background: rgba(0,0,0,0.4); border-bottom: 1px solid #6a4a22; color: #f0c060; font-weight: 700; letter-spacing: 3px; font-size: 14px; }
+    .traderHint { color: #aaa; font-size: 11px; letter-spacing: 1px; }
+    .traderBody { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px; }
+    .traderColumn { background: rgba(0,0,0,0.3); border: 1px solid #4a3a22; padding: 8px 10px; min-height: 360px; }
+    .traderColTitle { color: #f0c060; font-size: 11px; letter-spacing: 2px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #4a3a22; }
+    .traderRow { display: flex; justify-content: space-between; align-items: center; padding: 5px 4px; font-size: 12px; color: #ddd; cursor: pointer; transition: background 0.1s; border-radius: 2px; }
+    .traderRow:hover { background: rgba(80,60,30,0.4); }
+    .traderRow.unaffordable { opacity: 0.4; cursor: not-allowed; }
+    .traderRow .trCost { color: #f0c060; font-weight: 700; font-family: monospace; }
+    .traderFooter { padding: 10px 18px; background: rgba(0,0,0,0.4); border-top: 1px solid #6a4a22; color: #aaa; font-size: 12px; letter-spacing: 1px; text-align: right; }
+    .traderScrapNum { color: #f0c060; font-weight: 700; font-size: 16px; font-family: monospace; }
+
     /* =========================================================
        Custom cursor — flecha dorada estilo survival.
        Solo se ve cuando NO hay pointer lock (menú principal,
@@ -325,6 +369,46 @@
     </div>
     <div id="killRow"><span class="ammoLabel">BAJAS</span> <span id="killCount">0</span></div>
     <div id="armorRow"><span class="ammoLabel">ARMADURA</span> <span id="armorPct">0%</span></div>
+    <!-- Barra de XP + nivel -->
+    <div id="xpRow">
+      <span class="ammoLabel">NIVEL <span id="lvlNum">1</span></span>
+      <div id="xpBar"><div id="xpFill" style="width:0%"></div></div>
+      <span id="xpText" class="ammoLabel">0 / 80 XP</span>
+    </div>
+    <!-- Indicadores de status (sangrado / infección) -->
+    <div id="statusRow" class="hidden">
+      <span class="statusBleed hidden" id="statusBleed">★ SANGRANDO</span>
+      <span class="statusInfect hidden" id="statusInfect">☣ INFECTADO</span>
+    </div>
+  </div>
+
+  <!-- Quest panel — top-right (debajo del minimapa) -->
+  <div id="questPanel">
+    <div class="questHeader">★ MISIONES DEL DIA</div>
+    <div id="questList"></div>
+  </div>
+
+  <!-- Trader panel — modal -->
+  <div id="traderPanel" class="hidden">
+    <div class="traderModal">
+      <div class="traderHeader">
+        <span>★ COMERCIANTE</span>
+        <span class="traderHint">[E] cerrar</span>
+      </div>
+      <div class="traderBody">
+        <div class="traderColumn">
+          <div class="traderColTitle">COMPRAR (chatarra)</div>
+          <div id="traderShopList"></div>
+        </div>
+        <div class="traderColumn">
+          <div class="traderColTitle">VENDER (por chatarra)</div>
+          <div id="traderBuyList"></div>
+        </div>
+      </div>
+      <div class="traderFooter">
+        Tenés <span id="traderScrap" class="traderScrapNum">0</span> chatarra
+      </div>
+    </div>
   </div>
 
   <!-- Mini-map: top-right canvas. Player at center, north up, 100m range. -->

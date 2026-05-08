@@ -61,6 +61,7 @@ export const player = {
   vy: 0,
   onGround: false,
   hp: 100,
+  maxHp: 100,
   stamina: STAMINA_MAX,
   staminaCooldown: 0,
   // Survival stats — drain over time, damage you when they hit 0.
@@ -92,7 +93,7 @@ export const player = {
     this.lastHitAt = performance.now() / 1000;
   },
   respawn() {
-    this.hp = 100;
+    this.hp = this.maxHp || 100;
     this.stamina = STAMINA_MAX;
     this.staminaCooldown = 0;
     this.pos.set(0, heightAt(0, 0) + EYE_HEIGHT, 0);
@@ -109,10 +110,11 @@ export const player = {
   // HP regen — sumar lentamente si no fuiste hit en los ultimos 5s.
   // HP regen también requiere comer y beber: si hunger o thirst en 0, no regen.
   regen(dt) {
-    if (this.hp > 0 && this.hp < 100) {
+    const max = this.maxHp || 100;
+    if (this.hp > 0 && this.hp < max) {
       const now = performance.now() / 1000;
       if (now - (this.lastHitAt || 0) >= 5 && this.hunger > 10 && this.thirst > 10) {
-        this.hp = Math.min(100, this.hp + 4 * dt);
+        this.hp = Math.min(max, this.hp + 4 * dt);
       }
     }
   },
