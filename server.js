@@ -97,11 +97,11 @@ function _rawHeight(x, z) {
 // Se incluyen TOWNS, BUNKERS y POIs (cabins/heli/gas) para que ningún
 // edificio quede atascado en pendiente.
 const TOWN_FLAT = [
-  { cx: -300, cz:  280, r: 38, transition: 18 },
-  { cx:  310, cz:  300, r: 38, transition: 18 },
-  { cx: -320, cz: -260, r: 38, transition: 18 },
-  { cx:  280, cz: -320, r: 38, transition: 18 },
-  { cx:    0, cz: -200, r: 95, transition: 25 },
+  { cx: -300, cz:  280, r: 60, transition: 22 },
+  { cx:  310, cz:  300, r: 60, transition: 22 },
+  { cx: -320, cz: -260, r: 60, transition: 22 },
+  { cx:  280, cz: -320, r: 60, transition: 22 },
+  { cx:    0, cz: -200, r: 130, transition: 35 },
   // Bunkers
   { cx:  150, cz:    0, r: 14, transition: 8 },
   { cx: -240, cz:  240, r: 14, transition: 8 },
@@ -229,36 +229,61 @@ function genTownBuildings(centerX, centerZ, count, seed) {
   let s = seed;
   const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
   const buildings = [];
-  // Cell separation aumentado (12→16 town, 13→17 city) para evitar que
-  // las puertas de unas casas queden contra paredes de otras.
+  // Cell separation — ciudades más densas (12m), towns un poco más spread
+  // (14m). Puerta siempre +Z para evitar bloqueos con vecinos.
   const isCity = count >= 12;
-  const cell = isCity ? 17 : 16;
+  const cell = isCity ? 13 : 14;
   const cols = Math.ceil(Math.sqrt(count));
+  // 1 comisaría + 1 hospital obligatorios por town (no en city).
+  const policeIdx = isCity ? -1 : 0;
+  const hospitalIdx = isCity ? -1 : 1;
   for (let i = 0; i < count; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const ox = (col - (cols - 1) / 2) * cell + (rng() - 0.5) * 3;  // jitter más chico
-    const oz = (row - (cols - 1) / 2) * cell + (rng() - 0.5) * 3;
-    const w = isCity ? 7.5 + rng() * 3.0 : 5.5 + rng() * 2.5;
-    const h = isCity ? 7.5 + rng() * 3.0 : 5.5 + rng() * 2.5;
-    // Rotación: ahora siempre 0 (puerta a +Z) para evitar que el doorway
-    // quede mirando contra otra casa. La variabilidad visual viene del
-    // tamaño + posición.
-    const ry = 0;
-    buildings.push({ dx: ox, dz: oz, w, h, ry });
+    const ox = (col - (cols - 1) / 2) * cell + (rng() - 0.5) * 2;
+    const oz = (row - (cols - 1) / 2) * cell + (rng() - 0.5) * 2;
+    let kind = 'normal';
+    let floors = 1;
+    let w, h;
+    if (i === policeIdx) {
+      kind = 'police';
+      w = 9; h = 8; floors = 1;
+    } else if (i === hospitalIdx) {
+      kind = 'hospital';
+      w = 10; h = 9; floors = 2;
+    } else if (isCity) {
+      // Helix Lab: bloques de torre 2-12 pisos. Variabilidad mucha.
+      const r = rng();
+      if      (r > 0.85) floors = 8 + Math.floor(rng() * 5);   // 8-12 pisos rascacielos
+      else if (r > 0.65) floors = 4 + Math.floor(rng() * 4);   // 4-7 pisos
+      else if (r > 0.40) floors = 2 + Math.floor(rng() * 2);   // 2-3 pisos
+      else               floors = 1;                            // 1 piso
+      w = 7.5 + rng() * 3.0;
+      h = 7.5 + rng() * 3.0;
+      // Edificios anchos ocasionales (oficinas/gimnasios).
+      if (rng() < 0.20) { w *= 1.4; h *= 1.4; floors = Math.min(floors, 3); }
+    } else {
+      // Towns regulares: mayoría 1-3 pisos, ocasional torre 5-7.
+      const r = rng();
+      if      (r > 0.92) floors = 5 + Math.floor(rng() * 3);   // 5-7 pisos torre
+      else if (r > 0.70) floors = 2 + Math.floor(rng() * 2);   // 2-3 pisos
+      else               floors = 1;
+      w = 5.5 + rng() * 2.5;
+      h = 5.5 + rng() * 2.5;
+    }
+    buildings.push({ dx: ox, dz: oz, w, h, ry: 0, floors, kind });
   }
   return buildings;
 }
 
 const TOWNS = [
-  // Cuatro towns regulares spread por el mapa expandido. Cada town tiene
-  // 8 edificios (era 6) con 1-3 zombies durmiendo cada uno.
-  { id: 'westhaven',  cx: -300, cz:  280, type: 'town', buildings: genTownBuildings(-300,  280, 8, 11), label: 'Westhaven' },
-  { id: 'eastfield',  cx:  310, cz:  300, type: 'town', buildings: genTownBuildings( 310,  300, 8, 22), label: 'Eastfield' },
-  { id: 'pinecreek',  cx: -320, cz: -260, type: 'town', buildings: genTownBuildings(-320, -260, 8, 33), label: 'Pinecreek' },
-  { id: 'southridge', cx:  280, cz: -320, type: 'town', buildings: genTownBuildings( 280, -320, 8, 44), label: 'Southridge' },
-  // The science city — más grande, científicos custodiando loot premium.
-  { id: 'helix-lab',  cx:  0,   cz: -200, type: 'city', buildings: genTownBuildings(  0, -200, 28, 77), label: 'Helix Lab' },
+  // Towns más densos: 18 edificios c/u (incluye 1 comisaría + 1 hospital).
+  { id: 'westhaven',  cx: -300, cz:  280, type: 'town', buildings: genTownBuildings(-300,  280, 18, 11), label: 'Westhaven' },
+  { id: 'eastfield',  cx:  310, cz:  300, type: 'town', buildings: genTownBuildings( 310,  300, 18, 22), label: 'Eastfield' },
+  { id: 'pinecreek',  cx: -320, cz: -260, type: 'town', buildings: genTownBuildings(-320, -260, 18, 33), label: 'Pinecreek' },
+  { id: 'southridge', cx:  280, cz: -320, type: 'town', buildings: genTownBuildings( 280, -320, 18, 44), label: 'Southridge' },
+  // Helix Lab — ciudad densa con rascacielos.
+  { id: 'helix-lab',  cx:  0,   cz: -200, type: 'city', buildings: genTownBuildings(  0, -200, 40, 77), label: 'Helix Lab' },
 ];
 
 // Compute world-space center of each building so spawn / wake checks

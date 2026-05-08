@@ -50,45 +50,89 @@ let lavaMesh = null;
 function makeVolcanoMesh() {
   const g = new THREE.Group();
   const rockMat = new THREE.MeshStandardMaterial({ color: 0x2a1818, roughness: 0.95 });
+  const darkRockMat = new THREE.MeshStandardMaterial({ color: 0x1a0e0e, roughness: 0.98 });
   const lavaMat = new THREE.MeshStandardMaterial({
-    color: 0xff4010,
-    emissive: 0xff5020,
-    emissiveIntensity: 1.8,
-    roughness: 0.4,
+    color: 0xff4010, emissive: 0xff5020, emissiveIntensity: 1.8, roughness: 0.4,
   });
-  // Cono base — geometry trunc cone con radius bottom 22m, top 8m, height 14m.
-  const cone = new THREE.Mesh(
-    new THREE.CylinderGeometry(VOLCANO_DAMAGE_R + 2, VOLCANO_OUTER_R, 14, 16),
-    rockMat,
-  );
-  cone.position.y = 7;
-  g.add(cone);
-  // Cráter — disco lava emisivo arriba.
-  const crater = new THREE.Mesh(new THREE.CircleGeometry(VOLCANO_DAMAGE_R, 24), lavaMat);
-  crater.rotation.x = -Math.PI / 2;
-  crater.position.y = 14.05;
-  g.add(crater);
-  // Lava río descendente desde el cráter (1 ribbon visual).
-  const flowGeom = new THREE.BoxGeometry(2.5, 0.4, 18);
-  flowGeom.translate(0, 0, 9);
-  const flow = new THREE.Mesh(flowGeom, lavaMat);
-  flow.position.set(0, 7, 5);
-  flow.rotation.y = Math.random() * Math.PI;
-  g.add(flow);
-  // Light source en el cráter.
-  const light = new THREE.PointLight(0xff5020, 4, 60, 2);
-  light.position.set(0, 12, 0);
+  const lavaBrightMat = new THREE.MeshStandardMaterial({
+    color: 0xffaa20, emissive: 0xffaa20, emissiveIntensity: 2.5, roughness: 0.3,
+  });
+  // VOLCÁN ABIERTO — anillo de roca con cráter HUNDIDO (no cerrado).
+  // Un anillo (TorusGeometry hueco) forma el borde exterior; adentro
+  // hay un pozo de lava varios metros bajo el labio.
+  const RIM_R   = 18;        // radio exterior del labio
+  const CRATER_R = 12;        // radio del pozo de lava (interior del anillo)
+  const RIM_H   = 6;         // altura del labio
+  // Anillo — varios bloques de roca formando un ring irregular.
+  const SEG = 18;
+  for (let i = 0; i < SEG; i++) {
+    const a = (i / SEG) * Math.PI * 2;
+    const r = RIM_R + (Math.random() - 0.5) * 3;
+    const blockH = RIM_H + Math.random() * 2 - 1;
+    const blockW = 4.5 + Math.random() * 2;
+    const block = new THREE.Mesh(
+      new THREE.BoxGeometry(blockW, blockH, blockW),
+      i % 3 === 0 ? darkRockMat : rockMat,
+    );
+    block.position.set(Math.cos(a) * r, blockH / 2, Math.sin(a) * r);
+    block.rotation.y = a + Math.random() * 0.3;
+    block.rotation.x = (Math.random() - 0.5) * 0.15;
+    g.add(block);
+  }
+  // POZO DE LAVA — disco hundido al nivel del suelo, brillante.
+  // Posicionado a -2m respecto a la base, dándole sensación de profundidad.
+  const lavaPit = new THREE.Mesh(new THREE.CircleGeometry(CRATER_R, 32), lavaBrightMat);
+  lavaPit.rotation.x = -Math.PI / 2;
+  lavaPit.position.y = -2.0;
+  g.add(lavaPit);
+  // Anillo lava más oscuro (borde del pozo).
+  const lavaRing = new THREE.Mesh(new THREE.RingGeometry(CRATER_R, CRATER_R + 1.4, 32), lavaMat);
+  lavaRing.rotation.x = -Math.PI / 2;
+  lavaRing.position.y = -1.5;
+  g.add(lavaRing);
+  // Borbotones de lava — 5 pequeños discos brillantes saltando dentro.
+  const bubbles = [];
+  for (let i = 0; i < 5; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const rr = Math.random() * (CRATER_R - 2);
+    const bubble = new THREE.Mesh(new THREE.SphereGeometry(0.6 + Math.random() * 0.5, 8, 6), lavaBrightMat);
+    bubble.position.set(Math.cos(a) * rr, -1.2 + Math.random() * 0.5, Math.sin(a) * rr);
+    g.add(bubble);
+    bubbles.push({ mesh: bubble, baseY: bubble.position.y, phase: Math.random() * Math.PI * 2 });
+  }
+  // Río de lava saliente — 2 derrames descendentes.
+  for (let i = 0; i < 2; i++) {
+    const a = i === 0 ? -0.5 : 2.6;
+    const flow = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.5, 14), lavaMat);
+    flow.position.set(Math.cos(a) * (RIM_R + 4), 0.5, Math.sin(a) * (RIM_R + 4));
+    flow.rotation.y = a;
+    g.add(flow);
+  }
+  // Humo gris saliendo del cráter — 4 spheres semi-transparentes que suben.
+  const smokeMat = new THREE.MeshBasicMaterial({ color: 0x6a6058, transparent: true, opacity: 0.45, depthWrite: false });
+  const smokes = [];
+  for (let i = 0; i < 6; i++) {
+    const sm = new THREE.Mesh(new THREE.SphereGeometry(2.5 + Math.random() * 1.5, 8, 6), smokeMat);
+    sm.position.set((Math.random() - 0.5) * 8, 4 + Math.random() * 6, (Math.random() - 0.5) * 8);
+    g.add(sm);
+    smokes.push({ mesh: sm, baseY: sm.position.y, phase: Math.random() * Math.PI * 2 });
+  }
+  // Light fuerte rojo desde el pozo.
+  const light = new THREE.PointLight(0xff5020, 6, 80, 2);
+  light.position.set(0, 0.5, 0);
   g.add(light);
-  // Rocks alrededor de la base.
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2 + Math.random() * 0.3;
-    const r = VOLCANO_OUTER_R + 1 + Math.random() * 2;
-    const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8 + Math.random() * 0.6, 0), rockMat);
-    rock.position.set(Math.cos(a) * r, 0.5, Math.sin(a) * r);
+  // Rocas dispersas afuera del anillo.
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2 + Math.random() * 0.3;
+    const r = RIM_R + 6 + Math.random() * 5;
+    const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6 + Math.random() * 0.7, 0), rockMat);
+    rock.position.set(Math.cos(a) * r, 0.4, Math.sin(a) * r);
     rock.rotation.set(Math.random(), Math.random(), Math.random());
     g.add(rock);
   }
-  g.userData.lava = crater;
+  g.userData.lava = lavaPit;
+  g.userData.bubbles = bubbles;
+  g.userData.smokes = smokes;
   return g;
 }
 
@@ -116,10 +160,23 @@ export function tick(dt) {
     lakeMesh.position.y = heightAt(LAKE_POS.x, LAKE_POS.z) - 0.6 + Math.sin(_phase) * 0.05;
     if (lakeMesh.material) lakeMesh.material.opacity = 0.65 + Math.sin(_phase * 1.2) * 0.05;
   }
-  // Volcán: lava pulsa.
+  // Volcán: lava pulsa + borbotones suben/bajan + humo flota.
   if (volcanoGroup && volcanoGroup.userData.lava) {
     const lava = volcanoGroup.userData.lava;
-    if (lava.material) lava.material.emissiveIntensity = 1.4 + Math.abs(Math.sin(_phase * 2)) * 0.6;
+    if (lava.material) lava.material.emissiveIntensity = 2.0 + Math.abs(Math.sin(_phase * 2)) * 0.8;
+  }
+  if (volcanoGroup && volcanoGroup.userData.bubbles) {
+    for (const b of volcanoGroup.userData.bubbles) {
+      b.phase += dt * 2.5;
+      b.mesh.position.y = b.baseY + Math.sin(b.phase) * 0.4;
+    }
+  }
+  if (volcanoGroup && volcanoGroup.userData.smokes) {
+    for (const s of volcanoGroup.userData.smokes) {
+      s.phase += dt * 0.4;
+      s.mesh.position.y = s.baseY + Math.sin(s.phase) * 1.5;
+      s.mesh.rotation.y += dt * 0.2;
+    }
   }
   // Daño al player si está sobre el cráter.
   if (player && player.pos && isNearVolcanoCrater(player.pos.x, player.pos.z)) {

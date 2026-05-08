@@ -16,13 +16,14 @@ const TERRAIN_RES = 144;         // grid resolución, mantiene buen detalle a 80
 const TREE_COUNT = 800;          // 4x árboles → densidad similar al mapa viejo
 const ROCK_COUNT = 240;          // 4x rocas
 
-// Town clearings — alineadas con server. Posiciones nuevas más spread.
+// Town clearings — alineadas con server.TOWN_FLAT. Towns nuevas son más
+// densas (18 edificios) por lo que el clearing es más grande.
 const TOWN_CLEARINGS = [
-  { cx: -300, cz:  280, r: 40 },  // Westhaven (8 edificios)
-  { cx:  310, cz:  300, r: 40 },  // Eastfield
-  { cx: -320, cz: -260, r: 40 },  // Pinecreek
-  { cx:  280, cz: -320, r: 40 },  // Southridge
-  { cx:    0, cz: -200, r: 100 }, // Helix Lab — walled compound, 28 edificios
+  { cx: -300, cz:  280, r: 65 },
+  { cx:  310, cz:  300, r: 65 },
+  { cx: -320, cz: -260, r: 65 },
+  { cx:  280, cz: -320, r: 65 },
+  { cx:    0, cz: -200, r: 140 }, // Helix Lab — 40 edificios
 ];
 
 // =====================================================================
@@ -78,11 +79,11 @@ function _rawHeight(x, z) {
 
 // Town flat areas — debe matchear server.TOWN_FLAT byte-identical.
 const TOWN_FLAT = [
-  { cx: -300, cz:  280, r: 38, transition: 18 },
-  { cx:  310, cz:  300, r: 38, transition: 18 },
-  { cx: -320, cz: -260, r: 38, transition: 18 },
-  { cx:  280, cz: -320, r: 38, transition: 18 },
-  { cx:    0, cz: -200, r: 95, transition: 25 },
+  { cx: -300, cz:  280, r: 60, transition: 22 },
+  { cx:  310, cz:  300, r: 60, transition: 22 },
+  { cx: -320, cz: -260, r: 60, transition: 22 },
+  { cx:  280, cz: -320, r: 60, transition: 22 },
+  { cx:    0, cz: -200, r: 130, transition: 35 },
   { cx:  150, cz:    0, r: 14, transition: 8 },
   { cx: -240, cz:  240, r: 14, transition: 8 },
   { cx:  100, cz: -260, r: 14, transition: 8 },

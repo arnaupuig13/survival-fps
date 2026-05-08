@@ -41,62 +41,107 @@ const MATS = {
 // =====================================================================
 function buildBuilding(b, type) {
   const g = new THREE.Group();
-  const mats = (type === 'city')
+  const isCity = type === 'city';
+  const floors = b.floors | 0 || 1;
+  const kind = b.kind || 'normal';
+  // Materiales — police azul, hospital blanco, otros default.
+  const mats = isCity
     ? { wall: MATS.cityWall, trim: MATS.cityTrim, roof: MATS.cityRoof, glass: MATS.cityGlass }
     : { wall: MATS.townWall, trim: MATS.townTrim, roof: MATS.townRoof };
+  // Override por kind especial.
+  let wallMat = mats.wall;
+  if (kind === 'police') {
+    wallMat = new THREE.MeshStandardMaterial({ color: 0x3a4a78, roughness: 0.7 });
+  } else if (kind === 'hospital') {
+    wallMat = new THREE.MeshStandardMaterial({ color: 0xe8e8ec, roughness: 0.7 });
+  }
 
   const w = b.w, h = b.h;
   const halfW = w / 2, halfH = h / 2;
   const groundY = heightAt(b.wx, b.wz);
+  const totalH = WALL_HEIGHT * floors;
 
-  // Build walls in local coords (door faces +Z by convention).
-  // Back wall (-Z) — solid.
+  // Building con N pisos = paredes apiladas verticalmente.
+  // Back wall (-Z) — solid, alta.
   const back = new THREE.Mesh(
-    new THREE.BoxGeometry(w, WALL_HEIGHT, WALL_THICK), mats.wall,
+    new THREE.BoxGeometry(w, totalH, WALL_THICK), wallMat,
   );
-  back.position.set(0, WALL_HEIGHT / 2, -halfH + WALL_THICK / 2);
+  back.position.set(0, totalH / 2, -halfH + WALL_THICK / 2);
   g.add(back);
-
-  // Side walls (-X and +X) — solid.
   for (const sx of [-1, 1]) {
     const side = new THREE.Mesh(
-      new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, h), mats.wall,
+      new THREE.BoxGeometry(WALL_THICK, totalH, h), wallMat,
     );
-    side.position.set(sx * (halfW - WALL_THICK / 2), WALL_HEIGHT / 2, 0);
+    side.position.set(sx * (halfW - WALL_THICK / 2), totalH / 2, 0);
     g.add(side);
   }
-
-  // Front wall (+Z) — split into two slabs flanking the door + lintel above.
+  // Front: doorway en planta baja + slabs frontales en pisos superiores.
   const slabW = (w - DOOR_WIDTH) / 2;
+  // Planta baja frontal (con doorway).
   for (const sx of [-1, 1]) {
     const slab = new THREE.Mesh(
-      new THREE.BoxGeometry(slabW, WALL_HEIGHT, WALL_THICK), mats.wall,
+      new THREE.BoxGeometry(slabW, WALL_HEIGHT, WALL_THICK), wallMat,
     );
     slab.position.set(sx * (halfW - slabW / 2), WALL_HEIGHT / 2, halfH - WALL_THICK / 2);
     g.add(slab);
   }
-  // Lintel above the door.
   const lintel = new THREE.Mesh(
     new THREE.BoxGeometry(DOOR_WIDTH, WALL_HEIGHT - DOOR_HEIGHT, WALL_THICK), mats.trim,
   );
   lintel.position.set(0, DOOR_HEIGHT + (WALL_HEIGHT - DOOR_HEIGHT) / 2, halfH - WALL_THICK / 2);
   g.add(lintel);
+  // Pisos superiores: pared frontal sólida + ventanas.
+  if (floors > 1) {
+    for (let f = 1; f < floors; f++) {
+      const yBase = WALL_HEIGHT * f;
+      const upperFront = new THREE.Mesh(
+        new THREE.BoxGeometry(w, WALL_HEIGHT, WALL_THICK), wallMat,
+      );
+      upperFront.position.set(0, yBase + WALL_HEIGHT / 2, halfH - WALL_THICK / 2);
+      g.add(upperFront);
+    }
+    // Ventanas: 2-3 cuadrados de glass por piso por pared (front + sides).
+    const windowMat = MATS.cityGlass;
+    const winW = Math.min(0.9, w / 6);
+    const winH = 1.0;
+    for (let f = 0; f < floors; f++) {
+      const yBase = WALL_HEIGHT * f;
+      const winY = yBase + WALL_HEIGHT * 0.55;
+      // Ventanas frontales (saltando la planta baja en la columna central).
+      const winsPerSide = 2;
+      for (let i = 0; i < winsPerSide; i++) {
+        const offset = (i - (winsPerSide - 1) / 2) * (w / (winsPerSide + 1));
+        // Front (excluye doorway en piso 0).
+        if (f > 0 || Math.abs(offset) > DOOR_WIDTH / 2 + 0.4) {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(winW, winH, 0.06), windowMat);
+          win.position.set(offset, winY, halfH - WALL_THICK / 2 - 0.04);
+          g.add(win);
+        }
+        // Side walls.
+        const winSide = new THREE.Mesh(new THREE.BoxGeometry(0.06, winH, winW), windowMat);
+        for (const sx of [-1, 1]) {
+          const ws = winSide.clone();
+          ws.position.set(sx * (halfW - WALL_THICK / 2 - 0.04), winY, offset);
+          g.add(ws);
+        }
+      }
+    }
+  }
 
-  // Roof.
-  if (type === 'city') {
-    // Flat roof slab + glass strip skylight.
+  // Roof — flat para multipisos + city, pitched para town 1 piso.
+  if (isCity || floors > 1 || kind === 'police' || kind === 'hospital') {
     const roof = new THREE.Mesh(
-      new THREE.BoxGeometry(w + 0.2, 0.18, h + 0.2), mats.roof,
+      new THREE.BoxGeometry(w + 0.4, 0.30, h + 0.4), mats.roof,
     );
-    roof.position.set(0, WALL_HEIGHT + 0.09, 0);
+    roof.position.set(0, totalH + 0.15, 0);
     g.add(roof);
-    const glass = new THREE.Mesh(
-      new THREE.BoxGeometry(w * 0.5, 0.05, h * 0.3), mats.glass,
-    );
-    glass.position.set(0, WALL_HEIGHT + 0.18, 0);
-    g.add(glass);
+    if (isCity && floors === 1) {
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.05, h * 0.3), mats.glass);
+      glass.position.set(0, totalH + 0.30, 0);
+      g.add(glass);
+    }
   } else {
-    // Pitched wood roof (simple two-tri prism).
+    // Pitched wood roof (1 piso town).
     const roofGeom = new THREE.BufferGeometry();
     const verts = new Float32Array([
       -halfW - 0.3, 0, -halfH - 0.3,
@@ -110,14 +155,42 @@ function buildBuilding(b, type) {
       1, 2, 4,
       2, 3, 4,
       3, 0, 4,
-      0, 3, 1, 1, 3, 2, // floor of roof closes it
+      0, 3, 1, 1, 3, 2,
     ]);
     roofGeom.setAttribute('position', new THREE.BufferAttribute(verts, 3));
     roofGeom.setIndex(new THREE.BufferAttribute(idx, 1));
     roofGeom.computeVertexNormals();
     const roof = new THREE.Mesh(roofGeom, mats.roof);
-    roof.position.set(0, WALL_HEIGHT, 0);
+    roof.position.set(0, totalH, 0);
     g.add(roof);
+  }
+
+  // Emblems para police/hospital — sobre el dintel, exterior.
+  if (kind === 'police') {
+    const starMat = new THREE.MeshStandardMaterial({ color: 0x4080ff, emissive: 0x2050c0, emissiveIntensity: 1.2 });
+    const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), starMat);
+    star.position.set(0, WALL_HEIGHT + 0.5, halfH + 0.05);
+    star.scale.set(1, 1, 0.3);
+    g.add(star);
+    // Letras "POLICÍA" como caja amarilla.
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.4, 0.05),
+      new THREE.MeshStandardMaterial({ color: 0xfff080, emissive: 0xc0a020, emissiveIntensity: 0.7 }));
+    sign.position.set(0, WALL_HEIGHT - 0.1, halfH + 0.06);
+    g.add(sign);
+  } else if (kind === 'hospital') {
+    const crossMat = new THREE.MeshStandardMaterial({ color: 0xff3030, emissive: 0xc02020, emissiveIntensity: 1.2 });
+    // Cruz médica = 2 boxes perpendiculares.
+    const v = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.0, 0.06), crossMat);
+    v.position.set(0, WALL_HEIGHT + 0.5, halfH + 0.05);
+    g.add(v);
+    const hor = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.25, 0.06), crossMat);
+    hor.position.set(0, WALL_HEIGHT + 0.5, halfH + 0.05);
+    g.add(hor);
+    // Sign blanco con letras.
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.35, 0.05),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x808080, emissiveIntensity: 0.4 }));
+    sign.position.set(0, WALL_HEIGHT - 0.1, halfH + 0.06);
+    g.add(sign);
   }
 
   // (Loot crates are spawned by the server now and managed by loot.js so
