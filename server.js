@@ -243,12 +243,13 @@ const ETYPES = {
   // Three scientist variants. Same lab coat but different weapon profile.
   // Aggro subido para que detecten al player desde más lejos en el mapa
   // grande (era 30-60, ahora 60-90).
-  // Aggro alto para que la ciudad sienta hostil pero damage balanceado
-  // para que el player no se muera de un disparo de sniper cruzando la
-  // ciudad. El sniper en particular era 32 dmg y 1-shoteaba — bajado a 14.
-  scientist:    { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 80,  ranged: true,  weapon: 'rifle'   },
-  sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 18, range: 12,  cd: 1.5, aggro: 60,  ranged: true,  weapon: 'shotgun' },
-  sci_sniper:   { hp: 16,  speed: 1.0, dmg: 14, range: 50,  cd: 2.4, aggro: 80,  ranged: true,  weapon: 'sniper'  },
+  // Cientificos AGRESIVOS — usuario reportó "cientificos siguen sin
+  // matarme" porque solo los snipers (range 50) llegaban al player y
+  // pegaban 14 cada 2.4s. Bumpeo todos los rangos+dmg para que entrar
+  // a Helix Lab sea letal de verdad.
+  scientist:    { hp: 18,  speed: 1.4, dmg: 10, range: 45,  cd: 0.8, aggro: 100, ranged: true,  weapon: 'rifle'   },
+  sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 25, range: 18,  cd: 1.2, aggro: 70,  ranged: true,  weapon: 'shotgun' },
+  sci_sniper:   { hp: 16,  speed: 1.0, dmg: 22, range: 80,  cd: 1.6, aggro: 120, ranged: true,  weapon: 'sniper'  },
   // === ELITES — 4 guardias del boss en la torre central. Cada uno con
   //     un arma distinta. Mucho más HP que un cientifico normal pero
   //     no tanto como el boss. Aggro enorme: te detectan en cuanto
