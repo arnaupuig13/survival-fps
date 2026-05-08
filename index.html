@@ -113,6 +113,10 @@
     /* Difficulty badge — junto al day counter */
     #difficultyBadge { position: fixed; right: 12px; top: 332px; background: rgba(40,8,8,0.7); color: #ff7060; padding: 3px 10px; font-size: 11px; letter-spacing: 2px; font-family: monospace; border: 1px solid #722; }
 
+    /* Flashbang — full white overlay con tinnitus visual */
+    #flashOverlay { position: fixed; inset: 0; background: #ffffff; pointer-events: none; z-index: 12; opacity: 0; transition: opacity 0.1s; }
+    #flashOverlay.show { transition: opacity 0.1s linear; }
+
     /* Storm radioactiva — overlay verde + badge timer */
     #stormOverlay { position: fixed; inset: 0; pointer-events: none; z-index: 5; opacity: 0; transition: opacity 0.5s; background: radial-gradient(circle at center, transparent 30%, rgba(80,180,40,0.25) 80%); animation: stormPulse 1.5s infinite; }
     #stormOverlay.show { opacity: 1; }
@@ -497,6 +501,7 @@
   <div id="weatherOverlay"></div>
   <div id="stormOverlay"></div>
   <div id="stormBadge" class="hidden">☢ TORMENTA</div>
+  <div id="flashOverlay"></div>
   <div id="playerName"></div>
   <div id="log"></div>
 

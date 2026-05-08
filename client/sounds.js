@@ -333,3 +333,85 @@ export function setMusicMode(mode) {
     bus.gain.linearRampToValueAtTime(0.18, t + 2);
   }
 }
+
+// =====================================================================
+// Ambient soundscape — wind + distant moans. Llamados desde main.js
+// con timers para crear atmosfera sin asset files.
+// =====================================================================
+
+// Ráfaga de viento — noise blanco con bandpass que sube y baja.
+export function playWindGust() {
+  if (!ensureAudio()) return;
+  const t0 = ctx.currentTime;
+  const dur = 3 + Math.random() * 3;     // 3-6s
+  const noise = ctx.createBufferSource();
+  noise.buffer = noiseBuffer(Math.round(dur * 1000));
+  const filt = ctx.createBiquadFilter();
+  filt.type = 'bandpass';
+  filt.frequency.setValueAtTime(180, t0);
+  filt.frequency.linearRampToValueAtTime(380, t0 + dur * 0.4);
+  filt.frequency.linearRampToValueAtTime(120, t0 + dur);
+  filt.Q.value = 0.6;
+  const ng = ctx.createGain(); ng.gain.value = 0;
+  ng.gain.setValueAtTime(0, t0);
+  ng.gain.linearRampToValueAtTime(0.06, t0 + 1.0);
+  ng.gain.linearRampToValueAtTime(0.04, t0 + dur * 0.6);
+  ng.gain.linearRampToValueAtTime(0, t0 + dur);
+  noise.connect(filt).connect(ng).connect(masterGain);
+  noise.start(t0);
+}
+
+// Gemido lejano de zombi — más grave y prolongado que el growl normal.
+// Se atenúa con distancia para crear sensación de "hay algo allá".
+export function playDistantMoan(dist = 50) {
+  if (!ensureAudio()) return;
+  const a = Math.max(0.01, attenuate(dist, 120));
+  const t0 = ctx.currentTime;
+  // Tonal — pitch grave que oscila.
+  const osc = ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(80 + Math.random() * 30, t0);
+  osc.frequency.linearRampToValueAtTime(60 + Math.random() * 20, t0 + 1.5);
+  const og = ctx.createGain(); og.gain.value = 0;
+  og.gain.setValueAtTime(0, t0);
+  og.gain.linearRampToValueAtTime(a * 0.20, t0 + 0.4);
+  og.gain.linearRampToValueAtTime(a * 0.15, t0 + 1.3);
+  og.gain.linearRampToValueAtTime(0, t0 + 2.0);
+  // Filtro low-pass para que suene "amortiguado" lejos.
+  const filt = ctx.createBiquadFilter();
+  filt.type = 'lowpass';
+  filt.frequency.value = 350;
+  filt.Q.value = 0.5;
+  osc.connect(filt).connect(og).connect(masterGain);
+  osc.start(t0); osc.stop(t0 + 2.1);
+  // Noise body para textura.
+  const noise = ctx.createBufferSource();
+  noise.buffer = noiseBuffer(2000);
+  const nfilt = ctx.createBiquadFilter();
+  nfilt.type = 'bandpass';
+  nfilt.frequency.value = 280;
+  nfilt.Q.value = 1.5;
+  const ng = ctx.createGain(); ng.gain.value = 0;
+  ng.gain.setValueAtTime(0, t0);
+  ng.gain.linearRampToValueAtTime(a * 0.10, t0 + 0.3);
+  ng.gain.linearRampToValueAtTime(0, t0 + 1.8);
+  noise.connect(nfilt).connect(ng).connect(masterGain);
+  noise.start(t0);
+}
+
+// Sonido sutil de páginas/papeles que vuelan con el viento — de día.
+export function playLeafRustle() {
+  if (!ensureAudio()) return;
+  const t0 = ctx.currentTime;
+  const noise = ctx.createBufferSource();
+  noise.buffer = noiseBuffer(700);
+  const filt = ctx.createBiquadFilter();
+  filt.type = 'highpass';
+  filt.frequency.value = 1200;
+  const ng = ctx.createGain(); ng.gain.value = 0;
+  ng.gain.setValueAtTime(0, t0);
+  ng.gain.linearRampToValueAtTime(0.04, t0 + 0.15);
+  ng.gain.linearRampToValueAtTime(0, t0 + 0.7);
+  noise.connect(filt).connect(ng).connect(masterGain);
+  noise.start(t0);
+}

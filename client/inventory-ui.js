@@ -573,6 +573,16 @@ async function useItem(key) {
   } else if (key === 'antibiotics') {
     const status = await import('./status.js');
     status.tryAntibiotics();
+  } else if (key === 'smoke_grenade') {
+    if (inv.consume('smoke_grenade', 1)) {
+      const smoke = await import('./smoke.js');
+      smoke.throwSmoke();
+    }
+  } else if (key === 'flashbang') {
+    if (inv.consume('flashbang', 1)) {
+      const flashbang = await import('./flashbang.js');
+      flashbang.throwFlashbang();
+    }
   }
 }
 

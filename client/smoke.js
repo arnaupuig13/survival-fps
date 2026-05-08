@@ -10,6 +10,7 @@ import { player } from './player.js';
 import { heightAt } from './world.js';
 import { logLine, showBanner } from './hud.js';
 import * as sfx from './sounds.js';
+import { network } from './network.js';
 
 const LIFETIME = 9.0;
 const RADIUS   = 6.0;
@@ -47,9 +48,11 @@ export function throwSmoke() {
   cloud.group.position.set(tx, heightAt(tx, tz), tz);
   scene.add(cloud.group);
   clouds.push(cloud);
+  // Registrar el área en el server para que enemigos pierdan target.
+  network.registerSmoke?.(tx, tz, RADIUS, LIFETIME * 1000);
   showBanner('GRANADA DE HUMO', 1000);
   sfx.playEmpty?.();
-  logLine('Cobertura de humo desplegada');
+  logLine('Cobertura de humo desplegada — enemigos pierden visión');
 }
 
 // Devuelve true si una posición (x, z) está dentro de alguna nube de humo

@@ -39,6 +39,8 @@ class NetworkClient {
     this.onWeather = null;
     this.onHeliTrader = null;
     this.onStorm = null;
+    this.onFlashbang = null;
+    this.onConvoy = null;
     this.onSupplyDrop = null;
     this._sendAccum = 0;
   }
@@ -154,6 +156,10 @@ class NetworkClient {
       this.onHeliTrader?.(msg);
     } else if (msg.type === 'storm') {
       this.onStorm?.(msg);
+    } else if (msg.type === 'flashbang') {
+      this.onFlashbang?.(msg);
+    } else if (msg.type === 'convoy') {
+      this.onConvoy?.(msg);
     } else if (msg.type === 'supplyDrop') {
       this.onSupplyDrop?.(msg.x, msg.z);
     } else if (msg.type === 'fire') {
@@ -195,6 +201,8 @@ class NetworkClient {
   setName(name) { this._send({ type: 'name', name }); }
   chat(text) { this._send({ type: 'chat', text }); }
   throwGrenade(dx, dy, dz) { this._send({ type: 'grenade', dx, dy, dz }); }
+  registerSmoke(x, z, r, dur) { this._send({ type: 'smokeArea', x, z, r, dur }); }
+  detonateFlashbang(x, z) { this._send({ type: 'flashbang', x, z }); }
 
   _send(msg) {
     if (!this.connected || !this.ws || this.ws.readyState !== 1) return;

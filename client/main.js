@@ -57,6 +57,7 @@ import * as hotbar from './hotbar.js';
 import * as attachments from './attachments.js';
 import * as smoke from './smoke.js';
 import * as storm from './storm.js';
+import * as flashbang from './flashbang.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -376,6 +377,14 @@ network.onHeliTrader = (msg) => {
 network.onStorm = (msg) => {
   storm.setFromServer(msg);
   if (msg.state === 'warning') sfx.playBossSting?.();
+};
+network.onFlashbang = (msg) => {
+  flashbang.onServerFlash(msg);
+};
+network.onConvoy = (_msg) => {
+  // El banner ya lo da el server. Acá podríamos renderizar un avión
+  // visual cruzando — por ahora solo confirma con sound.
+  sfx.playBossSting?.();
 };
 network.onEnemyDead = (id, msg) => {
   const e = enemies.get(id);
@@ -729,6 +738,13 @@ addEventListener('keydown', (e) => {
     } else {
       logLine('Sin granadas de humo');
     }
+  } else if (e.code === 'KeyX' && !e.repeat) {
+    // Granada flashbang — ciega enemigos cercanos 3s.
+    if (inv.consume('flashbang', 1)) {
+      flashbang.throwFlashbang();
+    } else {
+      logLine('Sin granadas flashbang');
+    }
   } else if (e.code === 'KeyF') {
     if (vehicle.isDriving()) {
       vehicle.exit();
@@ -1058,6 +1074,7 @@ function frame(now) {
   heliTrader.update(dt);
   smoke.update(dt);
   storm.tickHud();
+  flashbang.tick();
   setHP(player.hp);
   setSurvival(player.hunger, player.thirst, player.warmth);
   setCompass(player.yaw());
@@ -1172,6 +1189,28 @@ function frame(now) {
   if (inCombat && !_combatMusic) { _combatMusic = true; sfx.setMusicMode?.('combat'); }
   else if (!inCombat && _combatMusic) { _combatMusic = false; sfx.setMusicMode?.(isNightServer ? 'night' : 'day'); }
 
+  // Ambient soundscape — viento ocasional + gemido lejano random según
+  // contexto (más frecuente de noche). No suenan durante hordas activas
+  // (ya hay mucho audio).
+  _ambientAccum += dt;
+  if (player.locked && player.hp > 0 && _ambientAccum > _nextAmbientAt) {
+    _ambientAccum = 0;
+    const isNightNow = isNightServer;
+    const r = Math.random();
+    if (r < 0.55) {
+      sfx.playWindGust?.();
+      _nextAmbientAt = 8 + Math.random() * 6;
+    } else if (r < 0.85 && (isNightNow || Math.random() < 0.5)) {
+      // Distance random 30-100m para variedad de cercanía.
+      const dist = 30 + Math.random() * 70;
+      sfx.playDistantMoan?.(dist);
+      _nextAmbientAt = isNightNow ? (10 + Math.random() * 8) : (18 + Math.random() * 12);
+    } else {
+      sfx.playLeafRustle?.();
+      _nextAmbientAt = 12 + Math.random() * 8;
+    }
+  }
+
   // ADS FOV lerp — sniper auto-zooms further while ADS held.
   // Mirilla equipada: reduce el FOV de ADS (más zoom = más precisión) en
   // todas las armas que no sean sniper (que ya tiene zoom intrínseco).
@@ -1226,6 +1265,8 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 let _combatMusic = false;
+let _ambientAccum = 0;
+let _nextAmbientAt = 6;
 let _recoilKick = 0;
 
 // =====================================================================

@@ -847,6 +847,59 @@ let weatherCheckAccum = 60; // primer tick de clima a los 30s
 let currentWeather = 'clear';
 
 // =====================================================================
+// Smoke areas — los jugadores que tiran granadas de humo registran un
+// área aquí. Los enemigos que están dentro pierden visión del jugador
+// que la causó (su AI los ignora como "nearest").
+// =====================================================================
+const smokeAreas = [];   // { x, z, r, until }
+function isInSmoke(x, z) {
+  const now = Date.now();
+  for (const s of smokeAreas) {
+    if (s.until < now) continue;
+    if (Math.hypot(x - s.x, z - s.z) < s.r) return true;
+  }
+  return false;
+}
+function cleanupSmoke() {
+  const now = Date.now();
+  for (let i = smokeAreas.length - 1; i >= 0; i--) {
+    if (smokeAreas[i].until < now) smokeAreas.splice(i, 1);
+  }
+}
+
+// =====================================================================
+// Convoy aéreo — cada 12-18 min anuncia "AVIÓN DE SUMINISTROS"
+// y dropea 3 cajas en una línea recta a través del mapa.
+// =====================================================================
+let convoyCd = 360;       // primer convoy a los 6 min
+function maybeTriggerConvoy() {
+  if (players.size === 0) return;
+  convoyCd -= AI_DT;
+  if (convoyCd > 0) return;
+  convoyCd = 720 + Math.random() * 360;  // 12-18 min entre convoys
+  // Dirección random — vector unitario.
+  const angle = Math.random() * Math.PI * 2;
+  const dirX = Math.cos(angle), dirZ = Math.sin(angle);
+  // Punto medio random cerca del centro.
+  const mx = (Math.random() * 2 - 1) * (WORLD_HALF * 0.4);
+  const mz = (Math.random() * 2 - 1) * (WORLD_HALF * 0.4);
+  // 3 cajas en línea, espaciado 30m.
+  const spacing = 30;
+  for (let i = 0; i < 3; i++) {
+    const offset = (i - 1) * spacing;
+    const x = mx + dirX * offset;
+    const z = mz + dirZ * offset;
+    if (Math.abs(x) > WORLD_HALF - 5 || Math.abs(z) > WORLD_HALF - 5) continue;
+    const id = nextCrateId++;
+    // Tier military para convoy — armas/ammo militar premium.
+    crates.set(id, { id, x, z, y: heightAt(x, z), tableKey: 'military', townId: null, taken: false });
+    broadcast({ type: 'crateSpawn', c: cPub(crates.get(id)) });
+  }
+  broadcast({ type: 'banner', text: '✈ AVION DE SUMINISTROS — 3 cajas militares en linea' });
+  broadcast({ type: 'convoy', x: mx, z: mz, dirX, dirZ });
+}
+
+// =====================================================================
 // Tormenta radioactiva — battle-royale-ish. Cada 8-12 min se anuncia
 // un círculo seguro. Después de 60s warning, players FUERA del círculo
 // reciben 3 HP/s. Dura 90s, después se libera.
@@ -1075,6 +1128,7 @@ setInterval(() => {
     maybeTriggerScientistPatrol();
     maybeTriggerHeliTrader();
     maybeTriggerStorm();
+    maybeTriggerConvoy();
   }
 
   // Clima: cada 90s real chequeamos si cambia. Lluvia 25%, niebla 15%
@@ -1206,9 +1260,14 @@ setInterval(() => {
     }
   }
 
+  // Limpieza de smoke areas expiradas (1 vez por tick).
+  cleanupSmoke();
+
   // Per-enemy AI.
   const _now = Date.now();
   for (const e of enemies.values()) {
+    // Stunned por flashbang — saltar todo el AI (no se mueve, no ataca).
+    if (e._stunnedUntil && _now < e._stunnedUntil) continue;
     if (e.attackCd > 0) e.attackCd -= AI_DT;
     const cfg = ETYPES[e.etype] || ETYPES.zombie;
     // Burn DoT (incendiary bullets) — 2 HP cada 500ms hasta 5s.
@@ -1223,10 +1282,12 @@ setInterval(() => {
       e._burnUntil = 0;
     }
 
-    // Find nearest alive player.
+    // Find nearest alive player. Players dentro de humo son invisibles
+    // para el AI (los enemies pierden el target).
     let nearest = null, nd2 = Infinity;
     for (const p of players.values()) {
       if (p.hp <= 0) continue;
+      if (isInSmoke(p.x, p.z)) continue;
       const dx = p.x - e.x, dz = p.z - e.z;
       const d2 = dx * dx + dz * dz;
       if (d2 < nd2) { nd2 = d2; nearest = p; }
@@ -1552,6 +1613,26 @@ wss.on('connection', (ws) => {
         player.spawnX = msg.x;
         player.spawnZ = msg.z;
       }
+    } else if (msg.type === 'smokeArea') {
+      // Cliente registró un área de humo. Validamos y la guardamos para
+      // que los enemigos pierdan target ahí.
+      if (!Number.isFinite(msg.x) || !Number.isFinite(msg.z)) return;
+      const r = Math.min(8, Math.max(1, +msg.r || 6));
+      const dur = Math.min(15000, Math.max(1000, +msg.dur || 9000));
+      smokeAreas.push({ x: msg.x, z: msg.z, r, until: Date.now() + dur });
+    } else if (msg.type === 'flashbang') {
+      // Detonación de flashbang en (x, z). Stunea enemigos cercanos 3s
+      // y broadcast a todos para que clientes cerca apliquen white-out.
+      if (!Number.isFinite(msg.x) || !Number.isFinite(msg.z)) return;
+      const FLASH_R = 14;
+      const FLASH_DUR = 3000;
+      const until = Date.now() + FLASH_DUR;
+      for (const e of enemies.values()) {
+        if (e.isBoss) continue;
+        const d = Math.hypot(e.x - msg.x, e.z - msg.z);
+        if (d <= FLASH_R) e._stunnedUntil = until;
+      }
+      broadcast({ type: 'flashbang', x: msg.x, z: msg.z, dur: FLASH_DUR });
     } else if (msg.type === 'name') {
       const name = String(msg.name || '').slice(0, 14).replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || `P${id}`;
       player.name = name;
