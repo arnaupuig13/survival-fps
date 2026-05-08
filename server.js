@@ -567,7 +567,9 @@ function streamTowns() {
       for (let i = 0; i < t.buildings.length; i++) {
         const b = t.buildings[i];
         const isCity = t.type === 'city';
-        const count = isCity ? 1 : (1 + Math.floor(Math.random() * 3)); // 1-3 town
+        // City: 2-3 científicos por edificio (más densidad). Town: 1-3 zombies.
+        const count = isCity ? (2 + Math.floor(Math.random() * 2))
+                             : (1 + Math.floor(Math.random() * 3));
         for (let k = 0; k < count; k++) {
           let etype;
           if (isCity) {
@@ -1119,7 +1121,46 @@ setInterval(() => {
     // Patrulla de scientists o aggro boost (por scream / disparo no
      // silenciado) ignora el aggro range normal.
     const aggroBoosted = e._aggroBoostUntil && Date.now() < e._aggroBoostUntil;
-    if (!e.patrol && !aggroBoosted && d > cfg.aggro) continue;
+    const isScientist = e.etype === 'scientist' || e.etype === 'sci_shotgun' || e.etype === 'sci_sniper';
+    if (!e.patrol && !aggroBoosted && d > cfg.aggro) {
+      // IDLE WANDER para scientists del lab — patrullan cerca de su
+      // posición de spawn (en el town de helix-lab) con heading aleatorio.
+      if (isScientist && e.townId === 'helix-lab') {
+        if (e._idleAnchor == null) e._idleAnchor = { x: e.x, z: e.z };
+        if (e._idleHeading == null) e._idleHeading = { angle: Math.random() * Math.PI * 2, t: 0 };
+        e._idleHeading.t -= AI_DT;
+        if (e._idleHeading.t <= 0) {
+          e._idleHeading.t = 2 + Math.random() * 3;
+          e._idleHeading.angle += (Math.random() - 0.5) * 1.6;
+          // Si se alejaron mucho del ancla, redirigir hacia el ancla.
+          const dxa = e.x - e._idleAnchor.x, dza = e.z - e._idleAnchor.z;
+          if (Math.hypot(dxa, dza) > 8) e._idleHeading.angle = Math.atan2(-dxa, -dza);
+        }
+        const speed = cfg.speed * 0.4;
+        e.x += Math.sin(e._idleHeading.angle) * speed * AI_DT;
+        e.z += Math.cos(e._idleHeading.angle) * speed * AI_DT;
+        e.y = heightAt(e.x, e.z);
+        e.ry = e._idleHeading.angle;
+      }
+      continue;
+    }
+    // ALERTA: si un scientist ENTRA en aggro y no estaba alertado
+    // recientemente, alerta a otros scientists en 35m (boostea su aggro).
+    if (isScientist && (!e._lastAlerted || Date.now() - e._lastAlerted > 30000)) {
+      e._lastAlerted = Date.now();
+      let alerted = 0;
+      for (const other of enemies.values()) {
+        if (other.id === e.id) continue;
+        const otherIsSci = other.etype === 'scientist' || other.etype === 'sci_shotgun' || other.etype === 'sci_sniper';
+        if (!otherIsSci) continue;
+        const od = Math.hypot(other.x - e.x, other.z - e.z);
+        if (od < 35) {
+          other._aggroBoostUntil = Date.now() + 12000;  // 12s de alerta
+          alerted++;
+        }
+      }
+      if (alerted > 0) broadcast({ type: 'banner', text: `⚠ Te detectaron — ${alerted} científicos alertados` });
+    }
 
     // Night buff — melee zombies/wolves move ~20% faster after dusk so the
     // night actually feels different from the day.

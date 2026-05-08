@@ -13,6 +13,7 @@ import { spawnTracer, spawnDamageNumber, spawnBulletHole } from './effects.js';
 import { scene as worldScene } from './three-setup.js';
 import * as ammoTypes from './ammo-types.js';
 import { getActiveTool } from './tools.js';
+import * as attachments from './attachments.js';
 
 // Each weapon names the inventory key it consumes per shot. magazineSize
 // caps the loaded round count; reload pulls from the inventory pool.
@@ -72,36 +73,55 @@ rearL.position.set(0.165, -0.13, -0.32); gunGroup.add(rearL);
 const rearR = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.034, 0.024), sightMat);
 rearR.position.set(0.195, -0.13, -0.32); gunGroup.add(rearR);
 
-// Reflex sight — solo visible cuando tenés `scope` equipado.
-// Diseño: marco DORADO TIPO ANILLO + glass MUY transparente para ver
-// claramente lo que hay detrás + DOT ROJO grande emisivo. Cuando ADS
-// (gunGroup mueve a AIM_POS), el dot queda alineado con el centro de
-// la pantalla (la x=0.18 local cancela el AIM_POS.x=-0.18).
+// Reflex sight — diseño realista CUADRADO. Se equipa por arma vía
+// attachments.equip(). Cuando ADS, el dot queda en el centro de la
+// pantalla porque REFLEX_X=0.18 cancela AIM_POS.x=-0.18.
 const REFLEX_X = 0.18, REFLEX_Y = -0.06, REFLEX_Z = -0.40;
-// Marco — torus dorado emisivo bien visible.
-const reflexFrame = new THREE.Mesh(
-  new THREE.TorusGeometry(0.10, 0.012, 8, 24),
-  new THREE.MeshStandardMaterial({ color: 0xf0c060, emissive: 0xf0c060, emissiveIntensity: 0.6, metalness: 0.7, roughness: 0.4 }),
+const REFLEX_SIZE = 0.045;        // ~4.5cm cuadrado, mucho más chico
+const FRAME_THICK = 0.006;        // espesor del marco
+const FRAME_DEPTH = 0.022;        // profundidad del marco
+// Marco metálico oscuro — 4 barras formando un cuadrado.
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.4, metalness: 0.85 });
+const reflexFrameTop = new THREE.Mesh(
+  new THREE.BoxGeometry(REFLEX_SIZE + FRAME_THICK * 2, FRAME_THICK, FRAME_DEPTH), frameMat,
 );
-reflexFrame.position.set(REFLEX_X, REFLEX_Y, REFLEX_Z);
-// Glass casi totalmente transparente — solo un tinte azulado leve para
-// que se note el marco pero no bloquee la visión.
+reflexFrameTop.position.set(REFLEX_X, REFLEX_Y + REFLEX_SIZE / 2 + FRAME_THICK / 2, REFLEX_Z);
+const reflexFrameBot = new THREE.Mesh(
+  new THREE.BoxGeometry(REFLEX_SIZE + FRAME_THICK * 2, FRAME_THICK, FRAME_DEPTH), frameMat,
+);
+reflexFrameBot.position.set(REFLEX_X, REFLEX_Y - REFLEX_SIZE / 2 - FRAME_THICK / 2, REFLEX_Z);
+const reflexFrameL = new THREE.Mesh(
+  new THREE.BoxGeometry(FRAME_THICK, REFLEX_SIZE, FRAME_DEPTH), frameMat,
+);
+reflexFrameL.position.set(REFLEX_X - REFLEX_SIZE / 2 - FRAME_THICK / 2, REFLEX_Y, REFLEX_Z);
+const reflexFrameR = new THREE.Mesh(
+  new THREE.BoxGeometry(FRAME_THICK, REFLEX_SIZE, FRAME_DEPTH), frameMat,
+);
+reflexFrameR.position.set(REFLEX_X + REFLEX_SIZE / 2 + FRAME_THICK / 2, REFLEX_Y, REFLEX_Z);
+// Base / soporte abajo — para que se vea anclado al arma.
+const reflexMount = new THREE.Mesh(
+  new THREE.BoxGeometry(REFLEX_SIZE * 0.6, FRAME_THICK * 1.5, FRAME_DEPTH * 1.2), frameMat,
+);
+reflexMount.position.set(REFLEX_X, REFLEX_Y - REFLEX_SIZE / 2 - FRAME_THICK * 1.8, REFLEX_Z);
+// Glass casi totalmente transparente con leve tinte.
 const reflexGlass = new THREE.Mesh(
-  new THREE.CircleGeometry(0.10, 24),
-  new THREE.MeshBasicMaterial({ color: 0x80b0d0, transparent: true, opacity: 0.10, depthWrite: false, side: THREE.DoubleSide }),
+  new THREE.PlaneGeometry(REFLEX_SIZE, REFLEX_SIZE),
+  new THREE.MeshBasicMaterial({ color: 0x6090b0, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide }),
 );
 reflexGlass.position.set(REFLEX_X, REFLEX_Y, REFLEX_Z);
-// Dot rojo grande y emisivo — sphere + plane chiquito al centro para
-// que se vea desde cualquier ángulo. depthTest:false así siempre se
-// pinta sobre lo que haya detrás (no se "esconde" detrás del glass).
+// Dot rojo MUY pequeño — punto de mira preciso.
 const reflexDot = new THREE.Mesh(
-  new THREE.SphereGeometry(0.014, 12, 10),
-  new THREE.MeshBasicMaterial({ color: 0xff2020, transparent: true, opacity: 0.95, depthTest: false }),
+  new THREE.CircleGeometry(0.0025, 12),
+  new THREE.MeshBasicMaterial({ color: 0xff2020, transparent: true, opacity: 0.95, depthTest: false, side: THREE.DoubleSide }),
 );
-reflexDot.position.set(REFLEX_X, REFLEX_Y, REFLEX_Z + 0.001);
+reflexDot.position.set(REFLEX_X, REFLEX_Y, REFLEX_Z + 0.0005);
 reflexDot.renderOrder = 999;
 const reflexGroup = new THREE.Group();
-reflexGroup.add(reflexFrame);
+reflexGroup.add(reflexFrameTop);
+reflexGroup.add(reflexFrameBot);
+reflexGroup.add(reflexFrameL);
+reflexGroup.add(reflexFrameR);
+reflexGroup.add(reflexMount);
 reflexGroup.add(reflexGlass);
 reflexGroup.add(reflexDot);
 reflexGroup.visible = false;
@@ -166,7 +186,7 @@ function finishReload() {
   const cfg = WEAPONS[active];
   if (!cfg) return;
   // Extended-mag attachment increases capacity by 50%.
-  const cap = inv.has('ext_mag', 1) ? Math.round(cfg.magazineSize * 1.5) : cfg.magazineSize;
+  const cap = attachments.has(active, 'ext_mag') ? Math.round(cfg.magazineSize * 1.5) : cfg.magazineSize;
   const need = cap - (loaded[active] | 0);
   const got = Math.min(need, inv.get(cfg.ammo));
   if (got > 0) {
@@ -229,7 +249,7 @@ function tryFire() {
   }
   cooldown = cfg.cooldown;
   // Sound — silencer mutes the report. Picks per weapon kind.
-  const silent = inv.has('silencer', 1) && (active === 'pistol' || active === 'smg');
+  const silent = attachments.has(active, 'silencer');
   if (silent) sfx.playEmpty?.();
   else if (active === 'rifle' || active === 'sniper') sfx.playRifle(0);
   else sfx.playPistol(0);
@@ -363,7 +383,7 @@ export function updateWeapons(dt) {
   gunGroup.position.z = HIP_POS.z + (AIM_POS.z - HIP_POS.z) * _aimT;
   // Reflex sight visible solo si tenés `scope` y estás centrando armas
   // de mano (no sniper, que tiene scope intrínseco).
-  reflexGroup.visible = inv.has('scope', 1) && (active === 'pistol' || active === 'smg' || active === 'rifle');
+  reflexGroup.visible = attachments.has(active, 'scope');
   if (cooldown > 0) cooldown -= dt;
   if (muzzle.intensity > 0) muzzle.intensity = Math.max(0, muzzle.intensity - dt * 30);
   // Reload progress.
@@ -383,7 +403,7 @@ export function updateWeapons(dt) {
 export function activeWeaponName() { return WEAPONS[active].name; }
 export function activeWeaponMeta() {
   const cfg = WEAPONS[active];
-  const cap = inv.has('ext_mag', 1) ? Math.round(cfg.magazineSize * 1.5) : cfg.magazineSize;
+  const cap = attachments.has(active, 'ext_mag') ? Math.round(cfg.magazineSize * 1.5) : cfg.magazineSize;
   return { name: cfg.name, loaded: loaded[active] | 0, ammo: inv.get(cfg.ammo), cap };
 }
 // Allow main.js to drive weapon selection via the hotbar.

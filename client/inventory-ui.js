@@ -16,6 +16,7 @@ import { spawnCrate, crates } from './loot.js';
 import { logLine } from './hud.js';
 import * as sfx from './sounds.js';
 import * as hotbar from './hotbar.js';
+import * as attachments from './attachments.js';
 
 // =====================================================================
 // DOM refs (resolved lazily so this module can be imported before the
@@ -85,9 +86,9 @@ const DESCRIPTIONS = {
   sniper_pickup:  'Rifle de francotirador. Calibre pesado, larga distancia.',
   axe:            'Hacha — talá árboles para conseguir madera.',
   pickaxe:        'Pico — picá rocas para conseguir piedra.',
-  scope:          'Mirilla. Auto-equipada en pistola/rifle/SMG/escopeta. Más zoom al apuntar (clic derecho).',
-  silencer:       'Silenciador. Auto-equipado en pistola/SMG. No alerta zombies al disparar.',
-  ext_mag:        'Cargador extendido. Auto-equipado en todas las armas. +50% capacidad de cargador.',
+  scope:          'Mirilla reflex. Equipala a un arma — más zoom y dot rojo al apuntar (clic derecho).',
+  silencer:       'Silenciador. Equipalo a un arma — no alerta zombies al disparar.',
+  ext_mag:        'Cargador extendido. Equipalo a un arma — +50% capacidad de cargador.',
   vest_armor:     'Chaleco antibalas. Reduce daño recibido un 25%.',
   helmet_armor:   'Casco. Reduce daño recibido un 25% (acumulable con chaleco).',
   meat_raw:       'Carne cruda. Comestible pero te quita 5 HP. Mejor cocinala.',
@@ -204,8 +205,31 @@ function renderItemInfo(state, key) {
   const rcol  = (inv.RARITY[meta.rarity] || inv.RARITY.common).color;
   const desc  = DESCRIPTIONS[key] || '';
   const stats = buildStatsHTML(key, meta);
-  const canDrop = !EQUIP_KEYS.has(key); // Equipment can be dropped from paperdoll instead.
+  const canDrop = !EQUIP_KEYS.has(key) && !meta.noDrop;
   const isUsable = USABLE.has(key);
+  const isAttachment = (key === 'scope' || key === 'silencer' || key === 'ext_mag');
+
+  // Para attachments, mostrar dónde está equipado y los botones de equipar.
+  let attachUI = '';
+  if (isAttachment) {
+    const ATT_TARGETS = {
+      scope:    ['pistol','rifle','smg','shotgun','sniper'],
+      silencer: ['pistol','smg','rifle'],
+      ext_mag:  ['pistol','rifle','smg','shotgun','sniper'],
+    };
+    const labels = { pistol: 'PISTOLA', rifle: 'RIFLE', smg: 'SMG', shotgun: 'ESCOPETA', sniper: 'SNIPER' };
+    const owned = { pistol: 'pistol_pickup', rifle: 'rifle_pickup', smg: 'smg_pickup', shotgun: 'shotgun_pickup', sniper: 'sniper_pickup' };
+    const equipped = attachments.whereEquipped(key);
+    const buttons = ATT_TARGETS[key].map((w) => {
+      if (!inv.has(owned[w], 1)) return '';
+      const isOn = equipped === w;
+      return `<button class="attachBtn ${isOn ? 'attachOn' : ''}" data-equip="${w}">${labels[w]}${isOn ? ' ✓' : ''}</button>`;
+    }).join('');
+    attachUI = `
+      <div class="iiAttachLabel">EQUIPAR A:</div>
+      <div class="iiAttach">${buttons}</div>
+    `;
+  }
 
   itemInfo.innerHTML = `
     <div class="iiHead">
@@ -214,16 +238,33 @@ function renderItemInfo(state, key) {
     </div>
     <div class="iiDesc">${desc}</div>
     ${stats ? `<div class="iiStats">${stats}</div>` : ''}
+    ${attachUI}
     <div class="iiActions">
       ${isUsable ? `<button data-act="use">USAR</button>` : ''}
       ${canDrop ? `<button data-act="drop">SOLTAR</button>` : ''}
     </div>
   `;
-  itemInfo.querySelectorAll('button').forEach((b) => {
+  itemInfo.querySelectorAll('button[data-act]').forEach((b) => {
     b.addEventListener('click', () => {
       const act = b.dataset.act;
       if (act === 'use')  useItem(key);
       if (act === 'drop') openDropDialog(key);
+    });
+  });
+  itemInfo.querySelectorAll('button[data-equip]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const weapon = b.dataset.equip;
+      const where = attachments.whereEquipped(key);
+      if (where === weapon) {
+        attachments.unequip(weapon, key);
+        logLine(`${meta.label} desequipado de ${weapon}`);
+      } else {
+        attachments.equip(weapon, key);
+        logLine(`${meta.label} equipado en ${weapon}${where ? ` (movido desde ${where})` : ''}`);
+      }
+      sfx.playPickup?.();
+      // Refresh UI con el nuevo estado.
+      renderItemInfo(inv.getState(), key);
     });
   });
 }

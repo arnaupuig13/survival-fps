@@ -54,6 +54,7 @@ import * as bedroll from './bedroll.js';
 import * as dog from './dog.js';
 import * as heliTrader from './heli-trader.js';
 import * as hotbar from './hotbar.js';
+import * as attachments from './attachments.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -1152,7 +1153,7 @@ function frame(now) {
   // Mirilla equipada: reduce el FOV de ADS (más zoom = más precisión) en
   // todas las armas que no sean sniper (que ya tiene zoom intrínseco).
   const isSniper = getActiveWeapon() === 'sniper';
-  const hasScope = inv.has('scope', 1);
+  const hasScope = attachments.has(getActiveWeapon(), 'scope');
   const adsFov = isSniper ? 22 : (hasScope ? 32 : ADS_FOV);
   const targetFov = _ads ? adsFov : BASE_FOV;
   camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-15 * dt));
