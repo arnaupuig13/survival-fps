@@ -1253,6 +1253,8 @@ function streamTowns() {
           if (!ts.bossSpawned) {
             ts.bossSpawned = true;
             const boss = makeEnemy({ etype: 'boss', x: b.wx, z: b.wz, townId: t.id });
+            // Ancla del boss = posición del tower. Nunca se aleja > 8m.
+            boss._anchor = { x: b.wx, z: b.wz };
             ts.enemyIds.add(boss.id);
             broadcast({ type: 'eSpawn', e: ePub(boss) });
             // 4 elites en las 4 esquinas, cada uno con un arma distinta.
@@ -1263,6 +1265,7 @@ function streamTowns() {
               const ex = b.wx + ox * b.w;
               const ez = b.wz + oz * b.h;
               const elite = makeEnemy({ etype: eliteTypes[k], x: ex, z: ez, townId: t.id });
+              elite._anchor = { x: ex, z: ez };  // ancla cada elite a su esquina
               ts.enemyIds.add(elite.id);
               broadcast({ type: 'eSpawn', e: ePub(elite) });
             }
@@ -2020,6 +2023,11 @@ setInterval(() => {
     let nearest = null, nd2 = Infinity;
     let nearestKind = 'player';
     const myFaction = factionOf(e);
+    // === BOSS + ELITES: solo atacan jugadores ===
+    // No persiguen zombies que vagan cerca. Si no hay player vivo a tiro,
+    // se quedan en el tower. Antes el boss caminaba hacia un zombie a 88m
+    // y abandonaba la torre — ahora se queda esperando al jugador.
+    const isBossOrElite = e.isBoss || cfg.special === 'elite';
     for (const p of players.values()) {
       if (p.hp <= 0) continue;
       if (isInSmoke(p.x, p.z)) continue;
@@ -2028,7 +2036,8 @@ setInterval(() => {
       if (d2 < nd2) { nd2 = d2; nearest = p; nearestKind = 'player'; }
     }
     // Considerar otros NPCs como targets si son hostiles.
-    if (myFaction !== 'passive') {
+    // Boss + elites NO consideran NPCs (solo players) — defienden el tower.
+    if (myFaction !== 'passive' && !isBossOrElite) {
       for (const o of enemies.values()) {
         if (o.id === e.id) continue;
         if (o.hp <= 0) continue;
@@ -2038,6 +2047,26 @@ setInterval(() => {
         const d2 = dx * dx + dz * dz;
         if (d2 < nd2) { nd2 = d2; nearest = o; nearestKind = 'enemy'; }
       }
+    }
+    // Boss + elites sin player a la vista → idle wander en el tower.
+    // Establece ancla la primera vez (posición inicial = tower).
+    if (!nearest && isBossOrElite) {
+      if (e._anchor == null) e._anchor = { x: e.x, z: e.z };
+      // Wander suave dentro del tower (radio 4m).
+      if (e._idleHeading == null) e._idleHeading = { angle: Math.random() * Math.PI * 2, t: 0 };
+      e._idleHeading.t -= AI_DT;
+      if (e._idleHeading.t <= 0) {
+        e._idleHeading.t = 2 + Math.random() * 3;
+        e._idleHeading.angle += (Math.random() - 0.5) * 1.6;
+        const dxa = e.x - e._anchor.x, dza = e.z - e._anchor.z;
+        if (Math.hypot(dxa, dza) > 4) e._idleHeading.angle = Math.atan2(-dxa, -dza);
+      }
+      const sp = cfg.speed * 0.3;
+      e.x += Math.sin(e._idleHeading.angle) * sp * AI_DT;
+      e.z += Math.cos(e._idleHeading.angle) * sp * AI_DT;
+      e.y = heightAt(e.x, e.z);
+      e.ry = e._idleHeading.angle;
+      continue;
     }
     if (!nearest) continue;
     const d = Math.sqrt(nd2);
@@ -2252,6 +2281,21 @@ setInterval(() => {
         const k = HELIX_RADIUS / distH;
         e.x = HELIX_CX + dxh * k;
         e.z = HELIX_CZ + dzh * k;
+        e.y = heightAt(e.x, e.z);
+      }
+    }
+    // === BOSS + ELITES CLAMP TO TOWER ===
+    // El boss y los 4 elites quedan ANCLADOS al boss tower. Aunque
+    // chaseen al player, no se alejan más de 8m de su posición spawn.
+    // Antes el boss caminaba 90m hacia un zombie y abandonaba la torre.
+    if ((e.isBoss || ETYPES[e.etype]?.special === 'elite') && e._anchor) {
+      const ANCHOR_RADIUS = 8;
+      const dxa = e.x - e._anchor.x, dza = e.z - e._anchor.z;
+      const distA = Math.hypot(dxa, dza);
+      if (distA > ANCHOR_RADIUS) {
+        const k = ANCHOR_RADIUS / distA;
+        e.x = e._anchor.x + dxa * k;
+        e.z = e._anchor.z + dza * k;
         e.y = heightAt(e.x, e.z);
       }
     }
