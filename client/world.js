@@ -34,20 +34,63 @@ function hash(x, y) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
+// IMPORTANT: server.js usa este código byte-identical. Si cambiás
+// algo acá, copialo exacto allá o el server y cliente verán terrenos
+// distintos (zombies enterrados o flotando).
+function _smoothstep(t) { return t * t * (3 - 2 * t); }
+
+function _octave(x, z, scale, amp) {
+  const sx = x / scale, sz = z / scale;
+  const x0 = Math.floor(sx), z0 = Math.floor(sz);
+  const fx = sx - x0, fz = sz - z0;
+  const a = hash(x0,     z0);
+  const b = hash(x0 + 1, z0);
+  const c = hash(x0,     z0 + 1);
+  const d = hash(x0 + 1, z0 + 1);
+  const u = _smoothstep(fx);
+  const v = _smoothstep(fz);
+  return (a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + d * u * v) * amp;
+}
+
+// Altura procedural sin flatten — usada como base + para calcular el
+// nivel del centro de cada town.
+function _rawHeight(x, z) {
+  const macro  = _octave(x, z, 220, 18);
+  const hills  = _octave(x, z,  70,  7);
+  const ridges = _octave(x, z,  22,  3);
+  const fine   = _octave(x, z,   7, 0.6);
+  let h = macro + hills + ridges + fine - 14.3;
+  const sign = h >= 0 ? 1 : -1;
+  const abs = Math.abs(h);
+  if (abs > 5) h = sign * (5 + (abs - 5) * 1.7);
+  return h;
+}
+
+// Town flat areas — el terreno se aplana dentro de estos radios.
+const TOWN_FLAT = [
+  { cx: -300, cz:  280, r: 38, transition: 18 },
+  { cx:  310, cz:  300, r: 38, transition: 18 },
+  { cx: -320, cz: -260, r: 38, transition: 18 },
+  { cx:  280, cz: -320, r: 38, transition: 18 },
+  { cx:    0, cz: -200, r: 95, transition: 25 },
+];
+
 export function heightAt(x, z) {
-  function octave(scale, amp) {
-    const sx = x / scale, sz = z / scale;
-    const x0 = Math.floor(sx), z0 = Math.floor(sz);
-    const fx = sx - x0,        fz = sz - z0;
-    const a = hash(x0,     z0);
-    const b = hash(x0 + 1, z0);
-    const c = hash(x0,     z0 + 1);
-    const d = hash(x0 + 1, z0 + 1);
-    const u = fx * fx * (3 - 2 * fx);
-    const v = fz * fz * (3 - 2 * fz);
-    return (a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + d * u * v) * amp;
+  let h = _rawHeight(x, z);
+  for (let i = 0; i < TOWN_FLAT.length; i++) {
+    const t = TOWN_FLAT[i];
+    const dx = x - t.cx, dz = z - t.cz;
+    const outerR = t.r + t.transition;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < outerR * outerR) {
+      const d = Math.sqrt(d2);
+      const flat = _rawHeight(t.cx, t.cz);
+      const t01 = d <= t.r ? 1 : (outerR - d) / t.transition;
+      const eased = _smoothstep(t01);
+      h = h * (1 - eased) + flat * eased;
+    }
   }
-  return octave(28, 2.4) + octave(7, 0.6) - 1.5;
+  return h;
 }
 
 function inAnyClearing(x, z) {
@@ -73,14 +116,30 @@ function buildTerrain() {
   pos.needsUpdate = true;
   geom.computeVertexNormals();
 
+  // Coloración por altura — valles verdes, colinas marrones, cumbres
+  // grises rocosas, picos nevados. Acompaña el relieve dramático.
   const colors = new Float32Array(pos.count * 3);
-  const grass = new THREE.Color(0x4a7a3a);
-  const dirt  = new THREE.Color(0x6a5234);
+  const valley = new THREE.Color(0x3a6a2c);   // verde valle profundo
+  const grass  = new THREE.Color(0x5a8044);   // verde grass
+  const dirt   = new THREE.Color(0x6a5234);   // marrón colina
+  const stone  = new THREE.Color(0x6a6a72);   // gris roca
+  const snow   = new THREE.Color(0xe0e0e8);   // nieve picos
   const tmp = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i);
-    const t = THREE.MathUtils.clamp((y + 1.5) / 3.5, 0, 1);
-    tmp.copy(grass).lerp(dirt, t);
+    if (y < -4) {
+      const t = THREE.MathUtils.clamp((y + 12) / 8, 0, 1);
+      tmp.copy(valley).lerp(grass, t);
+    } else if (y < 4) {
+      const t = THREE.MathUtils.clamp((y + 4) / 8, 0, 1);
+      tmp.copy(grass).lerp(dirt, t);
+    } else if (y < 14) {
+      const t = THREE.MathUtils.clamp((y - 4) / 10, 0, 1);
+      tmp.copy(dirt).lerp(stone, t);
+    } else {
+      const t = THREE.MathUtils.clamp((y - 14) / 10, 0, 1);
+      tmp.copy(stone).lerp(snow, t);
+    }
     colors[i * 3]     = tmp.r;
     colors[i * 3 + 1] = tmp.g;
     colors[i * 3 + 2] = tmp.b;
