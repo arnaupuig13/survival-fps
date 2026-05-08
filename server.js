@@ -1209,6 +1209,7 @@ function streamTowns() {
               ts.enemyIds.add(elite.id);
               broadcast({ type: 'eSpawn', e: ePub(elite) });
             }
+            broadcast({ type: 'banner', text: `[SPAWN] Boss+4 elites @ tower (${b.wx.toFixed(0)},${b.wz.toFixed(0)}) bossId=${boss.id}` });
             broadcast({ type: 'banner', text: '⚠ EL DOCTOR Y SUS 4 ELITES TE ESPERAN EN LA TORRE CENTRAL' });
           }
           continue;   // siempre skip spawn normal en boss_tower
@@ -1984,6 +1985,18 @@ setInterval(() => {
     if (!nearest) continue;
     const d = Math.sqrt(nd2);
 
+    // === DEBUG TELEMETRY ===
+    // Heartbeat para diagnosticar por qué el boss/elites no disparan.
+    // Cada 4s, el boss anuncia su estado al canal de banners. Si no
+    // aparece → o no existe en el mapa, o no encuentra al player.
+    if (e.etype === 'boss' || (e.etype && e.etype.startsWith('sci_elite'))) {
+      if (!e._dbgCd || _now > e._dbgCd) {
+        e._dbgCd = _now + 4000;
+        const cfgDbg = ETYPES[e.etype];
+        broadcast({ type: 'banner', text: `[DBG] ${e.etype} hp=${e.hp} sees ${nearestKind} d=${d.toFixed(0)}m range=${cfgDbg?.range || 0} sleep=${e.sleeping ? 1 : 0}` });
+      }
+    }
+
     // Sleeping: don't move. Wake if a player crosses WAKE_RADIUS.
     if (e.sleeping) {
       if (d < WAKE_RADIUS) {
@@ -2117,6 +2130,23 @@ setInterval(() => {
           if (nearest.hp <= 0) killEnemy(nearest, e.id);
         }
         broadcast({ type: 'eShoot', id: e.id, tx: nearest.x, ty: nearest.y, tz: nearest.z });
+        // === DEBUG === Banner cuando boss/elite/cualquier sci dispara.
+        // Throttled a 1 banner por segundo por entity type para no spamear.
+        if (e.etype === 'boss' || (e.etype && e.etype.startsWith('sci_elite'))) {
+          if (!e._fireDbgCd || _now > e._fireDbgCd) {
+            e._fireDbgCd = _now + 1500;
+            broadcast({ type: 'banner', text: `[FIRE] ${e.etype} → ${nearestKind} dmg=${dmg}` });
+          }
+        }
+      } else if (e.etype === 'boss' || (e.etype && e.etype.startsWith('sci_elite'))) {
+        // === DEBUG === Si NO se cumple la condición de fire, decir por qué.
+        if (!e._whyDbgCd || _now > e._whyDbgCd) {
+          e._whyDbgCd = _now + 4000;
+          const reason = (d >= cfg.range)
+            ? `out of range (d=${d.toFixed(0)}>=${cfg.range})`
+            : `cooldown (${e.attackCd.toFixed(2)}s)`;
+          broadcast({ type: 'banner', text: `[NOFIRE] ${e.etype}: ${reason}` });
+        }
       }
     } else if (cfg.special === 'exploder') {
       // Suicida: corre hacia el player. Si está dentro de range, detona
