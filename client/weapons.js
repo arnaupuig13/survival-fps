@@ -12,6 +12,7 @@ import * as sfx from './sounds.js';
 import { spawnTracer, spawnDamageNumber, spawnBulletHole } from './effects.js';
 import { scene as worldScene } from './three-setup.js';
 import * as ammoTypes from './ammo-types.js';
+import { getActiveTool } from './tools.js';
 
 // Each weapon names the inventory key it consumes per shot. magazineSize
 // caps the loaded round count; reload pulls from the inventory pool.
@@ -133,6 +134,10 @@ function updateGunVisual() {
 function tryFire() {
   if (!player.locked || player.hp <= 0) return;
   if (cooldown > 0 || reloading) return;
+  // Si hay una herramienta melee activa (cuchillo/hacha/pico), NO disparamos
+  // — ese click corresponde al swing manejado por tools.js. Esto evita
+  // disparar la pistola con el hacha en la mano.
+  if (getActiveTool()) return;
   const cfg = WEAPONS[active];
   // Resuelve el tipo de munición activo. Si elegiste especial pero no
   // tenés stock, fallback automático a normal.
@@ -282,6 +287,8 @@ function flashHitMarker(hit, isKill = false) {
 // Per-frame
 // =====================================================================
 export function updateWeapons(dt) {
+  // Ocultar el arma de fuego cuando hay tool melee activa.
+  gunGroup.visible = !getActiveTool();
   if (cooldown > 0) cooldown -= dt;
   if (muzzle.intensity > 0) muzzle.intensity = Math.max(0, muzzle.intensity - dt * 30);
   // Reload progress.
