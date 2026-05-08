@@ -4,27 +4,25 @@
 // If they drift, server-side AI walks a different terrain than the client
 // renders, and zombies clip into walls or float in the air.
 //
-// World is now 400x400 m (WORLD_HALF=200). Towns claim a clearing radius so
-// trees and rocks don't spawn inside them — buildings need open ground.
+// World es ahora 800x800 m (WORLD_HALF=400, 4x área del original). Towns
+// reclaman un clearing radius para que árboles/rocas no spawnen dentro.
 
 import * as THREE from 'three';
 import { scene } from './three-setup.js';
 
-export const WORLD_HALF = 200;
+export const WORLD_HALF = 400;
 const WORLD_SEED = 1337;
-const TERRAIN_RES = 96;          // 96x96 grid → 97 vertices a side. Good for 400 m.
-const TREE_COUNT = 220;
-const ROCK_COUNT = 60;
+const TERRAIN_RES = 144;         // grid resolución, mantiene buen detalle a 800m
+const TREE_COUNT = 800;          // 4x árboles → densidad similar al mapa viejo
+const ROCK_COUNT = 240;          // 4x rocas
 
-// Town clearings — kept in sync with server's TOWN_LOCATIONS centers. World
-// gen avoids spawning trees / rocks within `radius` metres of each. Buildings
-// + sleeping zombies will be placed here later by towns.js.
+// Town clearings — alineadas con server. Posiciones nuevas más spread.
 const TOWN_CLEARINGS = [
-  { cx: -150, cz:  140, r: 32 },  // Westhaven
-  { cx:  155, cz:  150, r: 32 },  // Eastfield
-  { cx: -160, cz: -130, r: 32 },  // Pinecreek
-  { cx:  140, cz: -160, r: 32 },  // Southridge
-  { cx:    0, cz: -100, r: 80 },  // Helix Lab — walled compound
+  { cx: -300, cz:  280, r: 40 },  // Westhaven (8 edificios)
+  { cx:  310, cz:  300, r: 40 },  // Eastfield
+  { cx: -320, cz: -260, r: 40 },  // Pinecreek
+  { cx:  280, cz: -320, r: 40 },  // Southridge
+  { cx:    0, cz: -200, r: 100 }, // Helix Lab — walled compound, 28 edificios
 ];
 
 // =====================================================================

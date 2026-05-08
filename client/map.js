@@ -13,23 +13,30 @@ const WORLD_SIZE = WORLD_HALF * 2;
 // Hardcoded — kept aligned with server.TOWNS / POIS so the map is
 // readable without an extra welcome payload.
 const MAP_TOWNS = [
-  { x: -150, z:  140, label: 'Westhaven', color: '#f0c060' },
-  { x:  155, z:  150, label: 'Eastfield', color: '#f0c060' },
-  { x: -160, z: -130, label: 'Pinecreek', color: '#f0c060' },
-  { x:  140, z: -160, label: 'Southridge', color: '#f0c060' },
-  { x:    0, z: -100, label: 'Helix Lab', color: '#ff5050' },
+  { x: -300, z:  280, label: 'Westhaven', color: '#f0c060' },
+  { x:  310, z:  300, label: 'Eastfield', color: '#f0c060' },
+  { x: -320, z: -260, label: 'Pinecreek', color: '#f0c060' },
+  { x:  280, z: -320, label: 'Southridge', color: '#f0c060' },
+  { x:    0, z: -200, label: 'Helix Lab', color: '#ff5050' },
 ];
 const MAP_POIS = [
-  { x: -80,  z:  60, kind: 'helicopter' },
-  { x:  80,  z:  70, kind: 'helicopter' },
-  { x: -40,  z:  10, kind: 'helicopter' },
-  { x: -90,  z: -40, kind: 'gas' },
-  { x:  100, z: -30, kind: 'gas' },
-  { x:  60,  z: 100, kind: 'cabin' },
-  { x: -100, z:  90, kind: 'cabin' },
-  { x:  30,  z: -50, kind: 'cabin' },
-  { x: -40,  z: -50, kind: 'cabin' },
-  { x: 110,  z:  90, kind: 'cabin' },
+  { x: -160, z:  120, kind: 'helicopter' },
+  { x:  160, z:  140, kind: 'helicopter' },
+  { x:  -80, z:   20, kind: 'helicopter' },
+  { x:  220, z: -100, kind: 'helicopter' },
+  { x: -200, z:  -50, kind: 'helicopter' },
+  { x: -180, z:  -80, kind: 'gas' },
+  { x:  200, z:  -60, kind: 'gas' },
+  { x:    0, z:  340, kind: 'gas' },
+  { x: -350, z:    0, kind: 'gas' },
+  { x:  120, z:  200, kind: 'cabin' },
+  { x: -200, z:  180, kind: 'cabin' },
+  { x:   60, z: -100, kind: 'cabin' },
+  { x:  -80, z: -100, kind: 'cabin' },
+  { x:  220, z:  180, kind: 'cabin' },
+  { x: -260, z:  100, kind: 'cabin' },
+  { x:  340, z:   40, kind: 'cabin' },
+  { x: -100, z:  340, kind: 'cabin' },
 ];
 
 let mapEl = null, ctx = null;

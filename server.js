@@ -51,7 +51,7 @@ const httpServer = http.createServer((req, res) => {
 // Procedural world heightmap. MUST be byte-identical to client/world.js.
 // =====================================================================
 const WORLD_SEED = 1337;
-export const WORLD_HALF = 200; // 400x400 m playable
+export const WORLD_HALF = 400; // 800x800 m playable (4x área del original)
 
 function hash(x, y) {
   let h = (x * 374761393 + y * 668265263 + WORLD_SEED * 982451653) | 0;
@@ -147,15 +147,14 @@ function genTownBuildings(centerX, centerZ, count, seed) {
 }
 
 const TOWNS = [
-  // Four regular towns scattered around the map. Each has 6 buildings with
-  // a sleeping zombie inside. Loot crate inside one random building per town.
-  { id: 'westhaven', cx: -150, cz:  140, type: 'town', buildings: genTownBuildings(-150,  140, 6, 11), label: 'Westhaven' },
-  { id: 'eastfield', cx:  155, cz:  150, type: 'town', buildings: genTownBuildings( 155,  150, 6, 22), label: 'Eastfield' },
-  { id: 'pinecreek', cx: -160, cz: -130, type: 'town', buildings: genTownBuildings(-160, -130, 6, 33), label: 'Pinecreek' },
-  { id: 'southridge', cx:  140, cz: -160, type: 'town', buildings: genTownBuildings( 140, -160, 6, 44), label: 'Southridge' },
-  // The science city — bigger, in the middle-but-offset, with scientists
-  // protecting valuable loot. Boss spawns when 50%+ scientists are dead.
-  { id: 'helix-lab', cx:  0,   cz: -100, type: 'city', buildings: genTownBuildings(  0, -100, 22, 77), label: 'Helix Lab' },
+  // Cuatro towns regulares spread por el mapa expandido. Cada town tiene
+  // 8 edificios (era 6) con 1-3 zombies durmiendo cada uno.
+  { id: 'westhaven',  cx: -300, cz:  280, type: 'town', buildings: genTownBuildings(-300,  280, 8, 11), label: 'Westhaven' },
+  { id: 'eastfield',  cx:  310, cz:  300, type: 'town', buildings: genTownBuildings( 310,  300, 8, 22), label: 'Eastfield' },
+  { id: 'pinecreek',  cx: -320, cz: -260, type: 'town', buildings: genTownBuildings(-320, -260, 8, 33), label: 'Pinecreek' },
+  { id: 'southridge', cx:  280, cz: -320, type: 'town', buildings: genTownBuildings( 280, -320, 8, 44), label: 'Southridge' },
+  // The science city — más grande, científicos custodiando loot premium.
+  { id: 'helix-lab',  cx:  0,   cz: -200, type: 'city', buildings: genTownBuildings(  0, -200, 28, 77), label: 'Helix Lab' },
 ];
 
 // Compute world-space center of each building so spawn / wake checks
@@ -180,30 +179,38 @@ for (const t of TOWNS) {
 //   cabin      — lone wooden cabin, 1 zombie guard, 1 town-tier crate.
 // =====================================================================
 const POIS = [
-  // Three crashed helicopters in mid-map clearings.
-  { id: 'heli-a',  kind: 'helicopter', cx: -80,  cz:  60,  ry: 0.4 },
-  { id: 'heli-b',  kind: 'helicopter', cx:  80,  cz:  70,  ry: -0.3 },
-  { id: 'heli-c',  kind: 'helicopter', cx: -40,  cz:  10,  ry: 1.2 },
-  // Two abandoned gas stations on the routes between towns.
-  { id: 'gas-a',   kind: 'gas',        cx: -90,  cz: -40,  ry: 0 },
-  { id: 'gas-b',   kind: 'gas',        cx:  100, cz: -30,  ry: Math.PI / 2 },
-  // Five lone cabins scattered in the woods.
-  { id: 'cabin-a', kind: 'cabin',      cx:  60,  cz: 100,  ry: 0 },
-  { id: 'cabin-b', kind: 'cabin',      cx: -100, cz:  90,  ry: Math.PI / 3 },
-  { id: 'cabin-c', kind: 'cabin',      cx:  30,  cz: -50,  ry: -0.5 },
-  { id: 'cabin-d', kind: 'cabin',      cx: -40,  cz: -50,  ry: 0.8 },
-  { id: 'cabin-e', kind: 'cabin',      cx: 110,  cz:  90,  ry: 0 },
+  // Helicópteros militares estrellados — custodiados por científicos,
+  // dropean loot militar (city tier).
+  { id: 'heli-a',    kind: 'helicopter', cx: -160, cz:  120, ry: 0.4 },
+  { id: 'heli-b',    kind: 'helicopter', cx:  160, cz:  140, ry: -0.3 },
+  { id: 'heli-c',    kind: 'helicopter', cx:  -80, cz:   20, ry: 1.2 },
+  { id: 'heli-d',    kind: 'helicopter', cx:  220, cz: -100, ry: 2.1 },
+  { id: 'heli-e',    kind: 'helicopter', cx: -200, cz:  -50, ry: 0.8 },
+  // Estaciones de gasolina — zombies guardia, town tier.
+  { id: 'gas-a',     kind: 'gas',        cx: -180, cz:  -80, ry: 0 },
+  { id: 'gas-b',     kind: 'gas',        cx:  200, cz:  -60, ry: Math.PI / 2 },
+  { id: 'gas-c',     kind: 'gas',        cx:    0, cz:  340, ry: 0 },
+  { id: 'gas-d',     kind: 'gas',        cx: -350, cz:    0, ry: Math.PI / 4 },
+  // Cabañas en el bosque — zombies, town tier.
+  { id: 'cabin-a',   kind: 'cabin',      cx:  120, cz:  200, ry: 0 },
+  { id: 'cabin-b',   kind: 'cabin',      cx: -200, cz:  180, ry: Math.PI / 3 },
+  { id: 'cabin-c',   kind: 'cabin',      cx:   60, cz: -100, ry: -0.5 },
+  { id: 'cabin-d',   kind: 'cabin',      cx:  -80, cz: -100, ry: 0.8 },
+  { id: 'cabin-e',   kind: 'cabin',      cx:  220, cz:  180, ry: 0 },
+  { id: 'cabin-f',   kind: 'cabin',      cx: -260, cz:  100, ry: 1.5 },
+  { id: 'cabin-g',   kind: 'cabin',      cx:  340, cz:   40, ry: -1.0 },
+  { id: 'cabin-h',   kind: 'cabin',      cx: -100, cz:  340, ry: 0.3 },
 ];
 
 const POI_GUARDS = {
-  helicopter: ['scientist', 'sci_shotgun'],
-  gas:        ['zombie', 'runner'],
-  cabin:      ['zombie'],
+  helicopter: ['scientist', 'sci_shotgun', 'scientist'],     // 3 guards
+  gas:        ['zombie', 'runner', 'zombie'],                // 3 guards
+  cabin:      ['zombie', 'zombie'],                          // 2 guards
 };
 const POI_CRATES = {
-  helicopter: { count: 2, tier: 'city' },
+  helicopter: { count: 3, tier: 'military' },     // tier nuevo militar
   gas:        { count: 2, tier: 'town' },
-  cabin:      { count: 1, tier: 'town' },
+  cabin:      { count: 2, tier: 'town' },
 };
 const poiState = new Map();
 for (const p of POIS) poiState.set(p.id, { spawned: false, enemyIds: new Set() });
@@ -215,8 +222,8 @@ for (const p of POIS) poiState.set(p.id, { spawned: false, enemyIds: new Set() }
 // rifle_pickup (unlocks the rifle weapon).
 // =====================================================================
 const LOOT_TABLES = {
-  // Street loot — most abundant, common-tier only. Spread thinly across
-  // the wilderness so wandering between towns is never empty-handed.
+  // STREET — loot común desperdigado por el suelo. Sin custodios. Cantidad
+  // mínima, calidad común. Recompensa de exploración.
   street: [
     { item: 'bullet_p',     range: [2, 6] },
     { item: 'wood',         range: [0, 2] },
@@ -225,20 +232,56 @@ const LOOT_TABLES = {
     { item: 'berry',        range: [0, 2] },
     { item: 'water_bottle', chance: 0.10 },
     { item: 'shell',        chance: 0.08 },
+    { item: 'meat_raw',     chance: 0.10 },
+    { item: 'scrap',        chance: 0.20 },
   ],
-  // Zombie houses — moderate ammo, occasional uncommon attachments.
+  // TOWN — casas custodiadas por zombies dormidos. Loot decente: ammo,
+  // bandages, armas básicas, attachments uncommon.
   town: [
-    { item: 'bullet_p',     range: [6, 12] },
-    { item: 'bullet_r',     range: [0, 6] },
-    { item: 'shell',        range: [0, 4] },
-    { item: 'bullet_smg',   range: [0, 6] },
-    { item: 'bandage',      range: [1, 2] },
-    { item: 'wood',         range: [1, 3] },
-    { item: 'stone',        range: [0, 2] },
-    { item: 'shotgun_pickup', chance: 0.12 },
-    { item: 'smg_pickup',     chance: 0.08 },
-    { item: 'vest_armor',     chance: 0.06 },
-    { item: 'ext_mag',        chance: 0.05 },
+    { item: 'bullet_p',       range: [6, 12] },
+    { item: 'bullet_r',       range: [2, 8] },
+    { item: 'shell',          range: [0, 4] },
+    { item: 'bullet_smg',     range: [0, 6] },
+    { item: 'bandage',        range: [1, 3] },
+    { item: 'wood',           range: [1, 3] },
+    { item: 'stone',          range: [0, 2] },
+    { item: 'meat_cooked',    chance: 0.25 },
+    { item: 'water_bottle',   chance: 0.30 },
+    { item: 'berry',          range: [0, 3] },
+    { item: 'scrap',          range: [1, 3] },
+    { item: 'rifle_pickup',   chance: 0.20 },
+    { item: 'shotgun_pickup', chance: 0.15 },
+    { item: 'smg_pickup',     chance: 0.10 },
+    { item: 'vest_armor',     chance: 0.08 },
+    { item: 'ext_mag',        chance: 0.07 },
+    { item: 'axe',            chance: 0.10 },
+    { item: 'pickaxe',        chance: 0.10 },
+    { item: 'campfire',       chance: 0.20 },
+    { item: 'bear_trap',      chance: 0.10 },
+    { item: 'flashlight',     chance: 0.08 },
+  ],
+  // MILITARY — POIs militares (helicópteros) custodiados por científicos.
+  // Cantidad similar a town pero bias a armas/ammo/AP, no comida ni recursos.
+  military: [
+    { item: 'bullet_r',       range: [10, 20] },
+    { item: 'bullet_p',       range: [10, 20] },
+    { item: 'bullet_smg',     range: [6, 14] },
+    { item: 'shell',          range: [4, 10] },
+    { item: 'bullet_r_ap',    range: [0, 8] },
+    { item: 'bullet_p_ap',    range: [0, 6] },
+    { item: 'sniper_round',   range: [0, 4] },
+    { item: 'grenade',        chance: 0.45 },
+    { item: 'bandage',        range: [1, 3] },
+    { item: 'rifle_pickup',   chance: 0.45 },
+    { item: 'shotgun_pickup', chance: 0.25 },
+    { item: 'smg_pickup',     chance: 0.30 },
+    { item: 'vest_armor',     chance: 0.25 },
+    { item: 'helmet_armor',   chance: 0.15 },
+    { item: 'scope',          chance: 0.20 },
+    { item: 'silencer',       chance: 0.12 },
+    { item: 'ext_mag',        chance: 0.18 },
+    { item: 'flashlight',     chance: 0.50 },
+    { item: 'scrap',          range: [3, 7] },
   ],
   // Helix Lab + city POIs — strongly tilted toward attachments + armor.
   city: [
@@ -378,7 +421,7 @@ spawnTownCrates();
 function spawnGroundLoot() {
   let s = 91011;
   const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
-  const TARGET = 80;
+  const TARGET = 280;     // 4x el original (era 80) para densidad similar en mapa expandido
   let placed = 0, tries = 0;
   while (placed < TARGET && tries < TARGET * 25) {
     tries++;
