@@ -519,23 +519,29 @@ export function removeEnemy(id) {
     e.mesh.traverse(c => { if (c.geometry) c.geometry.dispose?.(); });
     return;
   }
-  // Corpse: tumbar el mesh con tween suave — rotación X 0 → -π/2 sobre
-  // 0.6s. Pequeño bounce vertical al impacto.
+  // Corpse RAGDOLL — el cuerpo vuela un poco hacia atrás con velocidad
+  // residual + rotación tumbo. Cae con gravedad hasta tocar suelo, ahí
+  // se queda 60s (con fade en los últimos 5s).
   e.mesh.userData.isCorpse = true;
-  const targetRotX = -Math.PI / 2 + (Math.random() - 0.5) * 0.4;
-  const targetRotZ = (Math.random() - 0.5) * 0.6;
-  const startY = e.mesh.position.y;
+  // Impulse — random pero realista: dirección horizontal aleatoria + up.
+  const angle = Math.random() * Math.PI * 2;
+  const launchVx = Math.cos(angle) * (1.5 + Math.random() * 1.5);
+  const launchVz = Math.sin(angle) * (1.5 + Math.random() * 1.5);
+  const launchVy = 2.0 + Math.random() * 1.5;
+  // Rotation velocity for spinning during flight.
+  const rotV = {
+    x: (Math.random() - 0.5) * 6,
+    y: (Math.random() - 0.5) * 4,
+    z: (Math.random() - 0.5) * 6,
+  };
   corpses.push({
     mesh: e.mesh,
     until: performance.now() + CORPSE_LIFETIME * 1000,
-    fallStart: performance.now(),
-    fallDur: 600,
-    rot0X: e.mesh.rotation.x,
-    rot0Z: e.mesh.rotation.z,
-    rotTX: targetRotX,
-    rotTZ: targetRotZ,
-    y0: startY,
-    yT: startY - 0.4,
+    vx: launchVx, vy: launchVy, vz: launchVz,
+    rotV,
+    grounded: false,
+    targetRotX: -Math.PI / 2 + (Math.random() - 0.5) * 0.5,
+    targetRotZ: (Math.random() - 0.5) * 0.7,
   });
 }
 
@@ -546,7 +552,7 @@ export function markDespawn(id) {
   if (e) e._despawn = true;
 }
 
-// Tick — fall animation + fade-out + remove corpses expirados.
+// Tick — ragdoll physics + fade-out + remove corpses expirados.
 export function tickCorpses(dt) {
   const now = performance.now();
   for (let i = corpses.length - 1; i >= 0; i--) {
@@ -558,19 +564,26 @@ export function tickCorpses(dt) {
       corpses.splice(i, 1);
       continue;
     }
-    // Fall animation — primeros 0.6s.
-    if (c.fallDur > 0) {
-      const elapsed = now - c.fallStart;
-      const t = Math.min(1, elapsed / c.fallDur);
-      // Easing — easeOutCubic para que el bounce inicial sea fuerte.
-      const ease = 1 - Math.pow(1 - t, 3);
-      c.mesh.rotation.x = c.rot0X + (c.rotTX - c.rot0X) * ease;
-      c.mesh.rotation.z = c.rot0Z + (c.rotTZ - c.rot0Z) * ease;
-      // Bounce: el cuerpo cae con ligero rebote — sin function trig
-      // overlap con la curva ease final.
-      const bounce = Math.sin(t * Math.PI) * 0.15;
-      c.mesh.position.y = c.y0 + (c.yT - c.y0) * ease + bounce;
-      if (t >= 1) c.fallDur = 0;
+    if (!c.grounded) {
+      // Aplica gravedad + velocidad.
+      c.vy -= 18 * dt;
+      c.mesh.position.x += c.vx * dt;
+      c.mesh.position.y += c.vy * dt;
+      c.mesh.position.z += c.vz * dt;
+      // Rotación libre durante el vuelo.
+      c.mesh.rotation.x += c.rotV.x * dt;
+      c.mesh.rotation.y += c.rotV.y * dt;
+      c.mesh.rotation.z += c.rotV.z * dt;
+      // Touch ground.
+      const ground = heightAt(c.mesh.position.x, c.mesh.position.z) + 0.05;
+      if (c.mesh.position.y <= ground) {
+        c.mesh.position.y = ground;
+        c.grounded = true;
+        // Snap a la rotación final tumbado.
+        c.mesh.rotation.x = c.targetRotX;
+        c.mesh.rotation.z = c.targetRotZ;
+        c.mesh.rotation.y += (Math.random() - 0.5) * 0.5;
+      }
     }
     // Fade en últimos 5s.
     if (remain < 5000) {

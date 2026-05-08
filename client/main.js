@@ -69,6 +69,8 @@ import * as screenShake from './screen-shake.js';
 import * as magDrop from './mag-drop.js';
 import * as weaponTiers from './weapon-tiers.js';
 import { spawnAmbientProps, spawnDust, tickDust } from './ambient-props.js';
+import * as farming from './farming.js';
+import * as tutorial from './tutorial.js';
 import { setPeerPvP } from './entities.js';
 
 // Day/night state — interpolated locally between server `time` updates.
@@ -636,6 +638,8 @@ function startGame() {
   menuEl.style.display = 'none';
   renderer.domElement.requestPointerLock?.();
   logLine(`Bienvenido ${profile.name || 'P1'}. Total bajas: ${profile.totalKills | 0}.`);
+  // Tutorial — solo se ejecuta la primera vez.
+  setTimeout(() => tutorial.start(), 1500);
 }
 
 playBtn.addEventListener('click', () => {
@@ -687,6 +691,7 @@ let nearbyLake = null;
 let nearbyTrader = null;
 let nearbyHeli = null;
 let nearbyStash = null;
+let nearbyFarmPlant = null;
 
 // Player.js applies player.mouseSensitivity if present (default 0.0022).
 // We just need the field to exist so applySettings can override it.
@@ -704,6 +709,7 @@ addEventListener('keydown', (e) => {
   // si el jugador estaba jugando (para que pueda seguir sin clickear).
   if (e.code === 'Tab') {
     e.preventDefault();
+    tutorial.trigger?.('tab');
     const wasOpen = isInventoryOpen();
     toggleInventory();
     if (!wasOpen) {
@@ -778,6 +784,10 @@ addEventListener('keydown', (e) => {
     hideInteract();
   } else if (e.code === 'KeyE' && nearbyStash && !isStashOpen()) {
     openStashPanel(nearbyStash.id);
+    hideInteract();
+  } else if (e.code === 'KeyE' && nearbyFarmPlant) {
+    farming.harvest(nearbyFarmPlant.id);
+    nearbyFarmPlant = null;
     hideInteract();
   } else if (e.code === 'KeyQ' && !e.repeat) {
     // Cycle ammo type del arma activa.
@@ -1224,6 +1234,7 @@ function frame(now) {
   magDrop.tick(dt);
   screenShake.tick(dt);
   tickDust(dt, player.pos);
+  farming.tick();
   // Cocinar granada — si llega a COOK_MAX, te explota en la mano.
   if (_cookingGrenade) {
     const cookT = performance.now() / 1000 - _cookingStart;
@@ -1284,20 +1295,22 @@ function frame(now) {
     }
   }
 
-  // Interaction prompt — priority: crate > trader > heli > stash > plant > bush > lake > vehicle.
+  // Interaction prompt — priority: crate > trader > heli > stash > farm > plant > bush > lake > vehicle.
   if (player.locked && player.hp > 0) {
     const c = nearestInRange(player.pos);
     const tr = !c ? trader.nearestInRange(player.pos) : null;
     const heli = (!c && !tr) ? heliTrader.nearestInRange(player.pos) : null;
     const sta = (!c && !tr && !heli) ? stashPersonal.nearestInRange(player.pos) : null;
-    const plant = (!c && !tr && !heli && !sta) ? survival.nearestPlantInRange(player.pos) : null;
-    const bush = (!c && !tr && !heli && !sta && !plant) ? survival.nearestBushInRange(player.pos) : null;
-    const lake = (!c && !tr && !heli && !sta && !plant && !bush) ? survival.nearestLakeInRange(player.pos) : null;
-    const vp = (!c && !tr && !heli && !sta && !plant && !bush && !lake) ? vehicle.nearbyVehiclePrompt(player.pos) : null;
+    const fp = (!c && !tr && !heli && !sta) ? farming.nearestInRange(player.pos) : null;
+    const plant = (!c && !tr && !heli && !sta && !fp) ? survival.nearestPlantInRange(player.pos) : null;
+    const bush = (!c && !tr && !heli && !sta && !fp && !plant) ? survival.nearestBushInRange(player.pos) : null;
+    const lake = (!c && !tr && !heli && !sta && !fp && !plant && !bush) ? survival.nearestLakeInRange(player.pos) : null;
+    const vp = (!c && !tr && !heli && !sta && !fp && !plant && !bush && !lake) ? vehicle.nearbyVehiclePrompt(player.pos) : null;
     nearbyCrate = c || null;
     nearbyTrader = tr || null;
     nearbyHeli = heli || null;
     nearbyStash = sta || null;
+    nearbyFarmPlant = fp || null;
     nearbyPlant = plant || null;
     nearbyBush = bush || null;
     nearbyLake = lake || null;
@@ -1311,6 +1324,7 @@ function frame(now) {
     } else if (tr) showInteract('hablar con el comerciante');
     else if (heli) showInteract('comerciar con el heli');
     else if (sta) showInteract('abrir stash personal');
+    else if (fp) showInteract('cosechar planta');
     else if (plant) showInteract('recoger planta medicinal');
     else if (bush) showInteract('recoger bayas');
     else if (lake) showInteract('rellenar botella');

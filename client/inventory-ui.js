@@ -103,7 +103,7 @@ const DESCRIPTIONS = {
 };
 
 // Items that can be "used" from the inventory ctx menu.
-const USABLE = new Set(['bandage', 'meat_cooked', 'meat_raw', 'berry', 'water_bottle', 'dog_collar', 'antibiotics', 'smoke_grenade', 'flashbang', 'stash_box']);
+const USABLE = new Set(['bandage', 'meat_cooked', 'meat_raw', 'berry', 'water_bottle', 'dog_collar', 'antibiotics', 'smoke_grenade', 'flashbang', 'stash_box', 'seeds']);
 
 // =====================================================================
 // State
@@ -590,6 +590,13 @@ async function useItem(key) {
     const fx = player.pos.x + Math.sin(yaw) * -1.8;
     const fz = player.pos.z + Math.cos(yaw) * -1.8;
     stashPersonal.placeAt(fx, fz);
+  } else if (key === 'seeds') {
+    // Plantar al frente del player.
+    const farming = await import('./farming.js');
+    const yaw = player.yaw();
+    const fx = player.pos.x + Math.sin(yaw) * -1.4;
+    const fz = player.pos.z + Math.cos(yaw) * -1.4;
+    farming.plantSeed(fx, fz);
   }
 }
 
