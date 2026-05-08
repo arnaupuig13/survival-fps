@@ -84,6 +84,18 @@ const ETYPES = {
   tank:         { hp: 30,  speed: 0.9, dmg: 20, range: 1.8, cd: 2.0, aggro: 25, ranged: false },
   // Wolf — fast melee, predator. Lurks in the wilderness, aggro from far.
   wolf:         { hp: 14,  speed: 4.5, dmg: 10, range: 1.8, cd: 1.0, aggro: 40, ranged: false },
+  // ---- Specials ----
+  // Spitter — escupe ácido a media distancia. Daño moderado pero peligroso
+  // si se ignora. weapon='spit' permite al cliente renderizar el escupitajo.
+  spitter:      { hp: 14, speed: 1.5, dmg: 7,  range: 18, cd: 1.6, aggro: 32, ranged: true, weapon: 'spit', special: 'spitter' },
+  // Screamer — frágil pero al detectar al jugador "grita" y atrae a todos
+  // los zombies cercanos en 25m hacia esa posición. Server marca aggro.
+  screamer:     { hp: 8,  speed: 2.0, dmg: 4,  range: 1.8, cd: 1.5, aggro: 38, ranged: false, special: 'screamer' },
+  // Exploder — al morir explota en 5m haciendo 60 dmg. También explota si
+  // se acerca demasiado al jugador (suicida).
+  exploder:     { hp: 12, speed: 2.4, dmg: 30, range: 2.5, cd: 0.4, aggro: 28, ranged: false, special: 'exploder' },
+  // Brute — mini-boss melee. Más resistente y dañino que el tank, raro.
+  brute:        { hp: 80, speed: 1.4, dmg: 35, range: 2.4, cd: 1.8, aggro: 30, ranged: false, special: 'brute' },
   // Three scientist variants. Same lab coat but different weapon profile.
   scientist:    { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 40, ranged: true,  weapon: 'rifle'   },
   sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 22, range: 12,  cd: 1.5, aggro: 30, ranged: true,  weapon: 'shotgun' },
@@ -294,20 +306,41 @@ let nextGrenadeId = 1;
 const GRENADE_DAMAGE = 70;
 const GRENADE_RADIUS = 6;
 
-// Build crates at boot — one inside every building of every town. The
-// crate's table key matches the town type ('town' or 'city'), so cities
-// drop more loot.
+// Build crates at boot — varios cofres por edificio. Towns: 2-4 cofres
+// dispersos en esquinas del piso. Cities: 1-3 (más loot por cofre, ya
+// están en city tier). El crate's table key matches the town type.
 function spawnTownCrates() {
   for (const t of TOWNS) {
     for (const b of t.buildings) {
-      const id = nextCrateId++;
-      crates.set(id, {
-        id, x: b.wx, z: b.wz,
-        y: heightAt(b.wx, b.wz),
-        tableKey: t.type,
-        townId: t.id,
-        taken: false,
-      });
+      const isCity = t.type === 'city';
+      // Random count: town 2-4, city 1-3.
+      const count = isCity ? (1 + Math.floor(Math.random() * 3))
+                           : (2 + Math.floor(Math.random() * 3));
+      // Posiciones dentro del footprint del edificio: esquinas + centro.
+      // Footprint es w×h; convertimos a offsets locales y rotamos por b.ry.
+      const half = 0.4; // 0.4 * tamaño = quedar dentro de las paredes
+      const corners = [
+        [-half, -half], [half, -half], [-half, half], [half, half], [0, 0],
+      ];
+      // Shuffle.
+      for (let i = corners.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [corners[i], corners[j]] = [corners[j], corners[i]];
+      }
+      const cosR = Math.cos(b.ry || 0), sinR = Math.sin(b.ry || 0);
+      for (let i = 0; i < count && i < corners.length; i++) {
+        const [lx, lz] = corners[i];
+        const ox = lx * b.w, oz = lz * b.h;
+        // Rotar offset al world según b.ry.
+        const rx = cosR * ox - sinR * oz;
+        const rz = sinR * ox + cosR * oz;
+        const x = b.wx + rx, z = b.wz + rz;
+        const id = nextCrateId++;
+        crates.set(id, {
+          id, x, z, y: heightAt(x, z),
+          tableKey: t.type, townId: t.id, taken: false,
+        });
+      }
     }
   }
   // POI crates — placed near each POI center with a small offset.
@@ -367,8 +400,8 @@ const STREAM_RADIUS = 150;   // m — spawn town when any player closer
 const DESPAWN_RADIUS = 260;  // m — despawn town when ALL players farther
 const WAKE_RADIUS = 12;      // m — sleeping zombie wakes when player approaches
 
-const MAX_AMBIENT_ZOMBIES = 18; // cap on the random-spawn zombies (not town-bound)
-const AMBIENT_SPAWN_INTERVAL = 7.0;
+const MAX_AMBIENT_ZOMBIES = 30; // cap on the random-spawn zombies (not town-bound)
+const AMBIENT_SPAWN_INTERVAL = 4.5;
 
 function makeEnemy(opts) {
   const cfg = ETYPES[opts.etype] || ETYPES.zombie;
@@ -404,6 +437,14 @@ function dropAnimalLoot(e) {
 }
 
 function killEnemy(e, byId = null) {
+  // Exploder muerto = explosión. Marcamos un flag para no caer en loop
+  // infinito (detonateExploder llama a killEnemy de nuevo).
+  if (e.etype === 'exploder' && !e._detonated) {
+    e._detonated = true;
+    // detonateExploder despawnea el enemy y manda el broadcast.
+    detonateExploder(e);
+    return;
+  }
   // Animal drops are handled before scientist/boss bookkeeping.
   if (e.etype === 'deer' || e.etype === 'rabbit') {
     dropAnimalLoot(e);
@@ -502,34 +543,47 @@ function streamTowns() {
     }
 
     if (!ts.spawned && nearestD < STREAM_RADIUS) {
-      // Spawn one sleeping enemy per building. Town type picks variant.
+      // Spawn varios enemigos por edificio.
+      // Towns: 1-3 zombies durmiendo en cada casa.
+      // Cities: 1-2 científicos por edificio (igual que antes).
       ts.spawned = true;
       for (let i = 0; i < t.buildings.length; i++) {
         const b = t.buildings[i];
-        let etype;
-        if (t.type === 'city') {
-          // Helix Lab — mix of three scientist variants. Distribution
-          // chosen so the city feels different per visit and you have
-          // to engage at different ranges. Bias toward rifle (most
-          // standard), some shotgun guards and a couple snipers.
-          const r = (i * 23 + 5) % 12;
-          if (r < 7)       etype = 'scientist';      // 7/12 rifle
-          else if (r < 10) etype = 'sci_shotgun';   // 3/12 shotgun
-          else             etype = 'sci_sniper';    // 2/12 sniper
-        } else {
-          // Towns: mostly zombies, sprinkle of runner / tank.
-          const r = (i * 17 + 3) % 10;
-          if (r < 7) etype = 'zombie';
-          else if (r < 9) etype = 'runner';
-          else etype = 'tank';
+        const isCity = t.type === 'city';
+        const count = isCity ? 1 : (1 + Math.floor(Math.random() * 3)); // 1-3 town
+        for (let k = 0; k < count; k++) {
+          let etype;
+          if (isCity) {
+            const r = (i * 23 + 5) % 12;
+            if (r < 7)       etype = 'scientist';
+            else if (r < 10) etype = 'sci_shotgun';
+            else             etype = 'sci_sniper';
+          } else {
+            // Towns: 60% zombi, 18% runner, 8% tank, 5% spitter,
+            // 5% screamer, 4% exploder.
+            const r = Math.random();
+            if      (r > 0.96) etype = 'exploder';
+            else if (r > 0.91) etype = 'screamer';
+            else if (r > 0.86) etype = 'spitter';
+            else if (r > 0.78) etype = 'tank';
+            else if (r > 0.60) etype = 'runner';
+            else               etype = 'zombie';
+          }
+          // Posición: pequeño offset dentro del edificio para que no se
+          // amontonen exactamente en el mismo punto.
+          const offX = (Math.random() - 0.5) * b.w * 0.5;
+          const offZ = (Math.random() - 0.5) * b.h * 0.5;
+          const cosR = Math.cos(b.ry || 0), sinR = Math.sin(b.ry || 0);
+          const wx = b.wx + cosR * offX - sinR * offZ;
+          const wz = b.wz + sinR * offX + cosR * offZ;
+          const e = makeEnemy({
+            etype, x: wx, z: wz,
+            sleeping: !isCity,         // town zombies start asleep
+            townId: t.id,
+          });
+          ts.enemyIds.add(e.id);
+          broadcast({ type: 'eSpawn', e: ePub(e) });
         }
-        const e = makeEnemy({
-          etype, x: b.wx, z: b.wz,
-          sleeping: t.type === 'town', // city scientists are awake patrolling
-          townId: t.id,
-        });
-        ts.enemyIds.add(e.id);
-        broadcast({ type: 'eSpawn', e: ePub(e) });
       }
     } else if (ts.spawned && nearestD > DESPAWN_RADIUS) {
       // Despawn — release CPU on a town nobody's near. Keep the boss alive
@@ -569,23 +623,32 @@ function spawnAmbientHostile(minDist = 38, maxDist = 80) {
     }
     if (insideTown) continue;
     // Mix per night/day. By day mostly zombies, sprinkle of others. At
-    // night wolves and runners get more common — predators come out.
+    // night wolves, specials and predators salen más. Specials tienen
+    // chance baja para que se sientan eventos ocasionales y no farmable.
     const isNight = isNightHour(gameHour);
     let etype = 'zombie';
     const r2 = Math.random();
     if (isNight) {
-      if (r2 > 0.96)      etype = 'bear';
-      else if (r2 > 0.88) etype = 'tank';
-      else if (r2 > 0.82) etype = 'boar';
-      else if (r2 > 0.55) etype = 'wolf';
-      else if (r2 > 0.30) etype = 'runner';
+      if (r2 > 0.985)     etype = 'brute';     // 1.5%
+      else if (r2 > 0.96) etype = 'bear';
+      else if (r2 > 0.93) etype = 'exploder';  // 3%
+      else if (r2 > 0.90) etype = 'screamer';  // 3%
+      else if (r2 > 0.86) etype = 'spitter';   // 4%
+      else if (r2 > 0.80) etype = 'tank';
+      else if (r2 > 0.74) etype = 'boar';
+      else if (r2 > 0.50) etype = 'wolf';
+      else if (r2 > 0.25) etype = 'runner';
       else                etype = 'zombie';
     } else {
-      if (r2 > 0.97)      etype = 'bear';
-      else if (r2 > 0.93) etype = 'tank';
-      else if (r2 > 0.88) etype = 'boar';
-      else if (r2 > 0.82) etype = 'wolf';
-      else if (r2 > 0.75) etype = 'runner';
+      if (r2 > 0.992)     etype = 'brute';     // 0.8%
+      else if (r2 > 0.98) etype = 'bear';
+      else if (r2 > 0.965)etype = 'exploder';  // 1.5%
+      else if (r2 > 0.95) etype = 'screamer';  // 1.5%
+      else if (r2 > 0.93) etype = 'spitter';   // 2%
+      else if (r2 > 0.89) etype = 'tank';
+      else if (r2 > 0.85) etype = 'boar';
+      else if (r2 > 0.80) etype = 'wolf';
+      else if (r2 > 0.72) etype = 'runner';
       else                etype = 'zombie';
     }
     const e = makeEnemy({ etype, x, z, ambient: true });
@@ -786,7 +849,7 @@ setInterval(() => {
   // Ambient (out-of-town) spawn ticker. At night spawn faster + cap higher.
   const night = isNightHour(gameHour);
   const spawnInterval = night ? AMBIENT_SPAWN_INTERVAL * 0.55 : AMBIENT_SPAWN_INTERVAL;
-  const cap = night ? MAX_AMBIENT_ZOMBIES + 8 : MAX_AMBIENT_ZOMBIES;
+  const cap = night ? MAX_AMBIENT_ZOMBIES + 12 : MAX_AMBIENT_ZOMBIES;
   ambientSpawnAccum += AI_DT;
   if (ambientSpawnAccum >= spawnInterval && players.size > 0) {
     let ambientCount = 0;
@@ -887,6 +950,40 @@ setInterval(() => {
         sendTo(nearest, { type: 'youHit', dmg: cfg.dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
         broadcast({ type: 'eShoot', id: e.id, tx: nearest.x, ty: nearest.y, tz: nearest.z });
       }
+    } else if (cfg.special === 'exploder') {
+      // Suicida: corre hacia el player. Si está dentro de range, detona
+      // explosión radial: 60 dmg en 5m, y muere él mismo.
+      if (d > cfg.range) {
+        const dx = nearest.x - e.x, dz = nearest.z - e.z;
+        e.x += (dx / d) * cfg.speed * nightMul * AI_DT;
+        e.z += (dz / d) * cfg.speed * nightMul * AI_DT;
+        e.y = heightAt(e.x, e.z);
+        e.ry = Math.atan2(dx, dz);
+      } else {
+        detonateExploder(e);
+      }
+    } else if (cfg.special === 'screamer') {
+      // Frágil — corre hacia el jugador y "grita" cada 4s para aturdir y
+      // boostear aggro de zombies cercanos. El grito hace que zombies en
+      // 25m corran hacia la posición del jugador (override de aggro).
+      if (e._screamCd == null) e._screamCd = 0;
+      e._screamCd -= AI_DT;
+      if (d > cfg.range) {
+        const dx = nearest.x - e.x, dz = nearest.z - e.z;
+        e.x += (dx / d) * cfg.speed * nightMul * AI_DT;
+        e.z += (dz / d) * cfg.speed * nightMul * AI_DT;
+        e.y = heightAt(e.x, e.z);
+        e.ry = Math.atan2(dx, dz);
+      } else if (e.attackCd <= 0) {
+        e.attackCd = cfg.cd;
+        nearest.hp = Math.max(0, nearest.hp - cfg.dmg);
+        sendTo(nearest, { type: 'youHit', dmg: cfg.dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+        broadcast({ type: 'eAttack', id: e.id });
+      }
+      if (e._screamCd <= 0) {
+        e._screamCd = 4.0;
+        triggerScream(e, nearest);
+      }
     } else {
       // Melee: chase + bite.
       if (d > cfg.range) {
@@ -904,6 +1001,56 @@ setInterval(() => {
     }
   }
 }, 1000 / AI_HZ);
+
+// =====================================================================
+// Specials: detonación del exploder y grito del screamer.
+// =====================================================================
+function detonateExploder(e) {
+  const RADIUS = 5;
+  const DMG = 60;
+  // Daño radial a jugadores y a otros enemigos cercanos.
+  for (const p of players.values()) {
+    if (p.hp <= 0) continue;
+    const d = Math.hypot(p.x - e.x, p.z - e.z);
+    if (d <= RADIUS) {
+      const falloff = 1 - (d / RADIUS);
+      const dmg = Math.round(DMG * falloff);
+      p.hp = Math.max(0, p.hp - dmg);
+      sendTo(p, { type: 'youHit', dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: 'exploder' });
+    }
+  }
+  for (const other of enemies.values()) {
+    if (other.id === e.id) continue;
+    if (other.isBoss) continue;
+    const d = Math.hypot(other.x - e.x, other.z - e.z);
+    if (d <= RADIUS) {
+      other.hp = Math.max(0, other.hp - 40);
+      if (other.hp <= 0) killEnemy(other, e.id);
+    }
+  }
+  broadcast({ type: 'grenadeBoom', id: -e.id, x: e.x, y: e.y, z: e.z });
+  killEnemy(e, null);
+}
+
+function triggerScream(screamer, nearestPlayer) {
+  const RADIUS = 25;
+  let n = 0;
+  for (const z of enemies.values()) {
+    if (z.id === screamer.id) continue;
+    if (z.isBoss) continue;
+    if (z.etype !== 'zombie' && z.etype !== 'runner' && z.etype !== 'tank') continue;
+    const d = Math.hypot(z.x - screamer.x, z.z - screamer.z);
+    if (d <= RADIUS) {
+      // Despertar y empujar hacia el player (override de aggro): teleport
+      // virtual de su "objetivo" actual seteando temporal aggro grande.
+      z.sleeping = false;
+      z._aggroBoostUntil = Date.now() + 8000;
+      n++;
+    }
+  }
+  broadcast({ type: 'banner', text: '✦ GRITO DEL SCREAMER — horda alertada' });
+  broadcast({ type: 'eShoot', id: screamer.id, tx: nearestPlayer.x, ty: nearestPlayer.y, tz: nearestPlayer.z });
+}
 
 // =====================================================================
 // Snapshot tick — compact arrays at 10 Hz.

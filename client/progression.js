@@ -18,16 +18,23 @@ import { player } from './player.js';
 
 // XP grants por tipo de enemigo. Default 10 si no está mapeado.
 export const XP_PER_KILL = {
-  zombie:    10,
-  runner:    15,
-  tank:      40,
-  scientist: 30,
-  wolf:      12,
-  boar:      18,
-  bear:      60,
-  boss:     500,
-  deer:       4,
-  rabbit:     2,
+  zombie:      10,
+  runner:      15,
+  tank:        40,
+  // Specials.
+  spitter:     22,
+  screamer:    18,
+  exploder:    25,   // poco porque es fácil de matar a distancia
+  brute:       80,   // mini-boss
+  scientist:   30,
+  sci_shotgun: 35,
+  sci_sniper:  35,
+  wolf:        12,
+  boar:        18,
+  bear:        60,
+  boss:       500,
+  deer:         4,
+  rabbit:       2,
 };
 
 const state = {

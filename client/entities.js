@@ -14,9 +14,16 @@ import { heightAt } from './world.js';
 function makeZombieMesh(variant = 'zombie') {
   const g = new THREE.Group();
   let skin = 0x6f8a55, cloth = 0x303a25, scale = 1;
-  if (variant === 'runner') { skin = 0x8a8055; cloth = 0x55452a; scale = 0.95; }
-  if (variant === 'tank')   { skin = 0x4a5a3a; cloth = 0x222a18; scale = 1.25; }
-  const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.85 });
+  let glow = null;       // emissive accent (pulse) para specials
+  let extraMark = null;  // marca visual extra
+  if (variant === 'runner')   { skin = 0x8a8055; cloth = 0x55452a; scale = 0.95; }
+  if (variant === 'tank')     { skin = 0x4a5a3a; cloth = 0x222a18; scale = 1.25; }
+  if (variant === 'brute')    { skin = 0x2a3a18; cloth = 0x18200c; scale = 1.6; }
+  if (variant === 'spitter')  { skin = 0x6a8a30; cloth = 0x4a3a10; glow = 0x88ff20; }
+  if (variant === 'screamer') { skin = 0xc05050; cloth = 0x401818; glow = 0xff4040; }
+  if (variant === 'exploder') { skin = 0xa05a20; cloth = 0x3a2008; glow = 0xff6010; scale = 0.92; }
+  const skinMat  = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.85,
+    emissive: glow ?? 0x000000, emissiveIntensity: glow ? 0.45 : 0 });
   const clothMat = new THREE.MeshStandardMaterial({ color: cloth, roughness: 0.9 });
 
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.4), clothMat);
@@ -29,7 +36,32 @@ function makeZombieMesh(variant = 'zombie') {
   const legGeom = new THREE.BoxGeometry(0.22, 0.85, 0.22);
   const legL = new THREE.Mesh(legGeom, clothMat); legL.position.set(-0.18, 0.42, 0); g.add(legL);
   const legR = new THREE.Mesh(legGeom, clothMat); legR.position.set( 0.18, 0.42, 0); g.add(legR);
+  // Marcas extra por variante: bocas grandes (spitter), boca abierta gritando
+  // (screamer), barriles en el pecho (exploder).
+  if (variant === 'spitter') {
+    const drool = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xaaff40, emissive: 0x66cc20, emissiveIntensity: 0.8 }));
+    drool.position.set(0, 1.55, 0.22); g.add(drool);
+  } else if (variant === 'screamer') {
+    const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0x100000, emissive: 0xff2020, emissiveIntensity: 0.5 }));
+    mouth.position.set(0, 1.7, 0.22); g.add(mouth);
+  } else if (variant === 'exploder') {
+    const barrelMat = new THREE.MeshStandardMaterial({ color: 0xc04020, emissive: 0xff5020, emissiveIntensity: 0.6, metalness: 0.5 });
+    const bL = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.45, 8), barrelMat);
+    bL.position.set(-0.22, 1.05, 0.3); g.add(bL);
+    const bR = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.45, 8), barrelMat);
+    bR.position.set( 0.22, 1.05, 0.3); g.add(bR);
+  } else if (variant === 'brute') {
+    // Hombros enormes para que se note en silueta.
+    const shoulderMat = new THREE.MeshStandardMaterial({ color: 0x121810, roughness: 0.85 });
+    const sL = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.32), shoulderMat);
+    sL.position.set(-0.55, 1.5, 0.05); g.add(sL);
+    const sR = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.32), shoulderMat);
+    sR.position.set( 0.55, 1.5, 0.05); g.add(sR);
+  }
   g.userData.legs = [legL, legR]; g.userData.arms = [armL, armR];
+  g.userData.variant = variant;
   g.scale.setScalar(scale);
   return g;
 }
@@ -434,6 +466,10 @@ function meshFor(etype) {
   if (etype === 'rabbit')      return makeRabbitMesh();
   if (etype === 'runner')      return makeZombieMesh('runner');
   if (etype === 'tank')        return makeZombieMesh('tank');
+  if (etype === 'brute')       return makeZombieMesh('brute');
+  if (etype === 'spitter')     return makeZombieMesh('spitter');
+  if (etype === 'screamer')    return makeZombieMesh('screamer');
+  if (etype === 'exploder')    return makeZombieMesh('exploder');
   return makeZombieMesh('zombie');
 }
 

@@ -307,17 +307,25 @@ network.onEnemyDead = (id, msg) => {
   progression.awardKillXp(kind, !!msg.isBoss);
   // Track de quests por tipo de enemigo.
   if (!msg.isBoss) {
-    if (kind === 'zombie' || kind === 'runner' || kind === 'tank') quests.track('kill_zombies', 1);
+    const isZombieKind = ['zombie','runner','tank','brute','spitter','screamer','exploder'].includes(kind);
+    if (isZombieKind) quests.track('kill_zombies', 1);
     if (kind === 'runner') quests.track('kill_runners', 1);
-    if (kind === 'tank')   quests.track('kill_tank', 1);
-    if (kind === 'scientist') quests.track('kill_scientists', 1);
+    if (kind === 'tank' || kind === 'brute')   quests.track('kill_tank', 1);
+    if (kind === 'scientist' || kind === 'sci_shotgun' || kind === 'sci_sniper') quests.track('kill_scientists', 1);
     if (kind === 'wolf' || kind === 'boar' || kind === 'bear' || kind === 'deer' || kind === 'rabbit') {
       quests.track('kill_animals', 1);
     }
   }
-  // Drop random de chatarra: 30% en humanoides, 60% en científicos.
-  if (kind === 'scientist' || msg.isBoss) {
+  // Drop random de chatarra: 30% en humanoides básicos, 60% en científicos
+  // y specials, 100% en boss/brute.
+  if (msg.isBoss) {
+    inv.add('scrap', 5 + Math.floor(Math.random() * 6));
+  } else if (kind === 'brute') {
+    inv.add('scrap', 3 + Math.floor(Math.random() * 3));
+  } else if (kind === 'scientist' || kind === 'sci_shotgun' || kind === 'sci_sniper') {
     if (Math.random() < 0.7) inv.add('scrap', 1 + Math.floor(Math.random() * 3));
+  } else if (['spitter','screamer','exploder'].includes(kind)) {
+    if (Math.random() < 0.55) inv.add('scrap', 1 + Math.floor(Math.random() * 2));
   } else if (['zombie','runner','tank'].includes(kind)) {
     if (Math.random() < 0.3) inv.add('scrap', 1);
   }
