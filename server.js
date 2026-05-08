@@ -241,11 +241,12 @@ const ETYPES = {
   // Three scientist variants. Same lab coat but different weapon profile.
   // Aggro subido para que detecten al player desde más lejos en el mapa
   // grande (era 30-60, ahora 60-90).
-  // Aggro subido para que detecten al player desde más lejos. La ciudad
-  // de los cientificos tiene que sentirse muy hostil — si entrás te ven.
-  scientist:    { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 100, ranged: true,  weapon: 'rifle'   },
-  sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 22, range: 12,  cd: 1.5, aggro:  80, ranged: true,  weapon: 'shotgun' },
-  sci_sniper:   { hp: 16,  speed: 1.0, dmg: 32, range: 60,  cd: 2.4, aggro: 150, ranged: true,  weapon: 'sniper'  },
+  // Aggro alto para que la ciudad sienta hostil pero damage balanceado
+  // para que el player no se muera de un disparo de sniper cruzando la
+  // ciudad. El sniper en particular era 32 dmg y 1-shoteaba — bajado a 14.
+  scientist:    { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 80,  ranged: true,  weapon: 'rifle'   },
+  sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 18, range: 12,  cd: 1.5, aggro: 60,  ranged: true,  weapon: 'shotgun' },
+  sci_sniper:   { hp: 16,  speed: 1.0, dmg: 14, range: 50,  cd: 2.4, aggro: 80,  ranged: true,  weapon: 'sniper'  },
   // === ELITES — 4 guardias del boss en la torre central. Cada uno con
   //     un arma distinta. Mucho más HP que un cientifico normal pero
   //     no tanto como el boss. Aggro enorme: te detectan en cuanto
@@ -1209,7 +1210,6 @@ function streamTowns() {
               ts.enemyIds.add(elite.id);
               broadcast({ type: 'eSpawn', e: ePub(elite) });
             }
-            broadcast({ type: 'banner', text: `[SPAWN] Boss+4 elites @ tower (${b.wx.toFixed(0)},${b.wz.toFixed(0)}) bossId=${boss.id}` });
             broadcast({ type: 'banner', text: '⚠ EL DOCTOR Y SUS 4 ELITES TE ESPERAN EN LA TORRE CENTRAL' });
           }
           continue;   // siempre skip spawn normal en boss_tower
@@ -1985,18 +1985,6 @@ setInterval(() => {
     if (!nearest) continue;
     const d = Math.sqrt(nd2);
 
-    // === DEBUG TELEMETRY ===
-    // Heartbeat para diagnosticar por qué el boss/elites no disparan.
-    // Cada 4s, el boss anuncia su estado al canal de banners. Si no
-    // aparece → o no existe en el mapa, o no encuentra al player.
-    if (e.etype === 'boss' || (e.etype && e.etype.startsWith('sci_elite'))) {
-      if (!e._dbgCd || _now > e._dbgCd) {
-        e._dbgCd = _now + 4000;
-        const cfgDbg = ETYPES[e.etype];
-        broadcast({ type: 'banner', text: `[DBG] ${e.etype} hp=${e.hp} sees ${nearestKind} d=${d.toFixed(0)}m range=${cfgDbg?.range || 0} sleep=${e.sleeping ? 1 : 0}` });
-      }
-    }
-
     // Sleeping: don't move. Wake if a player crosses WAKE_RADIUS.
     if (e.sleeping) {
       if (d < WAKE_RADIUS) {
@@ -2130,23 +2118,6 @@ setInterval(() => {
           if (nearest.hp <= 0) killEnemy(nearest, e.id);
         }
         broadcast({ type: 'eShoot', id: e.id, tx: nearest.x, ty: nearest.y, tz: nearest.z });
-        // === DEBUG === Banner cuando boss/elite/cualquier sci dispara.
-        // Throttled a 1 banner por segundo por entity type para no spamear.
-        if (e.etype === 'boss' || (e.etype && e.etype.startsWith('sci_elite'))) {
-          if (!e._fireDbgCd || _now > e._fireDbgCd) {
-            e._fireDbgCd = _now + 1500;
-            broadcast({ type: 'banner', text: `[FIRE] ${e.etype} → ${nearestKind} dmg=${dmg}` });
-          }
-        }
-      } else if (e.etype === 'boss' || (e.etype && e.etype.startsWith('sci_elite'))) {
-        // === DEBUG === Si NO se cumple la condición de fire, decir por qué.
-        if (!e._whyDbgCd || _now > e._whyDbgCd) {
-          e._whyDbgCd = _now + 4000;
-          const reason = (d >= cfg.range)
-            ? `out of range (d=${d.toFixed(0)}>=${cfg.range})`
-            : `cooldown (${e.attackCd.toFixed(2)}s)`;
-          broadcast({ type: 'banner', text: `[NOFIRE] ${e.etype}: ${reason}` });
-        }
       }
     } else if (cfg.special === 'exploder') {
       // Suicida: corre hacia el player. Si está dentro de range, detona
