@@ -261,13 +261,17 @@ function closeTraderPanel() {
   }
 }
 
-// Stash personal — modal de cofre persistente.
-function openStashPanel() {
+// Stash personal — modal de cofre persistente. `stashId` identifica
+// cuál de los stashes colocados estamos abriendo (ahora son múltiples).
+let _openStashId = null;
+function openStashPanel(stashId) {
+  if (!stashId) return;
+  _openStashId = stashId;
   _voluntaryUnlock = true;
   document.exitPointerLock?.();
   openStash(
     () => {
-      // Items del inv (count > 0) que se pueden depositar.
+      // Lista plana de items del inv que se pueden depositar (con label).
       const out = [];
       const state = inv.getState();
       for (const [k, n] of Object.entries(state)) {
@@ -279,16 +283,18 @@ function openStashPanel() {
       return out;
     },
     () => {
-      // Stash slots con label resuelto.
-      return stashPersonal.getSlots().map((s) => {
+      const stash = stashPersonal.getById(_openStashId);
+      if (!stash) return [];
+      return stash.slots.map((s) => {
         if (!s) return null;
         const meta = inv.ITEMS[s.item];
-        return { item: s.item, count: s.count, label: meta?.label || s.item };
+        return { key: s.item, count: s.count, label: meta?.label || s.item };
       });
     },
-    (key) => stashPersonal.deposit(key, 1),
-    (idx) => stashPersonal.withdraw(idx, null),
-    () => stashPersonal.withdrawAll(),
+    (key) => stashPersonal.deposit(_openStashId, key, 1),
+    (idx) => stashPersonal.withdraw(_openStashId, idx, null),
+    () => stashPersonal.withdrawAll(_openStashId),
+    () => stashPersonal.destroy(_openStashId),
   );
 }
 function closeStashPanel() {
@@ -720,6 +726,10 @@ addEventListener('keydown', (e) => {
     }
     return;
   }
+  // Cierre de modales con E — antes del check de pointer lock, porque al
+  // abrir el stash/trader el cursor está libre (player.locked == false).
+  if (e.code === 'KeyE' && isStashOpen()) { closeStashPanel(); return; }
+  if (e.code === 'KeyE' && isTraderOpen()) { closeTraderPanel(); return; }
   if (!player.locked || player.hp <= 0) return;
   if (e.code === 'KeyE' && nearbyCrate) {
     if (nearbyCrate.localLoot) {
@@ -741,12 +751,8 @@ addEventListener('keydown', (e) => {
     openHeliTraderPanel();
     hideInteract();
   } else if (e.code === 'KeyE' && nearbyStash && !isStashOpen()) {
-    openStashPanel();
+    openStashPanel(nearbyStash.id);
     hideInteract();
-  } else if (e.code === 'KeyE' && isStashOpen()) {
-    closeStashPanel();
-  } else if (e.code === 'KeyE' && isTraderOpen()) {
-    closeTraderPanel();
   } else if (e.code === 'KeyQ' && !e.repeat) {
     // Cycle ammo type del arma activa.
     ammoTypes.cycleAmmo(getActiveWeapon());

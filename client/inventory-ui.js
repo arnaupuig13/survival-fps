@@ -103,7 +103,7 @@ const DESCRIPTIONS = {
 };
 
 // Items that can be "used" from the inventory ctx menu.
-const USABLE = new Set(['bandage', 'meat_cooked', 'meat_raw', 'berry', 'water_bottle', 'dog_collar', 'antibiotics', 'smoke_grenade', 'flashbang']);
+const USABLE = new Set(['bandage', 'meat_cooked', 'meat_raw', 'berry', 'water_bottle', 'dog_collar', 'antibiotics', 'smoke_grenade', 'flashbang', 'stash_box']);
 
 // =====================================================================
 // State
@@ -583,6 +583,13 @@ async function useItem(key) {
       const flashbang = await import('./flashbang.js');
       flashbang.throwFlashbang();
     }
+  } else if (key === 'stash_box') {
+    // Coloca un nuevo stash al frente del player.
+    const stashPersonal = await import('./stash-personal.js');
+    const yaw = player.yaw();
+    const fx = player.pos.x + Math.sin(yaw) * -1.8;
+    const fz = player.pos.z + Math.cos(yaw) * -1.8;
+    stashPersonal.placeAt(fx, fz);
   }
 }
 

@@ -69,6 +69,8 @@ export const ITEMS = {
   antibiotics:     { label: 'ANTIBIOTICOS',   max: 5,  rarity: 'rare', weight: 0.1 },
   // Trampas.
   bear_trap:       { label: 'CEPO',           max: 5,  rarity: 'uncommon', weight: 3 },
+  // Stash crafteable — colocás cofres con tu loot persistente.
+  stash_box:       { label: 'CAJA STASH',     max: 5,  rarity: 'uncommon', weight: 4 },
   // Granadas de utilidad.
   smoke_grenade:   { label: 'GRANADA HUMO',   max: 5,  rarity: 'uncommon', weight: 0.4 },
   flashbang:       { label: 'GRANADA CIEGA',  max: 5,  rarity: 'rare', weight: 0.4 },
@@ -127,6 +129,7 @@ const state = {
   bedroll_item: 0,
   antibiotics: 0,
   bear_trap: 0,
+  stash_box: 0,
   kills: 0,
 };
 
@@ -204,6 +207,7 @@ export const RECIPES = [
   { id: 'craft_campfire',label: 'HOGUERA',        requires: { wood: 5, stone: 2 },  produces: { campfire: 1 } },
   { id: 'craft_grenade', label: 'GRANADA',        requires: { stone: 3, wood: 1 },  produces: { grenade: 1 } },
   { id: 'craft_bear_trap', label: 'CEPO',         requires: { stone: 4, wood: 2, scrap: 3 }, produces: { bear_trap: 1 } },
+  { id: 'craft_stash',     label: 'CAJA STASH',   requires: { wood: 6, stone: 3, scrap: 4 }, produces: { stash_box: 1 } },
   { id: 'craft_water',   label: 'BOTELLA AGUA',   requires: {},                     produces: {}, special: 'fillWater' },
 ];
 

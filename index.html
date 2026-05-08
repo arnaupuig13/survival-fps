@@ -157,9 +157,13 @@
     .stashBody { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px; }
     .stashColumn { background: rgba(0,0,0,0.3); border: 1px solid #2a4a22; padding: 8px 10px; min-height: 360px; }
     .stashColTitle { color: #80ff60; font-size: 11px; letter-spacing: 2px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #2a4a22; }
-    .stashRow { display: flex; justify-content: space-between; align-items: center; padding: 5px 4px; font-size: 12px; color: #ddd; cursor: pointer; transition: background 0.1s; border-radius: 2px; }
-    .stashRow:hover { background: rgba(40,80,30,0.4); }
-    .stashRow .stashCount { color: #80ff60; font-weight: 700; font-family: monospace; }
+    .stashGrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; padding: 6px; background: rgba(0,0,0,0.4); border: 1px solid #2a4a22; }
+    .stashSlot { aspect-ratio: 1; background: rgba(20,28,18,0.7); border: 1px solid #2a4a22; position: relative; cursor: pointer; transition: border 0.08s, background 0.08s; user-select: none; }
+    .stashSlot:hover { border-color: #80ff60; background: rgba(40,80,40,0.4); }
+    .stashSlot.empty { background: rgba(15,22,15,0.45); border-style: dashed; opacity: 0.55; cursor: default; }
+    .stashSlot.empty:hover { border-style: dashed; background: rgba(15,22,15,0.45); }
+    .stashSlot .iLabel { position: absolute; top: 4px; left: 4px; right: 4px; font-size: 9px; color: #aaa; letter-spacing: 0.5px; line-height: 1.1; pointer-events: none; }
+    .stashSlot .iCount { position: absolute; bottom: 3px; right: 5px; font-size: 13px; font-weight: 700; color: #80ff60; font-family: monospace; pointer-events: none; }
     .stashFooter { padding: 10px 18px; background: rgba(0,0,0,0.4); border-top: 1px solid #4a8030; text-align: right; }
     .stashFooter button { background: rgba(60,100,40,0.4); border: 1px solid #4a8030; color: #80ff60; padding: 6px 16px; cursor: pointer; font-family: system-ui; letter-spacing: 1px; }
     .stashFooter button:hover { background: rgba(80,140,40,0.5); }
@@ -506,24 +510,25 @@
     </div>
   </div>
 
-  <!-- Stash personal — modal de cofre persistente -->
+  <!-- Stash personal — modal de cofre crafteable con grid de slots -->
   <div id="stashPanel" class="hidden">
     <div class="stashModal">
       <div class="stashHeader">
         <span>★ STASH PERSONAL</span>
-        <span class="stashHint">[E] cerrar · click izq depositar (item del inv) · click izq slot retirar</span>
+        <span class="stashHint">[E] cerrar · click slot inv para depositar · click slot stash para retirar</span>
       </div>
       <div class="stashBody">
         <div class="stashColumn">
-          <div class="stashColTitle">INVENTARIO (click para depositar)</div>
-          <div id="stashInvList"></div>
+          <div class="stashColTitle">TU INVENTARIO</div>
+          <div id="stashInvGrid" class="stashGrid"></div>
         </div>
         <div class="stashColumn">
-          <div class="stashColTitle">STASH (24 slots — click para retirar)</div>
-          <div id="stashSlotsGrid"></div>
+          <div class="stashColTitle">STASH (24 slots)</div>
+          <div id="stashSlotsGrid" class="stashGrid"></div>
         </div>
       </div>
       <div class="stashFooter">
+        <button id="stashDestroyBtn">RECOGER CAJA</button>
         <button id="stashWithdrawAll">RETIRAR TODO</button>
       </div>
     </div>

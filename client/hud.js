@@ -466,47 +466,53 @@ export function setWeather(kind) {
 // Stash personal modal
 // ----------------------------------------------------------------------
 const stashPanel = document.getElementById('stashPanel');
-const stashInvList = document.getElementById('stashInvList');
+const stashInvGrid = document.getElementById('stashInvGrid');
 const stashSlotsGrid = document.getElementById('stashSlotsGrid');
 const stashWithdrawAllBtn = document.getElementById('stashWithdrawAll');
+const stashDestroyBtn = document.getElementById('stashDestroyBtn');
 let _stashOpen = false;
 export function isStashOpen() { return _stashOpen; }
 
-export function openStash(getInvList, getStashSlots, onDeposit, onWithdraw, onWithdrawAll) {
+// Render grid de slots con cuadritos. items: array { key, count, label } | null.
+function renderStashGrid(grid, items, onClick, slotCount) {
+  if (!grid) return;
+  grid.innerHTML = '';
+  for (let i = 0; i < slotCount; i++) {
+    const it = items[i];
+    const slot = document.createElement('div');
+    slot.className = 'stashSlot' + (it ? '' : ' empty');
+    if (it) {
+      slot.innerHTML = `<div class="iLabel">${it.label}</div><div class="iCount">${it.count}</div>`;
+      slot.addEventListener('click', () => onClick(i, it));
+    }
+    grid.appendChild(slot);
+  }
+}
+
+export function openStash(getInvList, getStashSlots, onDeposit, onWithdraw, onWithdrawAll, onDestroy) {
   _stashOpen = true;
   if (!stashPanel) return;
   stashPanel.classList.remove('hidden');
   function render() {
-    if (stashInvList) {
-      stashInvList.innerHTML = '';
-      for (const { key, count, label } of getInvList()) {
-        const row = document.createElement('div');
-        row.className = 'stashRow';
-        row.innerHTML = `<span>${label}</span><span class="stashCount">${count}</span>`;
-        row.addEventListener('click', () => { onDeposit(key); render(); });
-        stashInvList.appendChild(row);
-      }
-    }
-    if (stashSlotsGrid) {
-      stashSlotsGrid.innerHTML = '';
-      const slots = getStashSlots();
-      for (let i = 0; i < slots.length; i++) {
-        const s = slots[i];
-        const row = document.createElement('div');
-        row.className = 'stashRow';
-        if (s) {
-          row.innerHTML = `<span>${s.label}</span><span class="stashCount">${s.count}</span>`;
-          row.addEventListener('click', () => { onWithdraw(i); render(); });
-        } else {
-          row.innerHTML = `<span style="color:#444">[vacío]</span><span></span>`;
-        }
-        stashSlotsGrid.appendChild(row);
-      }
-    }
+    // Inventario: grid 6×4 de items que se pueden depositar.
+    const invItems = getInvList();
+    renderStashGrid(stashInvGrid, invItems, (idx, item) => {
+      onDeposit(item.key);
+      render();
+    }, 24);
+    // Stash: 24 slots fijos.
+    const slots = getStashSlots();
+    renderStashGrid(stashSlotsGrid, slots, (idx) => {
+      onWithdraw(idx);
+      render();
+    }, 24);
   }
   render();
   if (stashWithdrawAllBtn) {
     stashWithdrawAllBtn.onclick = () => { onWithdrawAll(); render(); };
+  }
+  if (stashDestroyBtn) {
+    stashDestroyBtn.onclick = () => { onDestroy?.(); _stashOpen = false; stashPanel.classList.add('hidden'); };
   }
 }
 export function closeStash() {
