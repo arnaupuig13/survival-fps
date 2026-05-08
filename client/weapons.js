@@ -41,9 +41,9 @@ const _origin = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 
 // Visible weapon stub in front of camera — a simple gun-shaped box for now.
-// Material is kept brightish + emissive so it reads even when the player is
-// in shade. Adding a small camera-attached light avoids the "huge black box"
-// look caused by the arm being entirely in the directional light's shadow.
+// gunGroup tiene posiciones HIP por defecto. Cuando entra en ADS, el
+// gunGroup se traslada a la posición AIM (centrada en la pantalla, alineada
+// con la mira) para "apuntar a través de las miras".
 const gunGroup = new THREE.Group();
 const gunBody = new THREE.Mesh(
   new THREE.BoxGeometry(0.08, 0.12, 0.36),
@@ -60,6 +60,41 @@ barrel.rotation.x = Math.PI / 2;
 barrel.position.set(0.18, -0.18, -0.7);
 gunGroup.add(barrel);
 
+// Mira frontal (front sight) — pequeño post vertical al final del cañón.
+const sightMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4 });
+const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.04, 0.012), sightMat);
+frontSight.position.set(0.18, -0.13, -0.79);
+gunGroup.add(frontSight);
+// Mira trasera (rear sight) — dos postes con gap en V/U sobre la culata.
+const rearL = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.034, 0.024), sightMat);
+rearL.position.set(0.165, -0.13, -0.32); gunGroup.add(rearL);
+const rearR = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.034, 0.024), sightMat);
+rearR.position.set(0.195, -0.13, -0.32); gunGroup.add(rearR);
+
+// Reflex sight — solo visible cuando tenés `scope` equipado. Caja con
+// vidrio y punto rojo emisivo central. Pegada arriba del gunBody.
+const reflexBase = new THREE.Mesh(
+  new THREE.BoxGeometry(0.06, 0.04, 0.10),
+  new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.3, metalness: 0.85 }),
+);
+reflexBase.position.set(0.18, -0.10, -0.42);
+const reflexGlass = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.045, 0.045),
+  new THREE.MeshStandardMaterial({ color: 0x4080a0, transparent: true, opacity: 0.4, metalness: 0.9, roughness: 0.1 }),
+);
+reflexGlass.position.set(0.18, -0.10, -0.36);
+const reflexDot = new THREE.Mesh(
+  new THREE.SphereGeometry(0.005, 8, 6),
+  new THREE.MeshStandardMaterial({ color: 0xff3030, emissive: 0xff2020, emissiveIntensity: 2.0 }),
+);
+reflexDot.position.set(0.18, -0.10, -0.355);
+const reflexGroup = new THREE.Group();
+reflexGroup.add(reflexBase);
+reflexGroup.add(reflexGlass);
+reflexGroup.add(reflexDot);
+reflexGroup.visible = false;
+gunGroup.add(reflexGroup);
+
 const muzzle = new THREE.PointLight(0xffaa44, 0, 4);
 muzzle.position.set(0.18, -0.16, -0.82);
 gunGroup.add(muzzle);
@@ -69,6 +104,16 @@ gunGroup.add(muzzle);
 const camFill = new THREE.PointLight(0xfff0d8, 0.5, 6, 1.5);
 camFill.position.set(0, 0, 0);
 gunGroup.add(camFill);
+
+// Posiciones HIP (default) y AIM (ADS) del gunGroup. La diferencia entre
+// (0.18, -0.18, -0.45) hip de los hijos y la posición target del group
+// hace que al ADS la pistola quede centrada y elevada para alinearse con
+// la cruz central. _aimT es el blend (0=hip, 1=aim).
+const HIP_POS = new THREE.Vector3(0, 0, 0);
+const AIM_POS = new THREE.Vector3(-0.18, 0.06, 0.04);
+let _aimT = 0;
+let _aimTarget = 0;
+export function setAimMode(on) { _aimTarget = on ? 1 : 0; }
 
 camera.add(gunGroup);
 scene.add(camera); // make sure camera is in scene so its children render
@@ -289,6 +334,14 @@ function flashHitMarker(hit, isKill = false) {
 export function updateWeapons(dt) {
   // Ocultar el arma de fuego cuando hay tool melee activa.
   gunGroup.visible = !getActiveTool();
+  // Lerp ADS: muever el grupo a posición AIM (centrada) cuando _aimTarget=1.
+  _aimT += (_aimTarget - _aimT) * (1 - Math.exp(-12 * dt));
+  gunGroup.position.x = HIP_POS.x + (AIM_POS.x - HIP_POS.x) * _aimT;
+  gunGroup.position.y = HIP_POS.y + (AIM_POS.y - HIP_POS.y) * _aimT;
+  gunGroup.position.z = HIP_POS.z + (AIM_POS.z - HIP_POS.z) * _aimT;
+  // Reflex sight visible solo si tenés `scope` y estás centrando armas
+  // de mano (no sniper, que tiene scope intrínseco).
+  reflexGroup.visible = inv.has('scope', 1) && (active === 'pistol' || active === 'smg' || active === 'rifle');
   if (cooldown > 0) cooldown -= dt;
   if (muzzle.intensity > 0) muzzle.intensity = Math.max(0, muzzle.intensity - dt * 30);
   // Reload progress.

@@ -37,6 +37,7 @@ import { renderMinimap } from './minimap.js';
 import {
   lastShotWithinKillWindow, getActive as getActiveWeapon,
   selectWeaponBySlot, isReloading, activeWeaponMeta, consumeRecoil,
+  setAimMode,
 } from './weapons.js';
 import { updateEffects, spawnBloodDecal, spawnGoreBurst } from './effects.js';
 import { enemies } from './entities.js';
@@ -285,7 +286,12 @@ addEventListener('mousedown', (e) => { if (e.button === 2) setADS(true); });
 addEventListener('mouseup',   (e) => { if (e.button === 2) setADS(false); });
 function setADS(on) {
   _ads = on;
-  if (scopeVignette) scopeVignette.classList.toggle('show', on);
+  // La viñeta negra solo tiene sentido en sniper (efecto de óptica con
+  // bordes oscuros). En pistola/rifle queda raro — usá las miras de
+  // hierro o el reflex sight.
+  const isSniperNow = getActiveWeapon() === 'sniper';
+  if (scopeVignette) scopeVignette.classList.toggle('show', on && isSniperNow);
+  setAimMode(on);
 }
 
 // =====================================================================
