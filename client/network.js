@@ -37,6 +37,7 @@ class NetworkClient {
     this.onWave = null;
     this.onDifficulty = null;
     this.onWeather = null;
+    this.onHeliTrader = null;
     this.onSupplyDrop = null;
     this._sendAccum = 0;
   }
@@ -148,6 +149,8 @@ class NetworkClient {
       this.onDifficulty?.(msg.day, msg.mul);
     } else if (msg.type === 'weather') {
       this.onWeather?.(msg);
+    } else if (msg.type === 'heliTrader') {
+      this.onHeliTrader?.(msg);
     } else if (msg.type === 'supplyDrop') {
       this.onSupplyDrop?.(msg.x, msg.z);
     } else if (msg.type === 'fire') {
@@ -171,17 +174,21 @@ class NetworkClient {
     });
   }
 
-  shoot(origin, dir, hitId, dmg) {
+  shoot(origin, dir, hitId, dmg, opts = {}) {
     this._send({
       type: 'shoot',
       x: origin.x, y: origin.y, z: origin.z,
       dx: dir.x, dy: dir.y, dz: dir.z,
       hitId, dmg,
+      incendiary: !!opts.incendiary,
+      silenced: !!opts.silenced,
     });
   }
 
   openCrate(id) { this._send({ type: 'openCrate', id }); }
-  respawn() { this._send({ type: 'respawn' }); }
+  respawn(spawn) { this._send({ type: 'respawn', x: spawn?.x, z: spawn?.z }); }
+  setSpawn(x, z) { this._send({ type: 'setSpawn', x, z }); }
+  trySleepStat() { this._send({ type: 'sleep' }); }
   setName(name) { this._send({ type: 'name', name }); }
   chat(text) { this._send({ type: 'chat', text }); }
   throwGrenade(dx, dy, dz) { this._send({ type: 'grenade', dx, dy, dz }); }

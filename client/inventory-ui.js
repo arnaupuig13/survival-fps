@@ -100,7 +100,7 @@ const DESCRIPTIONS = {
 };
 
 // Items that can be "used" from the inventory ctx menu.
-const USABLE = new Set(['bandage', 'meat_cooked', 'meat_raw', 'berry', 'water_bottle']);
+const USABLE = new Set(['bandage', 'meat_cooked', 'meat_raw', 'berry', 'water_bottle', 'dog_collar', 'antibiotics']);
 
 // =====================================================================
 // State
@@ -464,7 +464,7 @@ window.addEventListener('blur', () => {
 // =====================================================================
 // Use actions (mirrors keybinds H / J / U)
 // =====================================================================
-function useItem(key) {
+async function useItem(key) {
   if (key === 'bandage') {
     if (inv.useBandage(player)) { logLine('+30 HP (vendaje)'); sfx.playPickup?.(); }
     else logLine('Sin vendas o HP llena');
@@ -476,6 +476,13 @@ function useItem(key) {
     if (inv.consume('berry', 1)) { player.eat?.('berry'); logLine('+ BAYAS'); sfx.playPickup?.(); }
   } else if (key === 'water_bottle') {
     if (inv.consume('water_bottle', 1)) { player.drink?.(); logLine('+ AGUA'); sfx.playPickup?.(); }
+  } else if (key === 'dog_collar') {
+    const dog = await import('./dog.js');
+    if (dog.isSummoned()) { logLine('Ya tenés un perro aliado'); return; }
+    if (inv.consume('dog_collar', 1)) { dog.tryUseCollar(); }
+  } else if (key === 'antibiotics') {
+    const status = await import('./status.js');
+    status.tryAntibiotics();
   }
 }
 

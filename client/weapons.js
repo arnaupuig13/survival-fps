@@ -11,6 +11,7 @@ import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
 import { spawnTracer, spawnDamageNumber, spawnBulletHole } from './effects.js';
 import { scene as worldScene } from './three-setup.js';
+import * as ammoTypes from './ammo-types.js';
 
 // Each weapon names the inventory key it consumes per shot. magazineSize
 // caps the loaded round count; reload pulls from the inventory pool.
@@ -133,19 +134,36 @@ function tryFire() {
   if (!player.locked || player.hp <= 0) return;
   if (cooldown > 0 || reloading) return;
   const cfg = WEAPONS[active];
+  // Resuelve el tipo de munición activo. Si elegiste especial pero no
+  // tenés stock, fallback automático a normal.
+  ammoTypes.fallbackToAvailable(active);
+  const ammoMeta = ammoTypes.getActiveAmmo(active) || { type: 'normal', item: cfg.ammo };
+  const isSpecial = ammoMeta.type !== 'normal';
+
   // God mode bypasses ammo entirely — never reload, never run dry.
   if (!player.godMode) {
-    if ((loaded[active] | 0) <= 0) {
-      if (inv.has(cfg.ammo, 1)) {
-        startReload();
-      } else {
+    if (isSpecial) {
+      // Munición especial NO usa cargador — consumís directo del pool.
+      if (!inv.has(ammoMeta.item, 1)) {
         sfx.playEmpty();
         cooldown = 0.25;
         mouseDown = false;
+        return;
       }
-      return;
+      inv.remove(ammoMeta.item, 1);
+    } else {
+      if ((loaded[active] | 0) <= 0) {
+        if (inv.has(cfg.ammo, 1)) {
+          startReload();
+        } else {
+          sfx.playEmpty();
+          cooldown = 0.25;
+          mouseDown = false;
+        }
+        return;
+      }
+      loaded[active] = (loaded[active] | 0) - 1;
     }
-    loaded[active] = (loaded[active] | 0) - 1;
   }
   cooldown = cfg.cooldown;
   // Sound — silencer mutes the report. Picks per weapon kind.
@@ -206,10 +224,17 @@ function tryFire() {
   }
 
   // Final damage. Perks: gunDamageMult (gunslinger), headshotMult (eagle_eye).
+  // Munición especial: AP +30% dmg, INC marca burn al server.
   const hsMul = (player.headshotMult || 2.0);
   const gunMul = (player.gunDamageMult || 1);
-  const finalDmg = Math.round((isHeadshot ? cfg.dmg * hsMul : cfg.dmg) * gunMul);
-  network.shoot(_origin, _dir, hitId, finalDmg);
+  const ammoDmgMul = ammoMeta.dmgMul || 1;
+  const finalDmg = Math.round((isHeadshot ? cfg.dmg * hsMul : cfg.dmg) * gunMul * ammoDmgMul);
+  // Manda flags al server: incendiary (DoT), silenced (sigilo).
+  const silencedShot = silent;
+  network.shoot(_origin, _dir, hitId, finalDmg, {
+    incendiary: !!ammoMeta.burn,
+    silenced: silencedShot,
+  });
 
   // Damage number floats up at impact.
   if (hitId !== null && hitPoint) {

@@ -247,7 +247,12 @@ const LOOT_TABLES = {
     { item: 'bullet_smg',    range: [6, 14] },
     { item: 'shell',         range: [4, 10] },
     { item: 'sniper_round',  range: [0, 4] },
+    { item: 'bullet_p_ap',   range: [0, 6] },
+    { item: 'bullet_r_ap',   range: [0, 8] },
+    { item: 'bullet_r_inc',  chance: 0.35 },
     { item: 'bandage',       range: [2, 4] },
+    { item: 'antibiotics',   chance: 0.20 },
+    { item: 'flashlight',    chance: 0.30 },
     { item: 'rifle_pickup',  chance: 0.55 },
     { item: 'shotgun_pickup',chance: 0.30 },
     { item: 'smg_pickup',    chance: 0.30 },
@@ -255,6 +260,7 @@ const LOOT_TABLES = {
     { item: 'helmet_armor',  chance: 0.18 },
     { item: 'scope',         chance: 0.22 },
     { item: 'ext_mag',       chance: 0.18 },
+    { item: 'scrap',         range: [2, 6] },
   ],
   // Boss drop — guaranteed legendary plus full attachment kit.
   boss: [
@@ -262,7 +268,13 @@ const LOOT_TABLES = {
     { item: 'bullet_p',       range: [25, 40] },
     { item: 'shell',          range: [12, 18] },
     { item: 'sniper_round',   range: [10, 16] },
+    { item: 'bullet_r_ap',    range: [10, 20] },
+    { item: 'bullet_r_inc',   range: [4, 8] },
+    { item: 'bullet_p_ap',    range: [10, 16] },
     { item: 'bandage',        range: [4, 7] },
+    { item: 'antibiotics',    range: [1, 2] },
+    { item: 'flashlight',     chance: 1.0 },
+    { item: 'dog_collar',     chance: 0.5 },
     { item: 'sniper_pickup',  chance: 1.0 },
     { item: 'silencer',       chance: 1.0 },
     { item: 'scope',          chance: 0.9 },
@@ -270,6 +282,7 @@ const LOOT_TABLES = {
     { item: 'vest_armor',     chance: 0.85 },
     { item: 'ext_mag',        chance: 0.7 },
     { item: 'rifle_pickup',   chance: 1.0 },
+    { item: 'scrap',          range: [12, 24] },
   ],
   animal: [
     { item: 'meat_raw', range: [1, 2] },
@@ -785,6 +798,72 @@ function announceWave() {
 // grande y mortal que las olas regulares: incluye specials (screamer +
 // brute) y mucha más cantidad. Anunciada con banner rojo.
 // =====================================================================
+// Patrulla de científicos — desde día 4, cada 5-7 min se forma un trío
+// que persigue al jugador más cercano hasta que muere todo el grupo o el
+// jugador escapa muy lejos.
+let scientistPatrolCd = 240;   // primera patrulla a los 4 min
+function maybeTriggerScientistPatrol() {
+  if (gameDay < 4) return;
+  if (players.size === 0) return;
+  scientistPatrolCd -= AI_DT;
+  if (scientistPatrolCd > 0) return;
+  scientistPatrolCd = 300 + Math.random() * 120;  // 5-7 min
+  const list = [...players.values()];
+  const target = list[Math.floor(Math.random() * list.length)];
+  const angle = Math.random() * Math.PI * 2;
+  const r = 60 + Math.random() * 25;
+  const baseX = target.x + Math.cos(angle) * r;
+  const baseZ = target.z + Math.sin(angle) * r;
+  if (Math.abs(baseX) > WORLD_HALF - 5 || Math.abs(baseZ) > WORLD_HALF - 5) return;
+  for (let i = 0; i < 3; i++) {
+    const off = (i - 1) * 2;
+    const types = ['scientist', 'sci_shotgun', 'sci_sniper'];
+    const e = makeEnemy({
+      etype: types[i], x: baseX + off, z: baseZ + off,
+    });
+    e.patrol = true;          // override aggro range siempre
+    broadcast({ type: 'eSpawn', e: ePub(e) });
+  }
+  broadcast({ type: 'banner', text: '⚠ PATRULLA DE CIENTIFICOS EN MARCHA' });
+}
+
+// Helicóptero comerciante — cada 6-10 min aterriza en posición random,
+// se queda 3 min, y al despegar deja un cofre boss-tier. Solo 1 a la vez.
+let heliTraderCd = 360;       // primer heli a los 6 min
+let heliTrader = null;        // { x, z, expiresAt }
+function maybeTriggerHeliTrader() {
+  if (players.size === 0) return;
+  if (heliTrader) {
+    if (Date.now() > heliTrader.expiresAt) {
+      // Aterriza loot drop antes de despegar.
+      const id = nextCrateId++;
+      crates.set(id, {
+        id, x: heliTrader.x, z: heliTrader.z, y: heightAt(heliTrader.x, heliTrader.z),
+        tableKey: 'boss', townId: null, taken: false,
+      });
+      broadcast({ type: 'crateSpawn', c: cPub(crates.get(id)) });
+      broadcast({ type: 'banner', text: '✦ El heli despegó — dejó loot' });
+      broadcast({ type: 'heliTrader', state: 'leave' });
+      heliTrader = null;
+    }
+    return;
+  }
+  heliTraderCd -= AI_DT;
+  if (heliTraderCd > 0) return;
+  heliTraderCd = 360 + Math.random() * 240;  // 6-10 min entre apariciones
+  // Posición random entre los jugadores.
+  const list = [...players.values()];
+  const anchor = list[Math.floor(Math.random() * list.length)];
+  const angle = Math.random() * Math.PI * 2;
+  const r = 40 + Math.random() * 20;
+  const x = anchor.x + Math.cos(angle) * r;
+  const z = anchor.z + Math.sin(angle) * r;
+  if (Math.abs(x) > WORLD_HALF - 10 || Math.abs(z) > WORLD_HALF - 10) return;
+  heliTrader = { x, z, expiresAt: Date.now() + 180 * 1000 };
+  broadcast({ type: 'banner', text: '✦ HELICOPTERO COMERCIANTE — interactúa con E' });
+  broadcast({ type: 'heliTrader', state: 'arrive', x, z, expiresAt: heliTrader.expiresAt });
+}
+
 let lastHordeNightDay = 0;
 function maybeTriggerNightHorde() {
   if (gameDay < 3) return;
@@ -838,7 +917,11 @@ setInterval(() => {
     broadcast({ type: 'difficulty', day: gameDay, mul: +difficultyMul().toFixed(2) });
   }
   // Trigger horda nocturna desde día 3 al cruzar las 22:00.
-  if (players.size > 0) maybeTriggerNightHorde();
+  if (players.size > 0) {
+    maybeTriggerNightHorde();
+    maybeTriggerScientistPatrol();
+    maybeTriggerHeliTrader();
+  }
 
   // Clima: cada 90s real chequeamos si cambia. Lluvia 25%, niebla 15%
   // (solo de noche), clear el resto. Anuncia con banner sutil.
@@ -970,9 +1053,21 @@ setInterval(() => {
   }
 
   // Per-enemy AI.
+  const _now = Date.now();
   for (const e of enemies.values()) {
     if (e.attackCd > 0) e.attackCd -= AI_DT;
     const cfg = ETYPES[e.etype] || ETYPES.zombie;
+    // Burn DoT (incendiary bullets) — 2 HP cada 500ms hasta 5s.
+    if (e._burnUntil && _now < e._burnUntil) {
+      if (_now >= (e._burnNextTick || 0)) {
+        e._burnNextTick = _now + 500;
+        e.hp = Math.max(0, e.hp - 2);
+        broadcast({ type: 'eHit', id: e.id, hp: e.hp });
+        if (e.hp <= 0) { killEnemy(e, null); continue; }
+      }
+    } else if (e._burnUntil) {
+      e._burnUntil = 0;
+    }
 
     // Find nearest alive player.
     let nearest = null, nd2 = Infinity;
@@ -1021,7 +1116,10 @@ setInterval(() => {
       continue;
     }
 
-    if (d > cfg.aggro) continue;
+    // Patrulla de scientists o aggro boost (por scream / disparo no
+     // silenciado) ignora el aggro range normal.
+    const aggroBoosted = e._aggroBoostUntil && Date.now() < e._aggroBoostUntil;
+    if (!e.patrol && !aggroBoosted && d > cfg.aggro) continue;
 
     // Night buff — melee zombies/wolves move ~20% faster after dusk so the
     // night actually feels different from the day.
@@ -1212,6 +1310,18 @@ wss.on('connection', (ws) => {
       player.ry = Number.isFinite(msg.ry) ? msg.ry : 0;
     } else if (msg.type === 'shoot') {
       broadcast({ type: 'fire', from: id, x: msg.x, y: msg.y, z: msg.z, dx: msg.dx, dy: msg.dy, dz: msg.dz });
+      // Sigilo: si NO está silenciado, despierta zombies cercanos al
+      // jugador y bumpea su aggro temporalmente.
+      if (!msg.silenced) {
+        for (const z of enemies.values()) {
+          if (z.isBoss || z.etype === 'deer' || z.etype === 'rabbit') continue;
+          const d = Math.hypot(z.x - player.x, z.z - player.z);
+          if (d < 35) {
+            z.sleeping = false;
+            z._aggroBoostUntil = Date.now() + 6000;
+          }
+        }
+      }
       if (msg.hitId != null) {
         const e = enemies.get(msg.hitId);
         if (e && e.hp > 0) {
@@ -1221,15 +1331,34 @@ wss.on('connection', (ws) => {
             e.sleeping = false;
             broadcast({ type: 'eWake', id: e.id });
           }
+          // Incendiary: marca burn DoT 5s.
+          if (msg.incendiary) {
+            e._burnUntil = Date.now() + 5000;
+            e._burnNextTick = Date.now() + 500;
+          }
           broadcast({ type: 'eHit', id: e.id, hp: Math.max(0, e.hp) });
           if (e.hp <= 0) killEnemy(e, id);
         }
       }
     } else if (msg.type === 'respawn') {
       player.hp = 100;
-      player.x = 0; player.z = 0;
-      player.y = heightAt(0, 0);
+      // Bedroll: cliente puede mandar (x, z) custom. Validamos rango y
+      // que no esté dentro de mundo prohibido.
+      let sx = 0, sz = 0;
+      if (Number.isFinite(msg.x) && Number.isFinite(msg.z) &&
+          Math.abs(msg.x) < WORLD_HALF - 5 && Math.abs(msg.z) < WORLD_HALF - 5) {
+        sx = msg.x; sz = msg.z;
+      } else if (Number.isFinite(player.spawnX) && Number.isFinite(player.spawnZ)) {
+        sx = player.spawnX; sz = player.spawnZ;
+      }
+      player.x = sx; player.z = sz;
+      player.y = heightAt(sx, sz);
       sendTo(player, { type: 'respawned', x: player.x, y: player.y, z: player.z });
+    } else if (msg.type === 'setSpawn') {
+      if (Number.isFinite(msg.x) && Number.isFinite(msg.z)) {
+        player.spawnX = msg.x;
+        player.spawnZ = msg.z;
+      }
     } else if (msg.type === 'name') {
       const name = String(msg.name || '').slice(0, 14).replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || `P${id}`;
       player.name = name;

@@ -20,12 +20,17 @@ export const RARITY = {
 // `weight`: peso unitario en "kg" abstractos. La capacidad base del jugador
 // es 30; el perk `sharp_senses` agrega +5. Sobrepeso = movimiento más lento.
 export const ITEMS = {
-  // Ammo.
+  // Ammo standard.
   bullet_p:        { label: 'BALAS PISTOLA',  max: 99, rarity: 'common', weight: 0.02 },
   bullet_r:        { label: 'BALAS RIFLE',    max: 99, rarity: 'common', weight: 0.03 },
   bullet_smg:      { label: 'BALAS SMG',      max: 99, rarity: 'common', weight: 0.025 },
   shell:           { label: 'CARTUCHOS',      max: 60, rarity: 'uncommon', weight: 0.06 },
   sniper_round:    { label: 'CAL .50',        max: 30, rarity: 'rare', weight: 0.12 },
+  // Ammo especial — perforantes (AP) +30% dmg vs blindados, incendiarias
+  // (INC) aplican burn DoT 5s. Loot raro en city/boss.
+  bullet_p_ap:     { label: 'BALAS .9 AP',    max: 60, rarity: 'rare',      weight: 0.025 },
+  bullet_r_ap:     { label: 'BALAS RIFLE AP', max: 60, rarity: 'rare',      weight: 0.035 },
+  bullet_r_inc:    { label: 'BALAS INCEND.',  max: 30, rarity: 'epic',      weight: 0.04  },
   // Consumables.
   bandage:         { label: 'VENDAJES',       max: 9,  rarity: 'uncommon', weight: 0.15 },
   grenade:         { label: 'GRANADAS',       max: 6,  rarity: 'rare', weight: 0.6 },
@@ -59,6 +64,9 @@ export const ITEMS = {
   antibiotics:     { label: 'ANTIBIOTICOS',   max: 5,  rarity: 'rare', weight: 0.1 },
   // Trampas.
   bear_trap:       { label: 'CEPO',           max: 5,  rarity: 'uncommon', weight: 3 },
+  // Survival gear nuevo.
+  flashlight:      { label: 'LINTERNA',       max: 1, oneTime: true, rarity: 'uncommon', weight: 0.4 },
+  dog_collar:      { label: 'COLLAR PERRO',   max: 1, oneTime: true, rarity: 'epic', weight: 0.3 },
 };
 
 export const BASE_WEIGHT_CAPACITY = 30;
@@ -69,6 +77,11 @@ const state = {
   bullet_smg: 0,
   shell: 0,
   sniper_round: 0,
+  bullet_p_ap: 0,
+  bullet_r_ap: 0,
+  bullet_r_inc: 0,
+  flashlight: 0,
+  dog_collar: 0,
   bandage:  1,
   grenade:  2,
   rifle_pickup: 0,

@@ -47,6 +47,11 @@ import * as status from './status.js';
 import * as traps from './traps.js';
 import * as trader from './trader.js';
 import * as perks from './perks.js';
+import * as ammoTypes from './ammo-types.js';
+import * as flashlight from './flashlight.js';
+import * as bedroll from './bedroll.js';
+import * as dog from './dog.js';
+import * as heliTrader from './heli-trader.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -97,6 +102,16 @@ quests.onChange((s) => renderQuests(s.quests));
 
 // Status: pinta indicadores de sangrado / infección.
 status.onChange((s) => setStatus(s.bleeding, s.infected));
+
+// Achievement chequeo en cambio de inventario — scrap acumulado, primera
+// arma, primer cofre boss, etc.
+inv.onChange((s) => {
+  if ((s.scrap | 0) >= 100) unlockAchievement('scrap_100', 'Mercader — 100 chatarra');
+  if ((s.scrap | 0) >= 500) unlockAchievement('scrap_500', 'Magnate — 500 chatarra');
+  if (s.flashlight)         unlockAchievement('first_light', 'Iluminaste la noche');
+  if (s.dog_collar)         unlockAchievement('best_friend', 'Conseguiste un perro aliado');
+  if (s.sniper_pickup)      unlockAchievement('sniper_unlocked', 'Conseguiste un sniper');
+});
 
 // Perks: refresca badge + abre modal cuando hay pendiente al subir nivel.
 perks.onChange((s) => setPerkPending(s.pending));
@@ -231,6 +246,22 @@ function closeTraderPanel() {
   }
 }
 
+// Heli trader — usa el mismo modal que el trader normal pero con el
+// catálogo SHOP del heli y BUY vacío (el heli no compra).
+function openHeliTraderPanel() {
+  _voluntaryUnlock = true;
+  document.exitPointerLock?.();
+  const refreshShow = () => {
+    openTrader(
+      heliTrader.HELI_SHOP, heliTrader.HELI_BUY, inv.get('scrap'),
+      (offerId) => { heliTrader.tryBuy(offerId); refreshShow(); },
+      () => {},
+      (o) => { for (const k of Object.keys(o.give || {})) if (inv.ITEMS[k]?.oneTime && inv.has(k, 1)) return true; return false; },
+    );
+  };
+  refreshShow();
+}
+
 function appendChatLog(name, text) {
   const div = document.createElement('div');
   div.className = 'cline';
@@ -323,6 +354,13 @@ network.onWeather = (msg) => {
   setWeather(msg.kind);
   player.weatherKind = msg.kind;
 };
+network.onHeliTrader = (msg) => {
+  if (msg.state === 'arrive') {
+    heliTrader.spawn(msg.x, msg.z, msg.expiresAt);
+  } else if (msg.state === 'leave') {
+    heliTrader.despawn();
+  }
+};
 network.onEnemyDead = (id, msg) => {
   const e = enemies.get(id);
   const x = e ? e.mesh.position.x : null;
@@ -363,8 +401,17 @@ network.onEnemyDead = (id, msg) => {
   // Achievement milestones.
   if (profile.totalKills === 1)   unlockAchievement('first_kill', 'Primera baja');
   if (profile.totalKills === 10)  unlockAchievement('ten_kills', '10 enemigos eliminados');
-  if (profile.totalKills === 50)  unlockAchievement('fifty_kills', '50 enemigos eliminados');
-  if (profile.totalKills === 100) unlockAchievement('hundred_kills', 'Centurión: 100 enemigos');
+  if (profile.totalKills === 50)  unlockAchievement('fifty_kills', 'Cazador — 50 enemigos');
+  if (profile.totalKills === 100) unlockAchievement('hundred_kills', 'Veterano — 100 enemigos');
+  if (profile.totalKills === 200) unlockAchievement('devastator', 'Devastador — 200 enemigos');
+  if (profile.totalKills === 500) unlockAchievement('apocalyptic', 'Apocalíptico — 500 enemigos');
+  // Por tipo de enemigo — track set de tipos matados.
+  if (kind === 'brute')      unlockAchievement('brute_down', 'Mataste un Brute');
+  if (kind === 'screamer')   unlockAchievement('screamer_down', 'Silenciaste un Screamer');
+  if (kind === 'spitter')    unlockAchievement('spitter_down', 'Mataste un Spitter');
+  if (kind === 'exploder')   unlockAchievement('exploder_down', 'Liquidaste un Exploder');
+  if (kind === 'bear')       unlockAchievement('bear_hunter', 'Cazaste un oso');
+  if (kind === 'wolf')       unlockAchievement('wolf_hunter', 'Cazaste un lobo');
   // Visceral feedback only on real kills, not despawn cleanups.
   if (e && x != null) {
     spawnBloodDecal(x, z);
@@ -483,8 +530,16 @@ playBtn.addEventListener('click', () => {
 
 respawnBtn.addEventListener('click', () => {
   player.respawn();
-  network.respawn();
-  // Bedroll respawn pausado (sistema de building deshabilitado).
+  // Si tenés bedroll colocado, respawneás ahí (manda coords al server).
+  const bp = bedroll.getPos();
+  if (bp) {
+    network.respawn({ x: bp.x, z: bp.z });
+    // Mover el player local también para evitar el flash en (0,0).
+    player.pos.set(bp.x, heightAt(bp.x, bp.z) + 1.65, bp.z);
+    logLine('★ Despertaste en tu cama');
+  } else {
+    network.respawn();
+  }
   setHP(player.hp);
   deathEl.classList.remove('show');
   resetLifeStats();
@@ -511,6 +566,7 @@ let nearbyBush = null;
 let nearbyPlant = null;
 let nearbyLake = null;
 let nearbyTrader = null;
+let nearbyHeli = null;
 
 // Player.js applies player.mouseSensitivity if present (default 0.0022).
 // We just need the field to exist so applySettings can override it.
@@ -581,8 +637,29 @@ addEventListener('keydown', (e) => {
   } else if (e.code === 'KeyE' && nearbyTrader && !isTraderOpen()) {
     openTraderPanel();
     hideInteract();
+  } else if (e.code === 'KeyE' && nearbyHeli && !isTraderOpen()) {
+    openHeliTraderPanel();
+    hideInteract();
   } else if (e.code === 'KeyE' && isTraderOpen()) {
     closeTraderPanel();
+  } else if (e.code === 'KeyQ' && !e.repeat) {
+    // Cycle ammo type del arma activa.
+    ammoTypes.cycleAmmo(getActiveWeapon());
+  } else if (e.code === 'KeyO' && !e.repeat) {
+    // Linterna toggle.
+    flashlight.toggle();
+  } else if (e.code === 'KeyZ' && !e.repeat) {
+    // Bedroll: coloca tu punto de respawn en el suelo frente al jugador.
+    if (!inv.has('bedroll_item', 1)) {
+      logLine('Necesitás una cama (loot raro)');
+    } else {
+      const yaw = player.yaw();
+      const fx = player.pos.x + Math.sin(yaw) * -1.6;
+      const fz = player.pos.z + Math.cos(yaw) * -1.6;
+      if (bedroll.placeAt(fx, fz)) {
+        network.setSpawn(fx, fz);
+      }
+    }
   } else if (e.code === 'KeyE' && nearbyBush) {
     const got = survival.harvestBush(nearbyBush);
     if (got > 0) {
@@ -858,6 +935,9 @@ function frame(now) {
   status.tick(dt);             // sangrado / infección
   traps.update(dt);            // cepos chequean enemigos cercanos
   trader.update(dt, player.pos);
+  flashlight.tick();
+  dog.update(dt);
+  heliTrader.update(dt);
   setHP(player.hp);
   setSurvival(player.hunger, player.thirst, player.warmth);
   setCompass(player.yaw());
@@ -903,16 +983,18 @@ function frame(now) {
     }
   }
 
-  // Interaction prompt — priority: crate > trader > plant > bush > lake > vehicle.
+  // Interaction prompt — priority: crate > trader > heli > plant > bush > lake > vehicle.
   if (player.locked && player.hp > 0) {
     const c = nearestInRange(player.pos);
     const tr = !c ? trader.nearestInRange(player.pos) : null;
-    const plant = (!c && !tr) ? survival.nearestPlantInRange(player.pos) : null;
-    const bush = (!c && !tr && !plant) ? survival.nearestBushInRange(player.pos) : null;
-    const lake = (!c && !tr && !plant && !bush) ? survival.nearestLakeInRange(player.pos) : null;
-    const vp = (!c && !tr && !plant && !bush && !lake) ? vehicle.nearbyVehiclePrompt(player.pos) : null;
+    const heli = (!c && !tr) ? heliTrader.nearestInRange(player.pos) : null;
+    const plant = (!c && !tr && !heli) ? survival.nearestPlantInRange(player.pos) : null;
+    const bush = (!c && !tr && !heli && !plant) ? survival.nearestBushInRange(player.pos) : null;
+    const lake = (!c && !tr && !heli && !plant && !bush) ? survival.nearestLakeInRange(player.pos) : null;
+    const vp = (!c && !tr && !heli && !plant && !bush && !lake) ? vehicle.nearbyVehiclePrompt(player.pos) : null;
     nearbyCrate = c || null;
     nearbyTrader = tr || null;
+    nearbyHeli = heli || null;
     nearbyPlant = plant || null;
     nearbyBush = bush || null;
     nearbyLake = lake || null;
@@ -924,6 +1006,7 @@ function frame(now) {
                 : 'cofre';
       showInteract(c.localLoot ? `recoger ${tier}` : `abrir ${tier}`);
     } else if (tr) showInteract('hablar con el comerciante');
+    else if (heli) showInteract('comerciar con el heli');
     else if (plant) showInteract('recoger planta medicinal');
     else if (bush) showInteract('recoger bayas');
     else if (lake) showInteract('rellenar botella');
@@ -942,6 +1025,9 @@ function frame(now) {
     profile.daysSurvived = (profile.daysSurvived | 0) + 1;
     saveProfile(profile);
     logLine(`★ DIA ${inSessionDay}`);
+    if (profile.daysSurvived === 3)  unlockAchievement('survive_3', 'Sobreviviste 3 días');
+    if (profile.daysSurvived === 7)  unlockAchievement('survive_7', 'Superviviente — 7 días');
+    if (profile.daysSurvived === 14) unlockAchievement('survive_14', 'Resistencia — 14 días');
   }
   // Survive-night tracking — al amanecer (06:00) marcamos quest.
   if (_lastClockHour < 6 && h >= 6 && h < 7) {
