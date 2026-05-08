@@ -20,6 +20,7 @@ import {
   openTrader, closeTrader, isTraderOpen, refreshTraderScrap,
   openPerksPanel, closePerksPanel, isPerksOpen, setPerkPending,
   setDifficulty, setWeather,
+  openStash, closeStash, isStashOpen,
 } from './hud.js';
 import * as survival from './survival.js';
 import * as tools from './tools.js';
@@ -28,7 +29,7 @@ import { updateCityLights, toggleColliderDebug } from './towns.js';
 import { updatePoi } from './poi.js';
 import * as build from './build.js';
 import { toggleMap, isMapOpen, updateMap, noteSupplyDrop } from './map.js';
-import { toggleStash, isStashOpen } from './stash.js';
+// stash.js (viejo) está deshabilitado — usamos stash-personal.js en su lugar.
 import * as inv from './inventory.js';
 import * as inventoryUI from './inventory-ui.js';
 import * as sfx from './sounds.js';
@@ -59,6 +60,7 @@ import * as smoke from './smoke.js';
 import * as storm from './storm.js';
 import * as flashbang from './flashbang.js';
 import * as convoyPlane from './convoy-plane.js';
+import * as stashPersonal from './stash-personal.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -255,6 +257,46 @@ function closeTraderPanel() {
   }
 }
 
+// Stash personal — modal de cofre persistente.
+function openStashPanel() {
+  _voluntaryUnlock = true;
+  document.exitPointerLock?.();
+  openStash(
+    () => {
+      // Items del inv (count > 0) que se pueden depositar.
+      const out = [];
+      const state = inv.getState();
+      for (const [k, n] of Object.entries(state)) {
+        if (typeof n !== 'number' || n <= 0) continue;
+        const meta = inv.ITEMS[k];
+        if (!meta || meta.noDrop) continue;
+        out.push({ key: k, count: n, label: meta.label || k });
+      }
+      return out;
+    },
+    () => {
+      // Stash slots con label resuelto.
+      return stashPersonal.getSlots().map((s) => {
+        if (!s) return null;
+        const meta = inv.ITEMS[s.item];
+        return { item: s.item, count: s.count, label: meta?.label || s.item };
+      });
+    },
+    (key) => stashPersonal.deposit(key, 1),
+    (idx) => stashPersonal.withdraw(idx, null),
+    () => stashPersonal.withdrawAll(),
+  );
+}
+function closeStashPanel() {
+  closeStash();
+  if (player.hp > 0) {
+    setTimeout(() => {
+      _voluntaryUnlock = false;
+      renderer.domElement.requestPointerLock?.();
+    }, 60);
+  }
+}
+
 // Heli trader — usa el mismo modal que el trader normal pero con el
 // catálogo SHOP del heli y BUY vacío (el heli no compra).
 function openHeliTraderPanel() {
@@ -387,6 +429,32 @@ network.onConvoy = (msg) => {
   if (msg && msg.dirX != null) {
     convoyPlane.spawn(msg.x, msg.z, msg.dirX, msg.dirZ);
   }
+};
+network.onLightning = (msg) => {
+  // White flash overlay (similar al flashbang pero más corto + sound).
+  const overlay = document.getElementById('flashOverlay');
+  const dx = (player.pos?.x || 0) - msg.x;
+  const dz = (player.pos?.z || 0) - msg.z;
+  const d = Math.hypot(dx, dz);
+  if (overlay && d < 200) {
+    const intensity = Math.max(0.2, 1 - d / 200);
+    overlay.style.opacity = String(0.85 * intensity);
+    overlay.classList.add('show');
+    setTimeout(() => {
+      overlay.classList.remove('show');
+      overlay.style.opacity = '0';
+    }, 250);
+  }
+  sfx.playBossSting?.();
+};
+let _localPvP = false;
+network.onPvpStatus = (on) => {
+  _localPvP = !!on;
+  showBanner(on ? '★ PVP ACTIVADO ★' : 'PvP desactivado', 1500);
+  logLine(on ? 'Estás en modo PvP — otros con PvP on pueden atacarte' : 'PvP desactivado');
+};
+network.onPeerPvp = (id, on) => {
+  // Indicador visual ya gestionado por entities — TODO highlight peer.
 };
 network.onEnemyDead = (id, msg) => {
   const e = enemies.get(id);
@@ -594,6 +662,7 @@ let nearbyPlant = null;
 let nearbyLake = null;
 let nearbyTrader = null;
 let nearbyHeli = null;
+let nearbyStash = null;
 
 // Player.js applies player.mouseSensitivity if present (default 0.0022).
 // We just need the field to exist so applySettings can override it.
@@ -667,6 +736,11 @@ addEventListener('keydown', (e) => {
   } else if (e.code === 'KeyE' && nearbyHeli && !isTraderOpen()) {
     openHeliTraderPanel();
     hideInteract();
+  } else if (e.code === 'KeyE' && nearbyStash && !isStashOpen()) {
+    openStashPanel();
+    hideInteract();
+  } else if (e.code === 'KeyE' && isStashOpen()) {
+    closeStashPanel();
   } else if (e.code === 'KeyE' && isTraderOpen()) {
     closeTraderPanel();
   } else if (e.code === 'KeyQ' && !e.repeat) {
@@ -747,6 +821,9 @@ addEventListener('keydown', (e) => {
     } else {
       logLine('Sin granadas flashbang');
     }
+  } else if (e.code === 'F2' && !e.repeat) {
+    // PvP toggle — ambos players con PvP on pueden dañarse entre sí.
+    network.togglePvP();
   } else if (e.code === 'KeyF') {
     if (vehicle.isDriving()) {
       vehicle.exit();
@@ -1124,18 +1201,20 @@ function frame(now) {
     }
   }
 
-  // Interaction prompt — priority: crate > trader > heli > plant > bush > lake > vehicle.
+  // Interaction prompt — priority: crate > trader > heli > stash > plant > bush > lake > vehicle.
   if (player.locked && player.hp > 0) {
     const c = nearestInRange(player.pos);
     const tr = !c ? trader.nearestInRange(player.pos) : null;
     const heli = (!c && !tr) ? heliTrader.nearestInRange(player.pos) : null;
-    const plant = (!c && !tr && !heli) ? survival.nearestPlantInRange(player.pos) : null;
-    const bush = (!c && !tr && !heli && !plant) ? survival.nearestBushInRange(player.pos) : null;
-    const lake = (!c && !tr && !heli && !plant && !bush) ? survival.nearestLakeInRange(player.pos) : null;
-    const vp = (!c && !tr && !heli && !plant && !bush && !lake) ? vehicle.nearbyVehiclePrompt(player.pos) : null;
+    const sta = (!c && !tr && !heli) ? stashPersonal.nearestInRange(player.pos) : null;
+    const plant = (!c && !tr && !heli && !sta) ? survival.nearestPlantInRange(player.pos) : null;
+    const bush = (!c && !tr && !heli && !sta && !plant) ? survival.nearestBushInRange(player.pos) : null;
+    const lake = (!c && !tr && !heli && !sta && !plant && !bush) ? survival.nearestLakeInRange(player.pos) : null;
+    const vp = (!c && !tr && !heli && !sta && !plant && !bush && !lake) ? vehicle.nearbyVehiclePrompt(player.pos) : null;
     nearbyCrate = c || null;
     nearbyTrader = tr || null;
     nearbyHeli = heli || null;
+    nearbyStash = sta || null;
     nearbyPlant = plant || null;
     nearbyBush = bush || null;
     nearbyLake = lake || null;
@@ -1148,6 +1227,7 @@ function frame(now) {
       showInteract(c.localLoot ? `recoger ${tier}` : `abrir ${tier}`);
     } else if (tr) showInteract('hablar con el comerciante');
     else if (heli) showInteract('comerciar con el heli');
+    else if (sta) showInteract('abrir stash personal');
     else if (plant) showInteract('recoger planta medicinal');
     else if (bush) showInteract('recoger bayas');
     else if (lake) showInteract('rellenar botella');

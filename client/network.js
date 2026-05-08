@@ -41,6 +41,9 @@ class NetworkClient {
     this.onStorm = null;
     this.onFlashbang = null;
     this.onConvoy = null;
+    this.onLightning = null;
+    this.onPvpStatus = null;
+    this.onPeerPvp = null;
     this.onSupplyDrop = null;
     this._sendAccum = 0;
   }
@@ -162,6 +165,12 @@ class NetworkClient {
       this.onFlashbang?.(msg);
     } else if (msg.type === 'convoy') {
       this.onConvoy?.(msg);
+    } else if (msg.type === 'lightning') {
+      this.onLightning?.(msg);
+    } else if (msg.type === 'pvpStatus') {
+      this.onPvpStatus?.(msg.on);
+    } else if (msg.type === 'peerPvp') {
+      this.onPeerPvp?.(msg.id, msg.on);
     } else if (msg.type === 'supplyDrop') {
       this.onSupplyDrop?.(msg.x, msg.z);
     } else if (msg.type === 'fire') {
@@ -205,6 +214,8 @@ class NetworkClient {
   throwGrenade(dx, dy, dz) { this._send({ type: 'grenade', dx, dy, dz }); }
   registerSmoke(x, z, r, dur) { this._send({ type: 'smokeArea', x, z, r, dur }); }
   detonateFlashbang(x, z) { this._send({ type: 'flashbang', x, z }); }
+  togglePvP() { this._send({ type: 'pvpToggle' }); }
+  attackPlayer(targetId, dmg) { this._send({ type: 'pvpAttack', targetId, dmg }); }
 
   _send(msg) {
     if (!this.connected || !this.ws || this.ws.readyState !== 1) return;

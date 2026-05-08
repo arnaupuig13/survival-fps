@@ -517,12 +517,24 @@ export function removeEnemy(id) {
     e.mesh.traverse(c => { if (c.geometry) c.geometry.dispose?.(); });
     return;
   }
-  // Corpse: tumbar el mesh.
-  e.mesh.rotation.x = -Math.PI / 2 + (Math.random() - 0.5) * 0.4;
-  e.mesh.rotation.z = (Math.random() - 0.5) * 0.6;
-  e.mesh.position.y -= 0.4;
+  // Corpse: tumbar el mesh con tween suave — rotación X 0 → -π/2 sobre
+  // 0.6s. Pequeño bounce vertical al impacto.
   e.mesh.userData.isCorpse = true;
-  corpses.push({ mesh: e.mesh, until: performance.now() + CORPSE_LIFETIME * 1000 });
+  const targetRotX = -Math.PI / 2 + (Math.random() - 0.5) * 0.4;
+  const targetRotZ = (Math.random() - 0.5) * 0.6;
+  const startY = e.mesh.position.y;
+  corpses.push({
+    mesh: e.mesh,
+    until: performance.now() + CORPSE_LIFETIME * 1000,
+    fallStart: performance.now(),
+    fallDur: 600,
+    rot0X: e.mesh.rotation.x,
+    rot0Z: e.mesh.rotation.z,
+    rotTX: targetRotX,
+    rotTZ: targetRotZ,
+    y0: startY,
+    yT: startY - 0.4,
+  });
 }
 
 // Llamado desde main.js cuando llega eDead con despawn:true. Marcamos
@@ -532,7 +544,7 @@ export function markDespawn(id) {
   if (e) e._despawn = true;
 }
 
-// Tick — fade-out + remove corpses expirados.
+// Tick — fall animation + fade-out + remove corpses expirados.
 export function tickCorpses(dt) {
   const now = performance.now();
   for (let i = corpses.length - 1; i >= 0; i--) {
@@ -543,6 +555,20 @@ export function tickCorpses(dt) {
       c.mesh.traverse((o) => { if (o.geometry) o.geometry.dispose?.(); });
       corpses.splice(i, 1);
       continue;
+    }
+    // Fall animation — primeros 0.6s.
+    if (c.fallDur > 0) {
+      const elapsed = now - c.fallStart;
+      const t = Math.min(1, elapsed / c.fallDur);
+      // Easing — easeOutCubic para que el bounce inicial sea fuerte.
+      const ease = 1 - Math.pow(1 - t, 3);
+      c.mesh.rotation.x = c.rot0X + (c.rotTX - c.rot0X) * ease;
+      c.mesh.rotation.z = c.rot0Z + (c.rotTZ - c.rot0Z) * ease;
+      // Bounce: el cuerpo cae con ligero rebote — sin function trig
+      // overlap con la curva ease final.
+      const bounce = Math.sin(t * Math.PI) * 0.15;
+      c.mesh.position.y = c.y0 + (c.yT - c.y0) * ease + bounce;
+      if (t >= 1) c.fallDur = 0;
     }
     // Fade en últimos 5s.
     if (remain < 5000) {

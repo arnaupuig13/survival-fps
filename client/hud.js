@@ -459,7 +459,59 @@ const weatherEl = document.getElementById('weatherOverlay');
 export function setWeather(kind) {
   if (!weatherEl) return;
   weatherEl.className = '';
-  if (kind === 'rain' || kind === 'fog') weatherEl.classList.add(kind);
+  if (kind === 'rain' || kind === 'fog' || kind === 'thunder') weatherEl.classList.add(kind);
+}
+
+// ----------------------------------------------------------------------
+// Stash personal modal
+// ----------------------------------------------------------------------
+const stashPanel = document.getElementById('stashPanel');
+const stashInvList = document.getElementById('stashInvList');
+const stashSlotsGrid = document.getElementById('stashSlotsGrid');
+const stashWithdrawAllBtn = document.getElementById('stashWithdrawAll');
+let _stashOpen = false;
+export function isStashOpen() { return _stashOpen; }
+
+export function openStash(getInvList, getStashSlots, onDeposit, onWithdraw, onWithdrawAll) {
+  _stashOpen = true;
+  if (!stashPanel) return;
+  stashPanel.classList.remove('hidden');
+  function render() {
+    if (stashInvList) {
+      stashInvList.innerHTML = '';
+      for (const { key, count, label } of getInvList()) {
+        const row = document.createElement('div');
+        row.className = 'stashRow';
+        row.innerHTML = `<span>${label}</span><span class="stashCount">${count}</span>`;
+        row.addEventListener('click', () => { onDeposit(key); render(); });
+        stashInvList.appendChild(row);
+      }
+    }
+    if (stashSlotsGrid) {
+      stashSlotsGrid.innerHTML = '';
+      const slots = getStashSlots();
+      for (let i = 0; i < slots.length; i++) {
+        const s = slots[i];
+        const row = document.createElement('div');
+        row.className = 'stashRow';
+        if (s) {
+          row.innerHTML = `<span>${s.label}</span><span class="stashCount">${s.count}</span>`;
+          row.addEventListener('click', () => { onWithdraw(i); render(); });
+        } else {
+          row.innerHTML = `<span style="color:#444">[vacío]</span><span></span>`;
+        }
+        stashSlotsGrid.appendChild(row);
+      }
+    }
+  }
+  render();
+  if (stashWithdrawAllBtn) {
+    stashWithdrawAllBtn.onclick = () => { onWithdrawAll(); render(); };
+  }
+}
+export function closeStash() {
+  _stashOpen = false;
+  if (stashPanel) stashPanel.classList.add('hidden');
 }
 
 // ----------------------------------------------------------------------

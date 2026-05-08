@@ -133,6 +133,22 @@
     #weatherOverlay.fog  { opacity: 0.7; background: radial-gradient(circle at center, transparent 30%, rgba(160,170,180,0.45) 80%); }
     @keyframes rainShimmer { 0%,100% { background-position: 0 0; } 50% { background-position: 0 4px; } }
 
+    /* Stash modal */
+    #stashPanel { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 9; backdrop-filter: blur(2px); }
+    #stashPanel.hidden { display: none; }
+    .stashModal { background: linear-gradient(180deg, rgba(28,40,28,0.96), rgba(20,28,20,0.96)); border: 1px solid #4a8030; min-width: 720px; min-height: 480px; font-family: system-ui, sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,0.7); }
+    .stashHeader { display: flex; justify-content: space-between; align-items: center; padding: 10px 18px; background: rgba(0,0,0,0.4); border-bottom: 1px solid #4a8030; color: #80ff60; font-weight: 700; letter-spacing: 3px; font-size: 14px; }
+    .stashHint { color: #aaa; font-size: 11px; letter-spacing: 1px; font-weight: 400; }
+    .stashBody { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px; }
+    .stashColumn { background: rgba(0,0,0,0.3); border: 1px solid #2a4a22; padding: 8px 10px; min-height: 360px; }
+    .stashColTitle { color: #80ff60; font-size: 11px; letter-spacing: 2px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #2a4a22; }
+    .stashRow { display: flex; justify-content: space-between; align-items: center; padding: 5px 4px; font-size: 12px; color: #ddd; cursor: pointer; transition: background 0.1s; border-radius: 2px; }
+    .stashRow:hover { background: rgba(40,80,30,0.4); }
+    .stashRow .stashCount { color: #80ff60; font-weight: 700; font-family: monospace; }
+    .stashFooter { padding: 10px 18px; background: rgba(0,0,0,0.4); border-top: 1px solid #4a8030; text-align: right; }
+    .stashFooter button { background: rgba(60,100,40,0.4); border: 1px solid #4a8030; color: #80ff60; padding: 6px 16px; cursor: pointer; font-family: system-ui; letter-spacing: 1px; }
+    .stashFooter button:hover { background: rgba(80,140,40,0.5); }
+
     /* Trader modal */
     #traderPanel { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 9; backdrop-filter: blur(2px); }
     #traderPanel.hidden { display: none; }
@@ -463,6 +479,29 @@
       <div class="perksHint">Subiste de nivel — tu cuerpo cambia. Elegí una mejora permanente:</div>
       <div id="perksList" class="perksList"></div>
       <div class="perksFooter">[K] cerrar (las opciones permanecen hasta que elijas)</div>
+    </div>
+  </div>
+
+  <!-- Stash personal — modal de cofre persistente -->
+  <div id="stashPanel" class="hidden">
+    <div class="stashModal">
+      <div class="stashHeader">
+        <span>★ STASH PERSONAL</span>
+        <span class="stashHint">[E] cerrar · click izq depositar (item del inv) · click izq slot retirar</span>
+      </div>
+      <div class="stashBody">
+        <div class="stashColumn">
+          <div class="stashColTitle">INVENTARIO (click para depositar)</div>
+          <div id="stashInvList"></div>
+        </div>
+        <div class="stashColumn">
+          <div class="stashColTitle">STASH (24 slots — click para retirar)</div>
+          <div id="stashSlotsGrid"></div>
+        </div>
+      </div>
+      <div class="stashFooter">
+        <button id="stashWithdrawAll">RETIRAR TODO</button>
+      </div>
     </div>
   </div>
 

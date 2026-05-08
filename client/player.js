@@ -271,7 +271,45 @@ export function updatePlayer(dt) {
     if (keys['ControlLeft'] || keys['ControlRight']) player.pos.y -= speed * dt;
   } else {
     player.vy -= GRAVITY * dt;
-    if (keys['Space'] && player.onGround && !player.crouching) { player.vy = JUMP_VEL; player.onGround = false; }
+    // VAULT — si estás en suelo + apretás Space + hay un obstáculo cuya
+    // top está hasta 1.8m sobre tus pies, te subís encima en vez de
+    // saltar normal. Detecta obstacle box collider justo en frente.
+    let didVault = false;
+    if (keys['Space'] && player.onGround && !player.crouching) {
+      const fwdX = -Math.sin(yaw), fwdZ = -Math.cos(yaw);
+      const probeX = player.pos.x + fwdX * 0.9;
+      const probeZ = player.pos.z + fwdZ * 0.9;
+      const groundHere = heightAt(player.pos.x, player.pos.z);
+      // Buscamos un box collider que abarca el punto-probe.
+      for (const o of obstacles) {
+        if (o.type !== 'box') continue;
+        // Test "AABB local" — convertimos punto a coords locales del box.
+        const cosI = Math.cos(-(o.ry || 0));
+        const sinI = Math.sin(-(o.ry || 0));
+        const dx = probeX - o.cx, dz = probeZ - o.cz;
+        const lx = cosI * dx - sinI * dz;
+        const lz = sinI * dx + cosI * dz;
+        if (lx > -o.hw - 0.5 && lx < o.hw + 0.5 && lz > -o.hh - 0.5 && lz < o.hh + 0.5) {
+          // Hay obstáculo — para vault asumimos que el "top" del box es
+          // groundHere + 1.5m. Si el player apenas estaría sobre eso,
+          // hacemos boost.
+          const topY = groundHere + 1.6;
+          if (player.pos.y < topY + player.eyeHeightCurrent) {
+            // Vault: teleport por encima + ligera velocidad fwd.
+            player.pos.x += fwdX * 0.6;
+            player.pos.z += fwdZ * 0.6;
+            player.pos.y = topY + player.eyeHeightCurrent;
+            player.vy = 1.5;
+            player.onGround = false;
+            didVault = true;
+            break;
+          }
+        }
+      }
+    }
+    if (!didVault) {
+      if (keys['Space'] && player.onGround && !player.crouching) { player.vy = JUMP_VEL; player.onGround = false; }
+    }
     player.pos.y += player.vy * dt;
     const groundY = heightAt(player.pos.x, player.pos.z) + player.eyeHeightCurrent;
     if (player.pos.y <= groundY) {

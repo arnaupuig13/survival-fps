@@ -856,6 +856,7 @@ let ambientSpawnAccum = 0;
 let streamCheckAccum = 0;
 let weatherCheckAccum = 60; // primer tick de clima a los 30s
 let currentWeather = 'clear';
+const thunderState = { nextStrikeAt: 0 };
 
 // =====================================================================
 // Smoke areas — los jugadores que tiran granadas de humo registran un
@@ -1142,22 +1143,52 @@ setInterval(() => {
     maybeTriggerConvoy();
   }
 
-  // Clima: cada 90s real chequeamos si cambia. Lluvia 25%, niebla 15%
-  // (solo de noche), clear el resto. Anuncia con banner sutil.
+  // Clima: cada 90s real chequeamos si cambia. Lluvia 22%, niebla 12%
+  // (solo de noche), tormenta eléctrica 8%, clear el resto.
   weatherCheckAccum += AI_DT;
   if (weatherCheckAccum >= 90) {
     weatherCheckAccum = 0;
     const r = Math.random();
     let next = 'clear';
-    if (isNightHour(gameHour) && r < 0.30) next = 'fog';
-    else if (r < 0.25) next = 'rain';
+    if (isNightHour(gameHour) && r < 0.20) next = 'fog';
+    else if (r < 0.22) next = 'rain';
+    else if (r < 0.30) next = 'thunder';   // 8%
     if (next !== currentWeather) {
       currentWeather = next;
       broadcast({ type: 'weather', kind: next });
-      if (next === 'rain')      broadcast({ type: 'banner', text: '☂ Empezó a llover' });
-      else if (next === 'fog')  broadcast({ type: 'banner', text: '✦ Niebla densa' });
-      else                      broadcast({ type: 'banner', text: '☀ Cielo despejado' });
+      if (next === 'rain')         broadcast({ type: 'banner', text: '☂ Empezó a llover' });
+      else if (next === 'fog')     broadcast({ type: 'banner', text: '✦ Niebla densa' });
+      else if (next === 'thunder') broadcast({ type: 'banner', text: '⚡ TORMENTA ELECTRICA — cuidado con los rayos' });
+      else                         broadcast({ type: 'banner', text: '☀ Cielo despejado' });
     }
+  }
+  // Rayos: durante thunder, cada 10-20s un rayo cae random. Daña 30 HP
+  // si cae dentro de 12m de un player (con falloff).
+  if (currentWeather === 'thunder' && players.size > 0) {
+    if (!thunderState.nextStrikeAt) thunderState.nextStrikeAt = Date.now() + 10000 + Math.random() * 10000;
+    if (Date.now() >= thunderState.nextStrikeAt) {
+      thunderState.nextStrikeAt = Date.now() + 10000 + Math.random() * 10000;
+      const list = [...players.values()];
+      const anchor = list[Math.floor(Math.random() * list.length)];
+      const angle = Math.random() * Math.PI * 2;
+      const r = 20 + Math.random() * 80;
+      const lx = anchor.x + Math.cos(angle) * r;
+      const lz = anchor.z + Math.sin(angle) * r;
+      // Daño a players cerca del impacto.
+      for (const p of players.values()) {
+        if (p.hp <= 0) continue;
+        const d = Math.hypot(p.x - lx, p.z - lz);
+        if (d < 12) {
+          const falloff = 1 - d / 12;
+          const dmg = Math.round(30 * falloff);
+          p.hp = Math.max(0, p.hp - dmg);
+          sendTo(p, { type: 'youHit', dmg, by: 0, sx: lx, sy: heightAt(lx, lz), sz: lz, source: 'lightning' });
+        }
+      }
+      broadcast({ type: 'lightning', x: lx, z: lz });
+    }
+  } else {
+    thunderState.nextStrikeAt = 0;
   }
 
   // Wave countdown.
@@ -1631,6 +1662,20 @@ wss.on('connection', (ws) => {
       const r = Math.min(8, Math.max(1, +msg.r || 6));
       const dur = Math.min(15000, Math.max(1000, +msg.dur || 9000));
       smokeAreas.push({ x: msg.x, z: msg.z, r, until: Date.now() + dur });
+    } else if (msg.type === 'pvpToggle') {
+      player.pvp = !player.pvp;
+      sendTo(player, { type: 'pvpStatus', on: !!player.pvp });
+      broadcast({ type: 'peerPvp', id, on: !!player.pvp });
+    } else if (msg.type === 'pvpAttack') {
+      // Player atacando a otro player. Solo procede si AMBOS tienen PvP on.
+      const target = players.get(msg.targetId);
+      if (!target || target.hp <= 0) return;
+      if (!player.pvp || !target.pvp) return;
+      const d = Math.hypot(target.x - player.x, target.z - player.z);
+      if (d > 100) return;  // anti-cheat range
+      const dmg = Math.max(1, msg.dmg | 0);
+      target.hp = Math.max(0, target.hp - dmg);
+      sendTo(target, { type: 'youHit', dmg, by: id, sx: player.x, sy: player.y, sz: player.z, source: 'player' });
     } else if (msg.type === 'flashbang') {
       // Detonación de flashbang en (x, z). Stunea enemigos cercanos 3s
       // y broadcast a todos para que clientes cerca apliquen white-out.
