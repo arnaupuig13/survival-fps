@@ -128,6 +128,21 @@ const TOWN_FLAT = [
   { cx: -100, cz:  340, r: 8, transition: 5 },
 ];
 
+// =====================================================================
+// BIOMAS — el mapa se divide en 4 cuadrantes:
+//   NW (-x, +z): bosque (verde, primaveral)
+//   NE (+x, +z): nieve (blanco, frío)
+//   SE (+x, -z): desierto (amarillo, calor)
+//   SW (-x, -z): bosque quemado (gris/negro, zombies más fuertes)
+// IMPORTANT: client/world.js debe usar este código byte-identical.
+// =====================================================================
+export function biomeAt(x, z) {
+  if (x >= 0 && z >= 0)  return 'snow';
+  if (x <  0 && z >= 0)  return 'forest';
+  if (x >= 0 && z <  0)  return 'desert';
+  return 'burnt';
+}
+
 export function heightAt(x, z) {
   let h = _rawHeight(x, z);
   // Aplanar gradualmente dentro de towns.
@@ -171,6 +186,10 @@ const ETYPES = {
   // Zombi alfa — boss random que aparece cada 15-25 min. Mucho HP, dmg
   // muy alto, persigue con aggro infinito (patrol-like). Drop boss-tier.
   alpha:        { hp: 220, speed: 2.5, dmg: 50, range: 2.8, cd: 1.4, aggro: 80, ranged: false, special: 'alpha', isBoss: false },
+  // Bilebomber — zombi del bosque quemado. Dispara una bola verde a
+  // distancia (proyectil ácido). Daño moderado pero hace DoT. Solo
+  // spawnea en el bioma 'burnt'.
+  bilebomber:   { hp: 50, speed: 1.6, dmg: 14, range: 22, cd: 2.0, aggro: 38, ranged: true, weapon: 'bile', special: 'bile' },
   // Three scientist variants. Same lab coat but different weapon profile.
   // Aggro subido para que detecten al player desde más lejos en el mapa
   // grande (era 30-60, ahora 60-90).
@@ -825,36 +844,69 @@ function spawnAmbientHostile(minDist = 38, maxDist = 80) {
       if (dx * dx + dz * dz < 60 * 60) { insideTown = true; break; }
     }
     if (insideTown) continue;
-    // Mix per night/day + escala con día. Día 1-2: mayoría zombies básicos.
-    // Día 3-5: más runners/specials. Día 6+: tanks, brutes, specials suben.
-    // El "specialBoost" suma a la chance de specials/elites con cada día.
+    // Mix per night/day + escala con día + ajuste por BIOMA.
+    //   forest: spawn estándar
+    //   snow: más tanks (resistentes al frío), menos animales hostiles
+    //   desert: menos zombies en general (calor), más alpha/brute si día alto
+    //   burnt: zombies más fuertes + BILEBOMBER exclusivo
     const isNight = isNightHour(gameHour);
-    const specialBoost = Math.min(0.20, (gameDay - 1) * 0.025);   // hasta +20%
-    const eliteBoost   = Math.min(0.15, (gameDay - 2) * 0.022);   // tanks/brutes
+    const specialBoost = Math.min(0.20, (gameDay - 1) * 0.025);
+    const eliteBoost   = Math.min(0.15, (gameDay - 2) * 0.022);
+    const biome = biomeAt(x, z);
     let etype = 'zombie';
     const r2 = Math.random();
-    if (isNight) {
-      if      (r2 > 0.985 - eliteBoost)           etype = 'brute';
-      else if (r2 > 0.96  - eliteBoost)           etype = 'bear';
-      else if (r2 > 0.93  - specialBoost)         etype = 'exploder';
-      else if (r2 > 0.90  - specialBoost)         etype = 'screamer';
-      else if (r2 > 0.86  - specialBoost)         etype = 'spitter';
-      else if (r2 > 0.80  - eliteBoost)           etype = 'tank';
-      else if (r2 > 0.74)                         etype = 'boar';
-      else if (r2 > 0.50)                         etype = 'wolf';
-      else if (r2 > 0.25)                         etype = 'runner';
-      else                                        etype = 'zombie';
+    // BURNT — bioma quemado tiene su propia tabla con bilebomber + más specials.
+    if (biome === 'burnt') {
+      if      (r2 > 0.97 - eliteBoost) etype = 'brute';
+      else if (r2 > 0.92 - specialBoost) etype = 'bilebomber';   // 8% base, exclusivo!
+      else if (r2 > 0.85 - specialBoost) etype = 'exploder';
+      else if (r2 > 0.78 - specialBoost) etype = 'screamer';
+      else if (r2 > 0.70 - specialBoost) etype = 'spitter';
+      else if (r2 > 0.60) etype = 'tank';
+      else if (r2 > 0.30) etype = 'runner';
+      else                etype = 'zombie';
+    } else if (biome === 'snow') {
+      // SNOW — tanks resistentes al frío + lobos comunes, menos specials.
+      if      (r2 > 0.98 - eliteBoost) etype = 'brute';
+      else if (r2 > 0.94) etype = 'bear';
+      else if (r2 > 0.86) etype = 'tank';
+      else if (r2 > 0.50) etype = 'wolf';        // lobos abundantes
+      else if (r2 > 0.30) etype = 'runner';
+      else                etype = 'zombie';
+    } else if (biome === 'desert') {
+      // DESERT — menos densidad. Animales escasos, zombies normales.
+      if (Math.random() < 0.35) return null;     // 35% skip — desierto vacío
+      if      (r2 > 0.985) etype = 'brute';
+      else if (r2 > 0.96)  etype = 'tank';
+      else if (r2 > 0.92)  etype = 'spitter';
+      else if (r2 > 0.85)  etype = 'boar';
+      else if (r2 > 0.50)  etype = 'runner';
+      else                 etype = 'zombie';
     } else {
-      if      (r2 > 0.992 - eliteBoost)           etype = 'brute';
-      else if (r2 > 0.98  - eliteBoost)           etype = 'bear';
-      else if (r2 > 0.965 - specialBoost)         etype = 'exploder';
-      else if (r2 > 0.95  - specialBoost)         etype = 'screamer';
-      else if (r2 > 0.93  - specialBoost)         etype = 'spitter';
-      else if (r2 > 0.89  - eliteBoost)           etype = 'tank';
-      else if (r2 > 0.85)                         etype = 'boar';
-      else if (r2 > 0.80)                         etype = 'wolf';
-      else if (r2 > 0.72)                         etype = 'runner';
-      else                                        etype = 'zombie';
+      // FOREST — tabla original primaveral.
+      if (isNight) {
+        if      (r2 > 0.985 - eliteBoost)   etype = 'brute';
+        else if (r2 > 0.96  - eliteBoost)   etype = 'bear';
+        else if (r2 > 0.93  - specialBoost) etype = 'exploder';
+        else if (r2 > 0.90  - specialBoost) etype = 'screamer';
+        else if (r2 > 0.86  - specialBoost) etype = 'spitter';
+        else if (r2 > 0.80  - eliteBoost)   etype = 'tank';
+        else if (r2 > 0.74)                 etype = 'boar';
+        else if (r2 > 0.50)                 etype = 'wolf';
+        else if (r2 > 0.25)                 etype = 'runner';
+        else                                etype = 'zombie';
+      } else {
+        if      (r2 > 0.992 - eliteBoost)   etype = 'brute';
+        else if (r2 > 0.98  - eliteBoost)   etype = 'bear';
+        else if (r2 > 0.965 - specialBoost) etype = 'exploder';
+        else if (r2 > 0.95  - specialBoost) etype = 'screamer';
+        else if (r2 > 0.93  - specialBoost) etype = 'spitter';
+        else if (r2 > 0.89  - eliteBoost)   etype = 'tank';
+        else if (r2 > 0.85)                 etype = 'boar';
+        else if (r2 > 0.80)                 etype = 'wolf';
+        else if (r2 > 0.72)                 etype = 'runner';
+        else                                etype = 'zombie';
+      }
     }
     const e = makeEnemy({ etype, x, z, ambient: true });
     broadcast({ type: 'eSpawn', e: ePub(e) });

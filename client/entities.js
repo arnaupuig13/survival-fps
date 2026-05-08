@@ -20,6 +20,7 @@ function makeZombieMesh(variant = 'zombie') {
   if (variant === 'tank')     { skin = 0x4a5a3a; cloth = 0x222a18; scale = 1.25; }
   if (variant === 'brute')    { skin = 0x2a3a18; cloth = 0x18200c; scale = 1.6; }
   if (variant === 'alpha')    { skin = 0x301010; cloth = 0x180404; scale = 2.0; glow = 0xff2020; }
+  if (variant === 'bilebomber') { skin = 0x3a5018; cloth = 0x1a2008; glow = 0x40ff20; scale = 1.15; }
   if (variant === 'spitter')  { skin = 0x6a8a30; cloth = 0x4a3a10; glow = 0x88ff20; }
   if (variant === 'screamer') { skin = 0xc05050; cloth = 0x401818; glow = 0xff4040; }
   if (variant === 'exploder') { skin = 0xa05a20; cloth = 0x3a2008; glow = 0xff6010; scale = 0.92; }
@@ -37,8 +38,20 @@ function makeZombieMesh(variant = 'zombie') {
   const legGeom = new THREE.BoxGeometry(0.22, 0.85, 0.22);
   const legL = new THREE.Mesh(legGeom, clothMat); legL.position.set(-0.18, 0.42, 0); g.add(legL);
   const legR = new THREE.Mesh(legGeom, clothMat); legR.position.set( 0.18, 0.42, 0); g.add(legR);
-  // Marcas extra por variante: bocas grandes (spitter), boca abierta gritando
-  // (screamer), barriles en el pecho (exploder).
+  // Marcas extra por variante.
+  if (variant === 'bilebomber') {
+    // Saco/glándula verde brillante en el cuello + drool.
+    const sacMat = new THREE.MeshStandardMaterial({ color: 0x60ff30, emissive: 0x40c020, emissiveIntensity: 1.2 });
+    const sac = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), sacMat);
+    sac.position.set(0, 1.50, 0.20);
+    sac.scale.set(1, 1.4, 0.9);
+    g.add(sac);
+    // Tubo orgánico para el bile.
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.05, 0.30, 8), sacMat);
+    tube.position.set(0, 1.75, 0.22);
+    tube.rotation.x = Math.PI / 2;
+    g.add(tube);
+  }
   if (variant === 'spitter') {
     const drool = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6),
       new THREE.MeshStandardMaterial({ color: 0xaaff40, emissive: 0x66cc20, emissiveIntensity: 0.8 }));
@@ -469,6 +482,7 @@ function meshFor(etype) {
   if (etype === 'tank')        return makeZombieMesh('tank');
   if (etype === 'brute')       return makeZombieMesh('brute');
   if (etype === 'alpha')       return makeZombieMesh('alpha');
+  if (etype === 'bilebomber')  return makeZombieMesh('bilebomber');
   if (etype === 'spitter')     return makeZombieMesh('spitter');
   if (etype === 'screamer')    return makeZombieMesh('screamer');
   if (etype === 'exploder')    return makeZombieMesh('exploder');

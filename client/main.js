@@ -3,7 +3,7 @@
 
 import { renderer, scene, camera, setTimeOfDay } from './three-setup.js';
 import * as THREE from 'three';
-import { heightAt } from './world.js';
+import { heightAt, biomeAt } from './world.js';
 import './world.js';                 // builds terrain + trees + rocks
 import { player, updatePlayer } from './player.js';
 import { network } from './network.js';
@@ -71,6 +71,7 @@ import * as weaponTiers from './weapon-tiers.js';
 import { spawnAmbientProps, spawnDust, tickDust } from './ambient-props.js';
 import * as farming from './farming.js';
 import * as tutorial from './tutorial.js';
+import { initBiomeParticles, tick as tickBiomeParticles } from './biome-particles.js';
 import { setPeerPvP } from './entities.js';
 
 // Day/night state — interpolated locally between server `time` updates.
@@ -389,6 +390,7 @@ network.connect(player);
 // Spawn ambient props (autos abandonados + cadáveres civiles + dust).
 spawnAmbientProps();
 spawnDust();
+initBiomeParticles();
 network.onYouHit = (dmg, src, source) => {
   player.takeDamage(dmg);
   setHP(player.hp);
@@ -493,7 +495,7 @@ network.onEnemyDead = (id, msg) => {
   progression.awardKillXp(kind, !!msg.isBoss);
   // Track de quests por tipo de enemigo.
   if (!msg.isBoss) {
-    const isZombieKind = ['zombie','runner','tank','brute','spitter','screamer','exploder'].includes(kind);
+    const isZombieKind = ['zombie','runner','tank','brute','spitter','screamer','exploder','bilebomber'].includes(kind);
     if (isZombieKind) quests.track('kill_zombies', 1);
     if (kind === 'runner') quests.track('kill_runners', 1);
     if (kind === 'tank' || kind === 'brute')   quests.track('kill_tank', 1);
@@ -510,7 +512,7 @@ network.onEnemyDead = (id, msg) => {
     inv.add('scrap', 3 + Math.floor(Math.random() * 3));
   } else if (kind === 'scientist' || kind === 'sci_shotgun' || kind === 'sci_sniper') {
     if (Math.random() < 0.7) inv.add('scrap', 1 + Math.floor(Math.random() * 3));
-  } else if (['spitter','screamer','exploder'].includes(kind)) {
+  } else if (['spitter','screamer','exploder','bilebomber'].includes(kind)) {
     if (Math.random() < 0.55) inv.add('scrap', 1 + Math.floor(Math.random() * 2));
   } else if (['zombie','runner','tank'].includes(kind)) {
     if (Math.random() < 0.3) inv.add('scrap', 1);
@@ -1216,6 +1218,7 @@ function frame(now) {
   // Survival systems — fire flicker + nearFire flag for the player tick.
   survival.updateSurvival(dt);
   player.nearFire = survival.isNearAnyFire(player.pos.x, player.pos.z);
+  player.biome = biomeAt(player.pos.x, player.pos.z);
   player.tickSurvival(dt, isNightServer);
   player.regen(dt);
   status.tick(dt);             // sangrado / infección
@@ -1234,6 +1237,7 @@ function frame(now) {
   magDrop.tick(dt);
   screenShake.tick(dt);
   tickDust(dt, player.pos);
+  tickBiomeParticles(dt, player.pos);
   farming.tick();
   // Cocinar granada — si llega a COOK_MAX, te explota en la mano.
   if (_cookingGrenade) {

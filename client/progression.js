@@ -23,6 +23,7 @@ export const XP_PER_KILL = {
   tank:        40,
   // Specials.
   spitter:     22,
+  bilebomber:  35,
   screamer:    18,
   exploder:    25,   // poco porque es fácil de matar a distancia
   brute:       80,   // mini-boss

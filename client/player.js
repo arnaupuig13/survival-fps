@@ -121,22 +121,38 @@ export const player = {
   // damage continuo hasta que coma / beba / se caliente. Llamado desde main loop.
   tickSurvival(dt, isNight) {
     if (this.invulnerable || this.godMode || this.hp <= 0) return;
-    // Hunger and thirst tick down slowly. Perks pueden ralentizar el drain.
-    const hungerMul = (this.hungerDrainMult || 1);
-    const thirstMul = (this.thirstDrainMult || 1);
-    // Lluvia hace que la sed drene 50% menos pero el calor 2x más rápido.
+    // Bioma del player — afecta drain de sed/calor/hambre.
+    const biome = this.biome || 'forest';
+    let hungerMul = (this.hungerDrainMult || 1);
+    let thirstMul = (this.thirstDrainMult || 1);
+    let warmthDelta = 0;       // qué se suma/resta a warmth/s
     const isRaining = (this.weatherKind === 'rain');
+    // BASE drain rates por bioma:
+    if (biome === 'desert') {
+      thirstMul *= 1.8;        // mucha sed en desierto
+      warmthDelta = +0.4;      // calor de día
+    } else if (biome === 'snow') {
+      thirstMul *= 0.7;        // menos sed (frío)
+      warmthDelta = -1.6;      // calor drena fuerte
+    } else if (biome === 'burnt') {
+      thirstMul *= 1.2;
+      warmthDelta = +0.2;      // cálido
+    } else {
+      // forest: neutral.
+    }
+    if (isRaining) thirstMul *= 0.5;   // lluvia general baja sed
     this.hunger = Math.max(0, this.hunger - 0.5 * hungerMul * dt);
-    this.thirst = Math.max(0, this.thirst - 0.7 * thirstMul * (isRaining ? 0.5 : 1) * dt);
-    // Warmth depends on the time of day + proximity to fire.
+    this.thirst = Math.max(0, this.thirst - 0.7 * thirstMul * dt);
+    // Warmth — combina: bioma + nearFire + noche + lluvia.
     if (this.warmthImmune) {
       this.warmth = 100;
     } else if (this.nearFire) {
       this.warmth = Math.min(100, this.warmth + 12 * dt);
-    } else if (isNight) {
-      this.warmth = Math.max(0, this.warmth - (isRaining ? 2.4 : 1.2) * dt);
     } else {
-      this.warmth = Math.min(100, this.warmth + 0.6 * dt);
+      let dW = warmthDelta;
+      if (isNight) dW -= 1.0;   // noche siempre suma frío
+      if (isRaining) dW -= 0.6;
+      this.warmth = Math.max(0, Math.min(100, this.warmth + dW * dt));
     }
     // Damage when stats reach 0 — slow to give the player a chance to fix it.
     if (this.hunger <= 0) this.hp = Math.max(0, this.hp - 1.0 * dt);
