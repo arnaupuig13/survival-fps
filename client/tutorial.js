@@ -46,7 +46,9 @@ const STEPS = [
 
 let currentStep = -1;
 let active = false;
-const overlay = (() => {
+let overlay = null;
+function ensureOverlay() {
+  if (overlay) return overlay;
   if (typeof document === 'undefined') return null;
   let el = document.getElementById('tutorialOverlay');
   if (!el) {
@@ -59,7 +61,7 @@ const overlay = (() => {
       color: #f0c060; font: 14px system-ui, sans-serif; letter-spacing: 1px;
       z-index: 12; text-align: center; pointer-events: none;
       box-shadow: 0 8px 24px rgba(240,192,96,0.3);
-      transition: opacity 0.25s;
+      transition: opacity 0.25s; display: none;
     `;
     el.innerHTML = `
       <div id="tutorialTitle" style="color:#80ff60;font-size:11px;letter-spacing:3px;margin-bottom:6px;">★ TUTORIAL ★</div>
@@ -68,10 +70,12 @@ const overlay = (() => {
     `;
     document.body.appendChild(el);
   }
-  return el;
-})();
+  overlay = el;
+  return overlay;
+}
 
 function setOverlayText(text) {
+  ensureOverlay();
   const t = document.getElementById('tutorialText');
   if (t) t.textContent = text;
 }
@@ -93,7 +97,7 @@ function showStep(idx) {
   }
   const step = STEPS[idx];
   setOverlayText(step.text);
-  if (overlay) overlay.style.opacity = '1';
+  if (overlay) { overlay.style.display = 'block'; overlay.style.opacity = '1'; }
   if (_timer) clearTimeout(_timer);
   if (step.autoDismiss) {
     _timer = setTimeout(() => advance(), step.autoDismiss);
@@ -108,7 +112,7 @@ export function advance() {
 export function finish() {
   active = false;
   markSeen();
-  if (overlay) overlay.style.opacity = '0';
+  if (overlay) { overlay.style.opacity = '0'; overlay.style.display = 'none'; }
   if (_timer) clearTimeout(_timer);
 }
 
