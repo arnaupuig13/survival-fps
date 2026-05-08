@@ -15,6 +15,7 @@ import { player } from './player.js';
 import { spawnCrate, crates } from './loot.js';
 import { logLine } from './hud.js';
 import * as sfx from './sounds.js';
+import * as hotbar from './hotbar.js';
 
 // =====================================================================
 // DOM refs (resolved lazily so this module can be imported before the
@@ -316,8 +317,19 @@ function endDrag(e) {
     return;
   }
 
+  // Drop on a hotbar slot → asignar el item al cinturón.
+  const hbSlot = target?.closest?.('.hbslot');
+  if (hbSlot && hbSlot.dataset.slot != null) {
+    const idx = parseInt(hbSlot.dataset.slot, 10);
+    if (!Number.isNaN(idx)) {
+      hotbar.setSlot(idx, drag.itemKey);
+      logLine(`Asignado "${inv.ITEMS[drag.itemKey].label}" al slot ${idx + 1}`);
+      sfx.playPickup?.();
+    }
+    return;
+  }
   // Drop back on inventory or anywhere inside the actual rust panel → no-op.
-  // (Drops on the dim backdrop or anywhere outside the panel = drop-to-ground.)
+  // (Drops on the dim backdrop o cualquier lugar fuera del panel = drop al suelo.)
   if (rustPanel && rustPanel.contains(target)) return;
 
   // Drop OUTSIDE the panel → open quantity dialog.
@@ -343,6 +355,19 @@ if (grid) {
     if (!slot || !slot.dataset.itemKey) return;
     e.preventDefault();
     showCtxMenu(e.clientX, e.clientY, slot.dataset.itemKey);
+  });
+}
+
+// Hotbar: click derecho sobre un slot lo limpia (quita el binding).
+for (const hb of document.querySelectorAll('.hbslot')) {
+  hb.addEventListener('contextmenu', (e) => {
+    if (panel && panel.classList.contains('hidden')) return; // solo en inventario abierto
+    e.preventDefault();
+    const idx = parseInt(hb.dataset.slot, 10);
+    if (!Number.isNaN(idx)) {
+      hotbar.clearSlot(idx);
+      logLine(`Slot ${idx + 1} liberado`);
+    }
   });
 }
 

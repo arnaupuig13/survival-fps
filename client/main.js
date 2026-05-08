@@ -13,7 +13,7 @@ import {
   setHP, setOnlineCount, flashDamage, logLine, tickFps, showBanner,
   setInventory, showInteract, hideInteract,
   setClock, showDamageArrow, setStamina, flashHitMarker,
-  setDay, setPlayerName, setHotbarActive, setHotbarCount, setHotbarLocked,
+  setDay, setPlayerName, setHotbarActive, setHotbarCount, setHotbarLocked, paintHotbarSlot,
   setActiveWeapon, showReload, toggleInventory, isInventoryOpen, renderInventory,
   setCompass, setSurvival,
   setXp, setStatus, renderQuests,
@@ -53,6 +53,7 @@ import * as flashlight from './flashlight.js';
 import * as bedroll from './bedroll.js';
 import * as dog from './dog.js';
 import * as heliTrader from './heli-trader.js';
+import * as hotbar from './hotbar.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -71,22 +72,24 @@ const respawnBtn = document.getElementById('respawnBtn');
 // HUD subscribes to inventory updates so ammo/kill counts always match state.
 inv.onChange(setInventory);
 inv.onChange((state) => {
-  setHotbarCount(0, state.bullet_p);
-  setHotbarCount(1, state.bullet_r);
-  setHotbarCount(2, state.bandage);
-  setHotbarCount(3, state.grenade);
-  setHotbarCount(7, state.shell);
-  setHotbarCount(8, state.sniper_round);
-  setHotbarLocked(1, !state.rifle_pickup);
-  setHotbarLocked(5, !state.axe);
-  setHotbarLocked(6, !state.pickaxe);
-  setHotbarLocked(7, !state.shotgun_pickup);
-  setHotbarLocked(8, !state.sniper_pickup);
   // Sync armor onto the player so takeDamage applies the reduction.
   player.armorState = { vest: !!state.vest_armor, helmet: !!state.helmet_armor };
-  // El nuevo inventory-ui se suscribe solo a inv.onChange — no necesitamos
-  // re-renderizar acá. Mantenemos esta función para los hotbar counts.
+  repaintHotbar();
 });
+
+// Repinta los 6 slots del cinturón según hotbar.getSlots() y el state
+// del inventario actual. Llamado al inicio + en cada cambio de inv/hotbar.
+function repaintHotbar() {
+  const slots = hotbar.getSlots();
+  const state = inv.getState();
+  for (let i = 0; i < slots.length; i++) {
+    const key = slots[i];
+    const meta = key ? inv.ITEMS[key] : null;
+    const count = key ? (state[key] | 0) : 0;
+    paintHotbarSlot(i, key, count, meta);
+  }
+}
+hotbar.onChange(repaintHotbar);
 
 // Conecta el handler de crafting al panel Rust-style.
 inventoryUI.setCraftHandler(tryCraft);
@@ -871,44 +874,132 @@ function closeSettings() {
   }
 }
 
+// Activa el slot `idx` del cinturón. La acción depende del item asignado.
+// Si el slot está vacío, no hace nada. Si el item requiere un pickup
+// (rifle/shotgun/etc) y no lo tenés, lo decimos.
 function handleHotbarSlot(slotIdx) {
-  // Firearm slots: 0 pistol, 1 rifle, 7 shotgun, 8 sniper.
-  if (slotIdx === 0 || slotIdx === 1 || slotIdx === 7 || slotIdx === 8) {
-    if (slotIdx === 7 && !inv.has('shotgun_pickup', 1)) { logLine('Necesitás encontrar la escopeta'); return; }
-    if (slotIdx === 8 && !inv.has('sniper_pickup', 1)) { logLine('Necesitás encontrar el rifle de francotirador'); return; }
+  const itemKey = hotbar.getSlot(slotIdx);
+  if (!itemKey) {
+    logLine(`Slot ${slotIdx + 1} vacío — arrastrá un item del inventario`);
+    return;
+  }
+  // Mapeo item → acción.
+  // ARMAS DE FUEGO (pickup): equipar el arma correspondiente.
+  if (itemKey === 'bullet_p' || itemKey === 'pistol') {
     tools.setActiveTool(null);
-    selectWeaponBySlot(slotIdx);
+    selectWeaponBySlot(0);
     setHotbarActive(slotIdx);
     return;
   }
-  if (slotIdx === 2) {
-    if (inv.useBandage(player)) {
-      logLine('+30 HP (vendaje usado)');
-      sfx.playPickup();
-    }
+  if (itemKey === 'rifle_pickup' || itemKey === 'bullet_r') {
+    if (!inv.has('rifle_pickup', 1)) { logLine('Necesitás un rifle'); return; }
+    tools.setActiveTool(null);
+    selectWeaponBySlot(1);
+    setHotbarActive(slotIdx);
     return;
   }
-  if (slotIdx === 3) {
-    setHotbarActive(3);
+  if (itemKey === 'smg_pickup' || itemKey === 'bullet_smg') {
+    if (!inv.has('smg_pickup', 1)) { logLine('Necesitás un SMG'); return; }
+    tools.setActiveTool(null);
+    selectWeaponBySlot(2); // sin slot fijo — usá selectWeapon directo
     return;
   }
-  if (slotIdx === 4) {
-    tools.setActiveTool('knife');
-    setHotbarActive(4);
+  if (itemKey === 'shotgun_pickup' || itemKey === 'shell') {
+    if (!inv.has('shotgun_pickup', 1)) { logLine('Necesitás una escopeta'); return; }
+    tools.setActiveTool(null);
+    selectWeaponBySlot(7);
+    setHotbarActive(slotIdx);
     return;
   }
-  if (slotIdx === 5) {
-    if (!inv.has('axe', 1)) { logLine('Necesitás craftear un hacha (3 madera + 2 piedra)'); return; }
+  if (itemKey === 'sniper_pickup' || itemKey === 'sniper_round') {
+    if (!inv.has('sniper_pickup', 1)) { logLine('Necesitás un sniper'); return; }
+    tools.setActiveTool(null);
+    selectWeaponBySlot(8);
+    setHotbarActive(slotIdx);
+    return;
+  }
+  // HERRAMIENTAS MELEE.
+  if (itemKey === 'axe') {
+    if (!inv.has('axe', 1)) { logLine('Necesitás un hacha'); return; }
     tools.setActiveTool('axe');
-    setHotbarActive(5);
+    setHotbarActive(slotIdx);
     return;
   }
-  if (slotIdx === 6) {
-    if (!inv.has('pickaxe', 1)) { logLine('Necesitás craftear un pico (2 madera + 4 piedra)'); return; }
+  if (itemKey === 'pickaxe') {
+    if (!inv.has('pickaxe', 1)) { logLine('Necesitás un pico'); return; }
     tools.setActiveTool('pickaxe');
-    setHotbarActive(6);
+    setHotbarActive(slotIdx);
     return;
   }
+  // Cuchillo — sin pickup necesario, siempre disponible si el jugador lo
+  // asigna al hotbar. Asumimos un item virtual 'knife' (no en inv).
+  if (itemKey === 'knife') {
+    tools.setActiveTool('knife');
+    setHotbarActive(slotIdx);
+    return;
+  }
+  // CONSUMIBLES.
+  if (itemKey === 'bandage') {
+    if (inv.useBandage(player)) { logLine('+30 HP (vendaje)'); sfx.playPickup(); status.stopBleeding(); }
+    return;
+  }
+  if (itemKey === 'antibiotics') { status.tryAntibiotics(); return; }
+  if (itemKey === 'meat_cooked') {
+    if (inv.consume('meat_cooked', 1)) { player.eat('meat_cooked'); logLine('+ CARNE COCIDA'); sfx.playPickup(); quests.track('eat_food', 1); }
+    return;
+  }
+  if (itemKey === 'meat_raw') {
+    if (inv.consume('meat_raw', 1)) { player.eat('meat_raw'); logLine('+ CARNE CRUDA (-5 HP)'); sfx.playPickup(); quests.track('eat_food', 1); }
+    return;
+  }
+  if (itemKey === 'berry') {
+    if (inv.consume('berry', 1)) { player.eat('berry'); logLine('+ BAYAS'); sfx.playPickup(); quests.track('eat_food', 1); }
+    return;
+  }
+  if (itemKey === 'water_bottle') {
+    if (inv.consume('water_bottle', 1)) { player.drink(); logLine('+ AGUA'); sfx.playPickup(); quests.track('drink_water', 1); }
+    return;
+  }
+  // GRANADA — solo selecciona el slot. G la tira realmente.
+  if (itemKey === 'grenade') {
+    if (!inv.has('grenade', 1)) { logLine('Sin granadas'); return; }
+    setHotbarActive(slotIdx);
+    logLine('Granada lista — G para lanzar');
+    return;
+  }
+  // PLACEABLES — colocar al frente.
+  if (itemKey === 'campfire') {
+    if (inv.consume('campfire', 1)) {
+      survival.placeFire(player.pos.x, player.pos.z);
+      logLine('Hoguera colocada');
+      sfx.playPickup();
+    } else logLine('Sin hogueras (crafteable)');
+    return;
+  }
+  if (itemKey === 'bear_trap') {
+    if (inv.consume('bear_trap', 1)) {
+      const yaw = player.yaw();
+      const fx = player.pos.x + Math.sin(yaw) * -1.5;
+      const fz = player.pos.z + Math.cos(yaw) * -1.5;
+      traps.placeTrap(fx, fz);
+    } else logLine('Sin cepos');
+    return;
+  }
+  if (itemKey === 'bedroll_item') {
+    if (!inv.has('bedroll_item', 1)) { logLine('Sin camas'); return; }
+    const yaw = player.yaw();
+    const fx = player.pos.x + Math.sin(yaw) * -1.6;
+    const fz = player.pos.z + Math.cos(yaw) * -1.6;
+    if (bedroll.placeAt(fx, fz)) network.setSpawn(fx, fz);
+    return;
+  }
+  if (itemKey === 'flashlight') { flashlight.toggle(); return; }
+  if (itemKey === 'dog_collar') {
+    if (dog.isSummoned()) { logLine('Ya tenés un perro'); return; }
+    if (inv.consume('dog_collar', 1)) dog.tryUseCollar();
+    return;
+  }
+  logLine(`Item "${inv.ITEMS[itemKey]?.label || itemKey}" no se puede usar desde el hotbar`);
 }
 
 // =====================================================================

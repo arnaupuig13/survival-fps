@@ -85,32 +85,56 @@ export function setPlayerName(name) {
 }
 
 // =====================================================================
-// Hotbar — 9 slots. Slot 0..2 fixed (pistol, rifle, bandage). 3..8 reserved
-// for future weapons. Active slot has `.active`. Each slot shows a count
-// (rounds for guns, charges for bandage).
+// Hotbar — 6 slots configurables. Cada slot tiene un itemKey o null.
+// El usuario asigna items dragueando desde el inventario. Las teclas 1-6
+// activan el slot. Render se nutre de inventory.js + hotbar.js.
 // =====================================================================
 const hotbarSlots = Array.from(document.querySelectorAll('.hbslot'));
-let _activeSlot = 0;
+let _activeSlot = -1;
 export function setHotbarActive(slotIdx) {
   _activeSlot = slotIdx;
   for (const el of hotbarSlots) el.classList.remove('active');
   const el = hotbarSlots[slotIdx];
   if (el) el.classList.add('active');
 }
-export function setHotbarCount(slotIdx, n) {
-  const el = document.getElementById(`hbcount${slotIdx}`);
-  if (el) el.textContent = n | 0;
-  // Disable visual when count = 0 (only for slots that have an item).
-  const slot = hotbarSlots[slotIdx];
-  if (slot && !slot.classList.contains('empty')) {
-    slot.classList.toggle('disabled', (n | 0) === 0);
+
+// Override de labels — los items de munición representan al arma cuando
+// están en el cinturón (ej. bullet_p → "PISTOLA").
+const HOTBAR_LABEL_OVERRIDE = {
+  bullet_p: 'PISTOLA',
+  bullet_r: 'RIFLE',
+  bullet_smg: 'SMG',
+  shell: 'ESCOPETA',
+  sniper_round: 'SNIPER',
+};
+
+// Pinta el slot `idx` con el item asignado (o vacío). Lee `count` desde
+// el inventario para mostrar stack. Si oneTime y count=0, marca disabled.
+export function paintHotbarSlot(idx, itemKey, count, itemMeta) {
+  const slot = hotbarSlots[idx];
+  if (!slot) return;
+  const labelEl = slot.querySelector('.hblabel');
+  const countEl = slot.querySelector('.hbcount');
+  slot.classList.remove('empty', 'disabled');
+  if (!itemKey) {
+    slot.classList.add('empty');
+    if (labelEl) labelEl.textContent = '';
+    if (countEl) countEl.textContent = '';
+    return;
   }
+  const label = HOTBAR_LABEL_OVERRIDE[itemKey] || itemMeta?.label || itemKey;
+  if (labelEl) labelEl.textContent = label.slice(0, 9);
+  if (countEl) countEl.textContent = (count | 0) > 0 ? (count | 0) : '';
+  // Disabled si oneTime y no lo tenés todavía, o si stack 0 sin oneTime.
+  if (itemMeta?.oneTime && (count | 0) === 0) slot.classList.add('disabled');
+  else if (!itemMeta?.oneTime && (count | 0) === 0) slot.classList.add('disabled');
 }
-// Mark a slot as locked (rifle before pickup) so it grays out.
-export function setHotbarLocked(slotIdx, locked) {
-  const slot = hotbarSlots[slotIdx];
-  if (slot) slot.classList.toggle('disabled', !!locked);
-}
+
+// Backwards-compat: setHotbarCount y setHotbarLocked siguen exportados
+// pero ya no hacen nada (los conserva main.js por ahora — los iremos
+// limpiando). Re-render real desde paintHotbarSlot.
+export function setHotbarCount(_slotIdx, _n) { /* deprecated */ }
+export function setHotbarLocked(_slotIdx, _locked) { /* deprecated */ }
 
 // Active-weapon big counter at bottom-right.
 const activeWeaponName = document.getElementById('activeWeaponName');
@@ -140,6 +164,9 @@ export function isInventoryOpen() { return _inventoryOpen; }
 export function toggleInventory(state) {
   _inventoryOpen = state == null ? !_inventoryOpen : !!state;
   if (inventoryPanel) inventoryPanel.classList.toggle('hidden', !_inventoryOpen);
+  // Permite que el hotbar reciba pointer events (drop targets) mientras
+  // el inventario esté abierto.
+  document.body.classList.toggle('inv-open', _inventoryOpen);
   // While inventory is open we want the cursor unlocked so the user can
   // close with TAB or click. Pointer lock is intentionally released by
   // pressing ESC; we don't unlock here to avoid interfering.
