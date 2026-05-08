@@ -12,9 +12,9 @@ import { scene } from './three-setup.js';
 
 export const WORLD_HALF = 800;   // v1.3: 1600x1600 m (4x área del v1.2)
 const WORLD_SEED = 1337;
-const TERRAIN_RES = 200;          // grid res — mantiene detalle a 1600m
-const TREE_COUNT = 1500;          // densidad similar al mapa viejo
-const ROCK_COUNT = 450;
+const TERRAIN_RES = 160;          // grid res — bajado de 200 para FPS
+const TREE_COUNT = 900;           // bajado de 1500 para FPS (densidad ok)
+const ROCK_COUNT = 300;
 
 // Town clearings — alineadas con server.TOWN_FLAT. v1.3: 10 pueblos +
 // Helix Lab mega-grande (~150 edificios).
@@ -390,9 +390,10 @@ export function buildRoads(roads) {
     const len = Math.hypot(dx, dz);
     if (len < 1) continue;
     const ang = Math.atan2(dx, dz);     // yaw del segmento
-    // Subdividimos el segmento en sub-tramos cortos para que la
-    // carretera siga la curvatura del terreno (cada 6m).
-    const STEP = 6;
+    // Subdividimos el segmento en sub-tramos para que la carretera siga
+    // la curvatura del terreno. STEP=14m: antes 6m → 800 segmentos
+    // totales × 3 meshes = 2,400 road meshes. Ahora ~350 × 3 = 1,050.
+    const STEP = 14;
     const steps = Math.ceil(len / STEP);
     for (let i = 0; i < steps; i++) {
       const t1 = i / steps, t2 = (i + 1) / steps;
@@ -408,18 +409,7 @@ export function buildRoads(roads) {
       slab.position.set(cx, y, cz);
       slab.rotation.y = ang;
       roadGroup.add(slab);
-      // Borde del camino — dos tiras finas más oscuras a los lados.
-      for (const side of [-1, 1]) {
-        const edge = new THREE.Mesh(
-          new THREE.BoxGeometry(0.5, 0.04, segLen),
-          roadEdgeMat,
-        );
-        const ex = cx + Math.cos(ang) * side * (ROAD_WIDTH / 2 + 0.1);
-        const ez = cz - Math.sin(ang) * side * (ROAD_WIDTH / 2 + 0.1);
-        edge.position.set(ex, y - 0.005, ez);
-        edge.rotation.y = ang;
-        roadGroup.add(edge);
-      }
+      // (Bordes laterales removidos para perf — ahorra 700+ meshes.)
     }
   }
   scene.add(roadGroup);

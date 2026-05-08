@@ -117,16 +117,16 @@ function buildBuilding(b, type) {
     );
     backLintel.position.set(0, DOOR_HEIGHT + (WALL_HEIGHT - DOOR_HEIGHT) / 2, -halfH + WALL_THICK / 2);
     g.add(backLintel);
-    // Pisos superiores: pared trasera solida (no puerta arriba).
+    // Pisos superiores: pared trasera solida — UN solo mesh por todos los
+    // pisos en vez de 1 por piso. Optimizacion FPS: reduce ~14 meshes por
+    // edificio de 15 pisos a 1.
     if (floors > 1) {
-      for (let f = 1; f < floors; f++) {
-        const yBase = WALL_HEIGHT * f;
-        const upperBack = new THREE.Mesh(
-          new THREE.BoxGeometry(w, WALL_HEIGHT, WALL_THICK), wallMat,
-        );
-        upperBack.position.set(0, yBase + WALL_HEIGHT / 2, -halfH + WALL_THICK / 2);
-        g.add(upperBack);
-      }
+      const upperH = WALL_HEIGHT * (floors - 1);
+      const upperBack = new THREE.Mesh(
+        new THREE.BoxGeometry(w, upperH, WALL_THICK), wallMat,
+      );
+      upperBack.position.set(0, WALL_HEIGHT + upperH / 2, -halfH + WALL_THICK / 2);
+      g.add(upperBack);
     }
   }
   // Side walls (±X) — con puertas si es ancho (>= 12m), solido si no.
@@ -147,16 +147,14 @@ function buildBuilding(b, type) {
       );
       sideLintel.position.set(sx * (halfW - WALL_THICK / 2), DOOR_HEIGHT + (WALL_HEIGHT - DOOR_HEIGHT) / 2, 0);
       g.add(sideLintel);
-      // Pisos superiores: pared lateral solida.
+      // Pisos superiores: pared lateral solida — UN solo mesh.
       if (floors > 1) {
-        for (let f = 1; f < floors; f++) {
-          const yBase = WALL_HEIGHT * f;
-          const upperSide = new THREE.Mesh(
-            new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT, h), wallMat,
-          );
-          upperSide.position.set(sx * (halfW - WALL_THICK / 2), yBase + WALL_HEIGHT / 2, 0);
-          g.add(upperSide);
-        }
+        const upperH = WALL_HEIGHT * (floors - 1);
+        const upperSide = new THREE.Mesh(
+          new THREE.BoxGeometry(WALL_THICK, upperH, h), wallMat,
+        );
+        upperSide.position.set(sx * (halfW - WALL_THICK / 2), WALL_HEIGHT + upperH / 2, 0);
+        g.add(upperSide);
       }
     } else {
       // Pared lateral solida normal.
@@ -181,21 +179,21 @@ function buildBuilding(b, type) {
   );
   lintel.position.set(0, DOOR_HEIGHT + (WALL_HEIGHT - DOOR_HEIGHT) / 2, halfH - WALL_THICK / 2);
   g.add(lintel);
-  // Pisos superiores: pared frontal sólida + ventanas.
+  // Pisos superiores: pared frontal sólida — UN solo mesh.
   if (floors > 1) {
-    for (let f = 1; f < floors; f++) {
-      const yBase = WALL_HEIGHT * f;
-      const upperFront = new THREE.Mesh(
-        new THREE.BoxGeometry(w, WALL_HEIGHT, WALL_THICK), wallMat,
-      );
-      upperFront.position.set(0, yBase + WALL_HEIGHT / 2, halfH - WALL_THICK / 2);
-      g.add(upperFront);
-    }
-    // Ventanas: 2-3 cuadrados de glass por piso por pared (front + sides).
+    const upperHF = WALL_HEIGHT * (floors - 1);
+    const upperFront = new THREE.Mesh(
+      new THREE.BoxGeometry(w, upperHF, WALL_THICK), wallMat,
+    );
+    upperFront.position.set(0, WALL_HEIGHT + upperHF / 2, halfH - WALL_THICK / 2);
+    g.add(upperFront);
+    // Ventanas: SOLO en buildings altos y solo 1 piso intermedio para
+    // ahorrar meshes. Antes habia 8 ventanas por piso × N pisos = mucho.
     const windowMat = MATS.cityGlass;
     const winW = Math.min(0.9, w / 6);
     const winH = 1.0;
-    for (let f = 0; f < floors; f++) {
+    const windowFloors = floors >= 4 ? [Math.floor(floors / 2)] : [1];
+    for (const f of windowFloors) {
       const yBase = WALL_HEIGHT * f;
       const winY = yBase + WALL_HEIGHT * 0.55;
       // Ventanas frontales (saltando la planta baja en la columna central).
@@ -263,36 +261,13 @@ function buildBuilding(b, type) {
         });
       }
     }
-    // === MUEBLES / DECORACION ===
-    // Cama, mesa, sillas — props simples para que se sienta habitado.
+    // (Mueble unico — UNA cama por edificio para perf. Antes habia 8+
+    // meshes de muebles por edificio, multiplicado por 280 edificios eran
+    // ~2,200 meshes solo de muebles. Reducido a 1.)
     const furnMat = new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.85 });
-    const fabMat  = new THREE.MeshStandardMaterial({ color: 0x6a5040, roughness: 0.95 });
-    // 1 cama en una esquina.
-    const bed = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.4, 0.9), furnMat);
-    const bedPillow = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.45, 0.8), fabMat);
-    bed.position.set(-halfW + 1.2, 0.2, halfH - 0.8);
-    bedPillow.position.set(-halfW + 1.2, 0.45, halfH - 0.8);
-    g.add(bed, bedPillow);
-    // 1 mesa en otra habitación (z<0, x>0).
-    const table = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.7), furnMat);
-    table.position.set(halfW - 1.5, 0.85, -halfH + 1.8);
-    g.add(table);
-    for (const tx of [-0.5, 0.5]) for (const tz of [-0.3, 0.3]) {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.85, 0.07), furnMat);
-      leg.position.set(halfW - 1.5 + tx, 0.42, -halfH + 1.8 + tz);
-      g.add(leg);
-    }
-    // 1 silla.
-    const chair = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.5), furnMat);
-    chair.position.set(halfW - 2.7, 0.45, -halfH + 1.8);
-    g.add(chair);
-    const chairBack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.06), furnMat);
-    chairBack.position.set(halfW - 2.7, 0.8, -halfH + 1.55);
-    g.add(chairBack);
-    // 1 estanteria/armario en otra esquina.
-    const shelf = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.8, 0.4), furnMat);
-    shelf.position.set(halfW - 0.8, 0.9, halfH - 1.0);
-    g.add(shelf);
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 0.9), furnMat);
+    bed.position.set(-halfW + 1.2, 0.25, halfH - 0.8);
+    g.add(bed);
   }
 
   // Roof — flat para multipisos + city, pitched para town 1 piso.
