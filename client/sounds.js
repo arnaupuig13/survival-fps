@@ -399,6 +399,105 @@ export function playDistantMoan(dist = 50) {
   noise.start(t0);
 }
 
+// === HELIX ALARM — sirena cuando el player entra a Helix Lab ===
+// Drone disonante con pulsos lentos. Se inicia/detiene desde main.js
+// segun la distancia del player al centro del lab.
+let helixAlarmNodes = null;
+export function startHelixAlarm() {
+  if (!ensureAudio()) return;
+  if (helixAlarmNodes) return;
+  const t = ctx.currentTime;
+  const bus = ctx.createGain();
+  bus.gain.value = 0;
+  bus.connect(masterGain);
+  // Sirena: 2 osciladores que pulsan en frecuencia.
+  const osc1 = ctx.createOscillator();
+  osc1.type = 'sine';
+  osc1.frequency.value = 220;
+  const osc2 = ctx.createOscillator();
+  osc2.type = 'sine';
+  osc2.frequency.value = 280;
+  // LFO modula las frecuencias para crear el efecto de sirena.
+  const lfo = ctx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.5;
+  const lfoGain = ctx.createGain();
+  lfoGain.gain.value = 30;
+  lfo.connect(lfoGain);
+  lfoGain.connect(osc1.frequency);
+  lfoGain.connect(osc2.frequency);
+  // Filtro band para sonido apretado.
+  const filt = ctx.createBiquadFilter();
+  filt.type = 'bandpass';
+  filt.frequency.value = 250;
+  filt.Q.value = 4;
+  osc1.connect(filt);
+  osc2.connect(filt);
+  filt.connect(bus);
+  osc1.start(t);
+  osc2.start(t);
+  lfo.start(t);
+  // Fade in.
+  bus.gain.linearRampToValueAtTime(0.15, t + 1.5);
+  helixAlarmNodes = { bus, osc1, osc2, lfo };
+}
+export function stopHelixAlarm() {
+  if (!helixAlarmNodes) return;
+  const t = ctx.currentTime;
+  const { bus, osc1, osc2, lfo } = helixAlarmNodes;
+  bus.gain.linearRampToValueAtTime(0, t + 1.0);
+  setTimeout(() => {
+    try { osc1.stop(); osc2.stop(); lfo.stop(); bus.disconnect(); } catch {}
+  }, 1100);
+  helixAlarmNodes = null;
+}
+
+// === DOG BARK — ladrido (placeable + dog AI) ===
+export function playDogBark(dist = 0) {
+  if (!ensureAudio()) return;
+  const t0 = ctx.currentTime;
+  const distMul = Math.max(0.15, 1 - dist / 60);
+  for (const startOff of [0, 0.18, 0.40]) {
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    const g = ctx.createGain();
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'bandpass';
+    filt.frequency.value = 800;
+    osc.frequency.setValueAtTime(380, t0 + startOff);
+    osc.frequency.exponentialRampToValueAtTime(220, t0 + startOff + 0.10);
+    g.gain.setValueAtTime(0.0, t0 + startOff);
+    g.gain.linearRampToValueAtTime(0.15 * distMul, t0 + startOff + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + startOff + 0.13);
+    osc.connect(filt).connect(g).connect(masterGain);
+    osc.start(t0 + startOff);
+    osc.stop(t0 + startOff + 0.15);
+  }
+}
+
+// === BOSS STING — mas dramático cuando spawnea el boss ===
+export function playBossAppear() {
+  if (!ensureAudio()) return;
+  const t0 = ctx.currentTime;
+  const bus = ctx.createGain();
+  bus.gain.value = 0.4;
+  bus.connect(masterGain);
+  // Acorde menor disonante descendente.
+  const freqs = [220, 261, 311, 415];
+  for (let i = 0; i < freqs.length; i++) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = freqs[i];
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    g.gain.linearRampToValueAtTime(0.18, t0 + 0.1);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 2.5);
+    osc.connect(g).connect(bus);
+    osc.start(t0 + i * 0.05);
+    osc.stop(t0 + 2.6);
+  }
+}
+
 // Sonido sutil de páginas/papeles que vuelan con el viento — de día.
 export function playLeafRustle() {
   if (!ensureAudio()) return;

@@ -1824,15 +1824,21 @@ setInterval(() => {
   }
   if (prev < 6 && gameHour >= 6 && gameHour < 7) {
     gameDay++;
-    // Fase lunar — ciclo de 8 días. day%8 = 0 luna nueva, day%8 = 4 luna llena.
-    const moonPhase = ((gameDay - 1) % 8) / 8;   // 0..1
-    broadcast({ type: 'banner', text: `★ DIA ${gameDay} — La amenaza crece` });
+    const moonPhase = ((gameDay - 1) % 8) / 8;
+    broadcast({ type: 'banner', text: `☀ AMANECE — DIA ${gameDay}. La amenaza crece` });
     broadcast({ type: 'difficulty', day: gameDay, mul: +difficultyMul().toFixed(2), moonPhase });
-    // Luna llena: anuncio especial.
     const isFullMoon = ((gameDay - 1) % 8) === 4;
     if (isFullMoon) {
       broadcast({ type: 'banner', text: '🌕 LUNA LLENA — esta noche habrá más zombis' });
     }
+  }
+  // Banner de anochecer — cuando cruzamos 19:00 → 20:00 anunciamos noche.
+  if (prev < 20 && gameHour >= 20 && gameHour < 21) {
+    broadcast({ type: 'banner', text: '🌑 CAE LA NOCHE — los zombies se vuelven más rápidos y peligrosos' });
+  }
+  // Banner de amanecer — al cruzar 6:00 → 7:00.
+  if (prev < 7 && gameHour >= 7 && gameHour < 8 && gameHour - prev < 0.5) {
+    // Solo si recien amanece este tick (no en spawn inicial).
   }
   // Trigger horda nocturna desde día 3 al cruzar las 22:00.
   if (players.size > 0) {
@@ -2218,7 +2224,12 @@ setInterval(() => {
 
     // Night buff — melee zombies/wolves move ~20% faster after dusk so the
     // night actually feels different from the day.
-    const nightMul = (isNightHour(gameHour) && !cfg.ranged) ? 1.2 : 1.0;
+    // Night buff — zombies de noche se vuelven mucho más rápidos (1.5x) y
+    // hacen más daño (1.4x). Cientificos rangeados no se afectan (siempre
+    // disparan a la misma cadencia).
+    const isNight = isNightHour(gameHour);
+    const nightMul = (isNight && !cfg.ranged) ? 1.5 : 1.0;
+    const nightDmgMul = (isNight && !cfg.ranged) ? 1.4 : 1.0;
 
     if (cfg.ranged) {
       // Shooter: keep optimal distance ~70% of range; circle-strafe slightly.
@@ -2312,7 +2323,8 @@ setInterval(() => {
         e.ry = Math.atan2(dx, dz);
       } else if (e.attackCd <= 0) {
         e.attackCd = cfg.cd;
-        const rawDmg = Math.round(cfg.dmg * (e.dmgScale || 1));
+        // De noche zombies muerden con +40% de daño extra.
+        const rawDmg = Math.round(cfg.dmg * (e.dmgScale || 1) * nightDmgMul);
         if (nearestKind === 'player') {
           if (!nearest.godMode) {
             const red = nearest.dmgReduction || 0;

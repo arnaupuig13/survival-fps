@@ -372,9 +372,22 @@ export function setStatus(bleeding, infected, poisoned = false) {
 // Quests HUD
 // ----------------------------------------------------------------------
 const questList = document.getElementById('questList');
-export function renderQuests(quests) {
+export function renderQuests(quests, storyQuest) {
   if (!questList) return;
   questList.innerHTML = '';
+  // Story quest first — destacada con borde dorado.
+  if (storyQuest) {
+    const div = document.createElement('div');
+    div.className = 'qItem story';
+    div.style.cssText = 'border-left: 3px solid #f0c060; background: rgba(80,60,20,0.4); padding: 4px 8px;';
+    const pct = Math.min(100, (storyQuest.progress / storyQuest.goal) * 100);
+    div.innerHTML = `
+      <span class="qProg" style="color:#f0c060">${storyQuest.progress}/${storyQuest.goal}</span>
+      <span class="qLabel" style="color:#f0c060">${storyQuest.label}</span>
+      <div class="qBar"><div class="qBarFill" style="width:${pct}%; background:#f0c060"></div></div>
+    `;
+    questList.appendChild(div);
+  }
   for (const q of quests) {
     const div = document.createElement('div');
     div.className = 'qItem' + (q.completed ? ' done' : '');

@@ -1,6 +1,20 @@
 // Bootstrap — wire together world, player, network, entities, weapons, HUD,
 // inventory, loot, sounds. Single game loop.
 
+// Coords de los pueblos para tracking de quest "reach_town".
+const __TOWN_CENTERS = [
+  { id: 'westhaven',  cx: -600, cz:  560 },
+  { id: 'eastfield',  cx:  620, cz:  600 },
+  { id: 'pinecreek',  cx: -640, cz: -520 },
+  { id: 'southridge', cx:  560, cz: -640 },
+  { id: 'northgate',  cx: -300, cz:  640 },
+  { id: 'sandwell',   cx:  300, cz: -680 },
+  { id: 'westmark',   cx: -700, cz:  100 },
+  { id: 'eastmark',   cx:  720, cz:  -80 },
+  { id: 'snowhold',   cx:  100, cz:  680 },
+  { id: 'burntpoint', cx: -180, cz: -700 },
+];
+
 import { renderer, scene, camera, setTimeOfDay } from './three-setup.js';
 import * as THREE from 'three';
 import { heightAt, biomeAt } from './world.js';
@@ -127,7 +141,7 @@ progression.onChange((s) => {
 });
 
 // Quests: refresca el panel cuando cambia el progreso.
-quests.onChange((s) => renderQuests(s.quests));
+quests.onChange((s) => renderQuests(s.quests, quests.getStoryQuest()));
 
 // Status: pinta indicadores de sangrado / infección / veneno.
 status.onChange((s) => setStatus(s.bleeding, s.infected, s.poisoned));
@@ -446,7 +460,16 @@ network.onYouHit = (dmg, src, source) => {
 network.onPeerCount = setOnlineCount;
 network.onBanner = (text) => {
   showBanner(text);
-  if (text.includes('DOCTOR') && text.includes('LABORATORIO')) sfx.playBossSting();
+  if (text.includes('DOCTOR') && text.includes('LABORATORIO')) {
+    sfx.playBossSting();
+    sfx.playBossAppear?.();
+  }
+  if (text.includes('CAE LA NOCHE')) sfx.playWindGust?.();
+  if (text.includes('AMANECE')) sfx.playLeafRustle?.();
+  // Track story quest: nuke helix.
+  if (text.includes('HELIX LAB DESTRUIDO')) {
+    quests.track('nuke_helix', 1);
+  }
 };
 network.onDifficulty = (day, mul) => {
   setDifficulty(day, mul);
@@ -517,13 +540,15 @@ network.onEnemyDead = (id, msg) => {
   // XP por kill — el etype del cliente nos da el tipo (zombie/runner/tank/wolf/...).
   const kind = e ? (e.etype || 'zombie') : 'zombie';
   progression.awardKillXp(kind, !!msg.isBoss);
+  // Track story quest: kill_boss.
+  if (msg.isBoss) quests.track('kill_boss', 1);
   // Track de quests por tipo de enemigo.
   if (!msg.isBoss) {
     const isZombieKind = ['zombie','runner','tank','brute','spitter','screamer','exploder','bilebomber'].includes(kind);
     if (isZombieKind) quests.track('kill_zombies', 1);
     if (kind === 'runner') quests.track('kill_runners', 1);
     if (kind === 'tank' || kind === 'brute')   quests.track('kill_tank', 1);
-    if (kind === 'scientist' || kind === 'sci_shotgun' || kind === 'sci_sniper') quests.track('kill_scientists', 1);
+    if (kind === 'scientist' || kind === 'sci_shotgun' || kind === 'sci_sniper' || kind?.startsWith?.('sci_elite')) quests.track('kill_scientists', 1);
     if (kind === 'wolf' || kind === 'boar' || kind === 'bear' || kind === 'deer' || kind === 'rabbit') {
       quests.track('kill_animals', 1);
     }
@@ -1447,6 +1472,46 @@ function frame(now) {
   const inCombat = (performance.now() / 1000 - (player.lastHitAt || 0)) < 4;
   if (inCombat && !_combatMusic) { _combatMusic = true; sfx.setMusicMode?.('combat'); }
   else if (!inCombat && _combatMusic) { _combatMusic = false; sfx.setMusicMode?.(isNightServer ? 'night' : 'day'); }
+
+  // === HELIX ALARM ===
+  // Sirena disonante cuando el player se acerca al lab (< 200m del centro).
+  // Para cuando se aleja. Indica peligro inmediato.
+  const helixDx = player.pos.x - 0;
+  const helixDz = player.pos.z - (-200);
+  const helixDist = Math.hypot(helixDx, helixDz);
+  if (helixDist < 200 && !window.__helixAlarmOn) {
+    window.__helixAlarmOn = true;
+    sfx.startHelixAlarm?.();
+  } else if (helixDist > 240 && window.__helixAlarmOn) {
+    window.__helixAlarmOn = false;
+    sfx.stopHelixAlarm?.();
+  }
+  // Story quest: enter_helix (dentro del muro perimetral 115m).
+  if (helixDist < 115 && !window.__enteredHelix) {
+    window.__enteredHelix = true;
+    quests.track('enter_helix', 1);
+  }
+  // Story quest: reach_town (dentro de cualquier town clearing).
+  if (!window.__visitedTowns) window.__visitedTowns = new Set();
+  for (const t of __TOWN_CENTERS) {
+    if (window.__visitedTowns.has(t.id)) continue;
+    const tdx = player.pos.x - t.cx, tdz = player.pos.z - t.cz;
+    if (Math.hypot(tdx, tdz) < 50) {
+      window.__visitedTowns.add(t.id);
+      quests.track('reach_town', 1);
+    }
+  }
+  // Story quest: equip_armor (cualquier pieza armor en inv).
+  if (!window.__equippedArmor) {
+    const state = inv.getState();
+    for (const k of Object.keys(state)) {
+      if (state[k] > 0 && inv.ITEMS[k]?.armor) {
+        window.__equippedArmor = true;
+        quests.track('equip_armor', 1);
+        break;
+      }
+    }
+  }
 
   // Ambient soundscape — viento ocasional + gemido lejano random según
   // contexto (más frecuente de noche). No suenan durante hordas activas

@@ -90,6 +90,8 @@ export function track(eventName, amount = 1) {
     }
   }
   if (any) { saveQuests(); notify(); }
+  // Tambien aplicar a story quests.
+  trackStory(eventName, amount);
 }
 
 function grantReward(q) {
@@ -105,5 +107,82 @@ function grantReward(q) {
 export function reroll() {
   state.quests = pickThree();
   saveQuests();
+  notify();
+}
+
+// =====================================================================
+// STORY QUESTS — progresion linear que guia al player desde spawn hasta
+// destruir Helix Lab. Cada una se desbloquea al completar la anterior.
+// Persistido aparte (otra storage key) para que no se rerolle por dia.
+// =====================================================================
+const STORY_KEY = 'survival-fps-v1-story';
+
+export const STORY = [
+  { id: 's1_food',      label: '★ Mata tu primera presa o come una baya',   track: 'eat_food',         goal: 1,  xp: 50,  reward: { bandage: 2 } },
+  { id: 's2_drink',     label: '★ Bebe agua para sobrevivir',                track: 'drink_water',      goal: 1,  xp: 50,  reward: { water_bottle: 2 } },
+  { id: 's3_wood',      label: '★ Corta 5 maderas',                          track: 'harvest_wood',     goal: 5,  xp: 80,  reward: { axe: 1 } },
+  { id: 's4_stone',     label: '★ Pica 5 piedras',                           track: 'harvest_stone',    goal: 5,  xp: 80,  reward: { pickaxe: 1 } },
+  { id: 's5_kills',     label: '★ Mata 5 zombies',                           track: 'kill_zombies',     goal: 5,  xp: 120, reward: { bullet_p: 30 } },
+  { id: 's6_town',      label: '★ Visita un pueblo',                         track: 'reach_town',       goal: 1,  xp: 200, reward: { rifle_body: 1, bullet_r: 20 } },
+  { id: 's7_loot',      label: '★ Saquea 5 cofres en pueblos',               track: 'open_crates',      goal: 5,  xp: 200, reward: { bandage: 3, scrap: 10 } },
+  { id: 's8_armor',     label: '★ Equipa cualquier pieza de armor',          track: 'equip_armor',      goal: 1,  xp: 250, reward: { iron: 10, cloth: 10 } },
+  { id: 's9_kill_sci',  label: '★ Mata 3 cientificos en el laboratorio',     track: 'kill_scientists',  goal: 3,  xp: 400, reward: { bullet_r: 60, bandage: 4 } },
+  { id: 's10_helix',    label: '★ Entra a Helix Lab — muerte asegurada',     track: 'enter_helix',      goal: 1,  xp: 500, reward: { medkit: 2, mil_helmet: 1 } },
+  { id: 's11_boss',     label: '★ Mata al doctor Helix',                     track: 'kill_boss',        goal: 1,  xp: 1500, reward: { mil_body: 1 } },
+  { id: 's12_nuke',     label: '☢ DESTRUYE el laboratorio con el nuke gun',  track: 'nuke_helix',       goal: 1,  xp: 5000, reward: {} },
+];
+
+function loadStory() {
+  try {
+    const raw = localStorage.getItem(STORY_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+function saveStory() {
+  try { localStorage.setItem(STORY_KEY, JSON.stringify(state.story)); } catch {}
+}
+
+state.story = loadStory() || { idx: 0, progress: 0, completed: [] };
+saveStory();
+
+export function getStoryQuest() {
+  if (state.story.idx >= STORY.length) return null;
+  const q = STORY[state.story.idx];
+  return { ...q, progress: state.story.progress };
+}
+export function getStoryDone() { return state.story.completed; }
+
+export function trackStory(eventName, amount = 1) {
+  if (state.story.idx >= STORY.length) return;
+  const q = STORY[state.story.idx];
+  if (q.track !== eventName) return;
+  state.story.progress = Math.min(q.goal, state.story.progress + amount);
+  if (state.story.progress >= q.goal) {
+    // Complete!
+    state.story.completed.push(q.id);
+    addXp(q.xp, q.label);
+    inv.applyLoot(q.reward || {});
+    showBanner(`✓ ${q.label}`, 3500);
+    sfx.playPickup?.();
+    sfx.playKill?.();
+    // Avanzar al siguiente.
+    state.story.idx++;
+    state.story.progress = 0;
+    if (state.story.idx < STORY.length) {
+      const next = STORY[state.story.idx];
+      setTimeout(() => showBanner(`◆ NUEVA MISION: ${next.label}`, 4000), 3500);
+    } else {
+      setTimeout(() => showBanner('★★ HISTORIA COMPLETA — has destruido Helix Lab', 6000), 3500);
+    }
+  }
+  saveStory();
+  notify();
+}
+
+// Reroll story (debug).
+export function resetStory() {
+  state.story = { idx: 0, progress: 0, completed: [] };
+  saveStory();
   notify();
 }

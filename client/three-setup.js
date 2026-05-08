@@ -39,10 +39,10 @@ scene.add(ambient);
 // the horizon.
 const _skyDay     = new THREE.Color(0x9bb6c8);
 const _skyDusk    = new THREE.Color(0xbf6a3a);
-const _skyNight   = new THREE.Color(0x0a0e1c);
+const _skyNight   = new THREE.Color(0x040608);    // mucho mas oscuro
 const _sunDay     = new THREE.Color(0xffefd0);
 const _sunDusk    = new THREE.Color(0xff8040);
-const _sunNight   = new THREE.Color(0x506890);
+const _sunNight   = new THREE.Color(0x304060);    // luna fria pero tenue
 function _smooth01(t) { return t * t * (3 - 2 * t); }
 const _tmpColor = new THREE.Color();
 export function setTimeOfDay(hour) {
@@ -65,7 +65,9 @@ export function setTimeOfDay(hour) {
     _tmpColor.copy(_sunNight).lerp(_sunDusk, dayFactor * 2);
   }
   sun.color.copy(_tmpColor);
-  sun.intensity = 0.15 + dayFactor * 1.25;
+  // Night = casi negro (0.04 minimo). Antes era 0.15 → todavia se veia
+  // demasiado claro. Ahora si la noche se siente NOCHE.
+  sun.intensity = 0.04 + dayFactor * 1.30;
 
   // Sky / fog tint.
   const skyOut = new THREE.Color();
@@ -75,11 +77,17 @@ export function setTimeOfDay(hour) {
     skyOut.copy(_skyNight).lerp(_skyDusk, dayFactor * 2);
   }
   scene.background = skyOut;
-  if (scene.fog) scene.fog.color.copy(skyOut);
+  if (scene.fog) {
+    scene.fog.color.copy(skyOut);
+    // Fog mas cercano de noche para visibilidad limitada (zombies salen
+    // de la oscuridad). Dia: 220m. Noche: 90m.
+    scene.fog.far = 90 + dayFactor * 130;
+    scene.fog.near = 30 + dayFactor * 50;
+  }
 
-  // Hemisphere + ambient ride dayFactor too.
-  hemi.intensity = 0.10 + dayFactor * 0.45;
-  ambient.intensity = 0.18 + dayFactor * 0.35;
+  // Hemisphere + ambient: night casi cero.
+  hemi.intensity = 0.04 + dayFactor * 0.50;
+  ambient.intensity = 0.06 + dayFactor * 0.45;
 }
 
 // Resize handling.
