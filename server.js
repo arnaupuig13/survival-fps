@@ -229,47 +229,61 @@ function genTownBuildings(centerX, centerZ, count, seed) {
   let s = seed;
   const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
   const buildings = [];
-  // Cell separation — ciudades más densas (12m), towns un poco más spread
-  // (14m). Puerta siempre +Z para evitar bloqueos con vecinos.
-  const isCity = count >= 12;
-  const cell = isCity ? 13 : 14;
+  const isCity = count >= 30;
+  // CELL — calles entre edificios:
+  //   towns: 11m (edificios de ~7m → 4m de calle)
+  //   cities: 10.5m (edificios ~9m → 1.5m calle = pared con pared)
+  const cell = isCity ? 10.5 : 11;
   const cols = Math.ceil(Math.sqrt(count));
   // 1 comisaría + 1 hospital obligatorios por town (no en city).
   const policeIdx = isCity ? -1 : 0;
   const hospitalIdx = isCity ? -1 : 1;
+  // En city, marcamos algunos índices como "high_loot" (zona controlada
+  // por más científicos con más cofres) y otros como "ruined" (fachada
+  // rota, sin techo, abandonada). Con 80 edificios elegimos 6 bloques de
+  // loot concentrado repartidos por la ciudad.
+  const highLootIndices = isCity ? new Set([12, 24, 38, 51, 63, 75]) : new Set();
   for (let i = 0; i < count; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const ox = (col - (cols - 1) / 2) * cell + (rng() - 0.5) * 2;
-    const oz = (row - (cols - 1) / 2) * cell + (rng() - 0.5) * 2;
+    // Jitter MUY pequeño (0.5m) para que las casas queden alineadas
+    // tipo manzana de ciudad real.
+    const ox = (col - (cols - 1) / 2) * cell + (rng() - 0.5) * 1;
+    const oz = (row - (cols - 1) / 2) * cell + (rng() - 0.5) * 1;
     let kind = 'normal';
     let floors = 1;
     let w, h;
     if (i === policeIdx) {
       kind = 'police';
-      w = 9; h = 8; floors = 1;
+      w = 8.5; h = 7.5; floors = 1;
     } else if (i === hospitalIdx) {
       kind = 'hospital';
-      w = 10; h = 9; floors = 2;
+      w = 9; h = 8.5; floors = 2;
     } else if (isCity) {
-      // Helix Lab: bloques de torre 2-12 pisos. Variabilidad mucha.
+      // Helix Lab — vieja ciudad medio en ruinas. Mucha variabilidad.
       const r = rng();
-      if      (r > 0.85) floors = 8 + Math.floor(rng() * 5);   // 8-12 pisos rascacielos
-      else if (r > 0.65) floors = 4 + Math.floor(rng() * 4);   // 4-7 pisos
-      else if (r > 0.40) floors = 2 + Math.floor(rng() * 2);   // 2-3 pisos
-      else               floors = 1;                            // 1 piso
-      w = 7.5 + rng() * 3.0;
-      h = 7.5 + rng() * 3.0;
-      // Edificios anchos ocasionales (oficinas/gimnasios).
-      if (rng() < 0.20) { w *= 1.4; h *= 1.4; floors = Math.min(floors, 3); }
+      if      (r > 0.78) floors = 7 + Math.floor(rng() * 6);    // 7-12 rascacielos (22%)
+      else if (r > 0.55) floors = 4 + Math.floor(rng() * 3);    // 4-6 pisos (23%)
+      else if (r > 0.30) floors = 2 + Math.floor(rng() * 2);    // 2-3 pisos (25%)
+      else               floors = 1;                             // 1 piso (30%)
+      w = 8.5 + rng() * 1.5;     // 8.5-10m (más uniforme para "manzana")
+      h = 8.5 + rng() * 1.5;
+      // Marcar ~25% de buildings como "ruined" (no police/hospital/highloot).
+      if (highLootIndices.has(i)) {
+        kind = 'high_loot';     // zona de loot concentrado
+      } else if (rng() < 0.25) {
+        kind = 'ruined';        // fachada rota
+      }
     } else {
-      // Towns regulares: mayoría 1-3 pisos, ocasional torre 5-7.
+      // Towns regulares: mayoría 2-3 pisos, varios de 4-6, alguna torre.
+      // Antes: 70% 1 piso. Ahora: 25% 1, 35% 2-3, 25% 4-5, 15% 6-9.
       const r = rng();
-      if      (r > 0.92) floors = 5 + Math.floor(rng() * 3);   // 5-7 pisos torre
-      else if (r > 0.70) floors = 2 + Math.floor(rng() * 2);   // 2-3 pisos
-      else               floors = 1;
-      w = 5.5 + rng() * 2.5;
-      h = 5.5 + rng() * 2.5;
+      if      (r > 0.85) floors = 6 + Math.floor(rng() * 4);    // 6-9 torre (15%)
+      else if (r > 0.60) floors = 4 + Math.floor(rng() * 2);    // 4-5 (25%)
+      else if (r > 0.25) floors = 2 + Math.floor(rng() * 2);    // 2-3 (35%)
+      else               floors = 1;                             // 1 piso (25%)
+      w = 6 + rng() * 2;
+      h = 6 + rng() * 2;
     }
     buildings.push({ dx: ox, dz: oz, w, h, ry: 0, floors, kind });
   }
@@ -282,8 +296,10 @@ const TOWNS = [
   { id: 'eastfield',  cx:  310, cz:  300, type: 'town', buildings: genTownBuildings( 310,  300, 18, 22), label: 'Eastfield' },
   { id: 'pinecreek',  cx: -320, cz: -260, type: 'town', buildings: genTownBuildings(-320, -260, 18, 33), label: 'Pinecreek' },
   { id: 'southridge', cx:  280, cz: -320, type: 'town', buildings: genTownBuildings( 280, -320, 18, 44), label: 'Southridge' },
-  // Helix Lab — ciudad densa con rascacielos.
-  { id: 'helix-lab',  cx:  0,   cz: -200, type: 'city', buildings: genTownBuildings(  0, -200, 40, 77), label: 'Helix Lab' },
+  // Helix Lab — ciudad densa con rascacielos. 80 edificios = 9x9 grid,
+  // ~94m de ancho. Mezcla de torres (7-12 pisos), edificios medianos,
+  // ruinas con fachada rota, y 6 bloques de loot concentrado.
+  { id: 'helix-lab',  cx:  0,   cz: -200, type: 'city', buildings: genTownBuildings(  0, -200, 80, 77), label: 'Helix Lab' },
 ];
 
 // Compute world-space center of each building so spawn / wake checks
@@ -597,14 +613,25 @@ function spawnTownCrates() {
   for (const t of TOWNS) {
     for (const b of t.buildings) {
       const isCity = t.type === 'city';
-      // Random count: town 2-4, city 1-3.
-      const count = isCity ? (1 + Math.floor(Math.random() * 3))
-                           : (2 + Math.floor(Math.random() * 3));
-      // Posiciones dentro del footprint del edificio: esquinas + centro.
+      const isHighLoot = b.kind === 'high_loot';
+      const isRuined = b.kind === 'ruined';
+      // Random count:
+      //   high_loot: 5-7 cofres por bloque (zona controlada por cientificos)
+      //   ruined: 1-2 cofres (abandonado, basura)
+      //   city normal: 1-3
+      //   town: 2-4
+      let count;
+      if (isHighLoot)      count = 5 + Math.floor(Math.random() * 3);
+      else if (isRuined)   count = 1 + Math.floor(Math.random() * 2);
+      else if (isCity)     count = 1 + Math.floor(Math.random() * 3);
+      else                 count = 2 + Math.floor(Math.random() * 3);
+      // Posiciones dentro del footprint del edificio: esquinas + medios.
       // Footprint es w×h; convertimos a offsets locales y rotamos por b.ry.
+      // 9 slots para que high_loot (5-7 cofres) tenga espacio sin amontonar.
       const half = 0.4; // 0.4 * tamaño = quedar dentro de las paredes
       const corners = [
-        [-half, -half], [half, -half], [-half, half], [half, half], [0, 0],
+        [-half, -half], [half, -half], [-half, half], [half, half],
+        [0, -half], [0, half], [-half, 0], [half, 0], [0, 0],
       ];
       // Shuffle.
       for (let i = corners.length - 1; i > 0; i--) {
@@ -612,6 +639,9 @@ function spawnTownCrates() {
         [corners[i], corners[j]] = [corners[j], corners[i]];
       }
       const cosR = Math.cos(b.ry || 0), sinR = Math.sin(b.ry || 0);
+      // High_loot blocks → loot tier "city" upgradeado (mejor que town).
+      // Ruined → mismo tier que town (basura).
+      const tableKey = isHighLoot ? 'city' : (isRuined ? 'town' : t.type);
       for (let i = 0; i < count && i < corners.length; i++) {
         const [lx, lz] = corners[i];
         const ox = lx * b.w, oz = lz * b.h;
@@ -622,7 +652,8 @@ function spawnTownCrates() {
         const id = nextCrateId++;
         crates.set(id, {
           id, x, z, y: heightAt(x, z),
-          tableKey: t.type, townId: t.id, taken: false,
+          tableKey, townId: t.id, taken: false,
+          highLoot: isHighLoot,
         });
       }
     }
@@ -742,8 +773,10 @@ function killEnemy(e, byId = null) {
   if (e.townId === 'helix-lab' && isScientist) {
     const ts = townState.get('helix-lab');
     ts.scientistsDead++;
-    // Boss appears once half the lab's scientists have fallen.
-    if (!ts.bossSpawned && ts.scientistsDead >= 6) {
+    // Boss appears once una buena tanda de scientists ha caido. Con 80
+    // edificios y ~150-200 cientificos en total, necesitamos algo razonable
+    // para que el jefe llegue tras una pelea sustancial pero no tarde horas.
+    if (!ts.bossSpawned && ts.scientistsDead >= 25) {
       const t = TOWNS.find(x => x.id === 'helix-lab');
       ts.bossSpawned = true;
       const boss = makeEnemy({
@@ -846,16 +879,33 @@ function streamTowns() {
       for (let i = 0; i < t.buildings.length; i++) {
         const b = t.buildings[i];
         const isCity = t.type === 'city';
-        // City: 2-3 científicos por edificio (más densidad). Town: 1-3 zombies.
-        const count = isCity ? (2 + Math.floor(Math.random() * 2))
-                             : (1 + Math.floor(Math.random() * 3));
+        const isHighLoot = b.kind === 'high_loot';
+        const isRuined = b.kind === 'ruined';
+        // City spawns:
+        //   high_loot: 4-6 cientificos guardia (zona controlada)
+        //   ruined:    0-1 cientifico (abandonado)
+        //   normal:    2-3 cientificos
+        // Town: 1-3 zombies.
+        let count;
+        if (!isCity)            count = 1 + Math.floor(Math.random() * 3);
+        else if (isHighLoot)    count = 4 + Math.floor(Math.random() * 3);
+        else if (isRuined)      count = Math.random() < 0.5 ? 0 : 1;
+        else                    count = 2 + Math.floor(Math.random() * 2);
         for (let k = 0; k < count; k++) {
           let etype;
           if (isCity) {
-            const r = (i * 23 + 5) % 12;
-            if (r < 7)       etype = 'scientist';
-            else if (r < 10) etype = 'sci_shotgun';
-            else             etype = 'sci_sniper';
+            // High_loot tiene ratio mas alto de sniper/shotgun (mejor armados).
+            if (isHighLoot) {
+              const r = (i * 23 + k * 7) % 10;
+              if (r < 4)       etype = 'scientist';
+              else if (r < 7)  etype = 'sci_shotgun';
+              else             etype = 'sci_sniper';
+            } else {
+              const r = (i * 23 + 5) % 12;
+              if (r < 7)       etype = 'scientist';
+              else if (r < 10) etype = 'sci_shotgun';
+              else             etype = 'sci_sniper';
+            }
           } else {
             // Towns: 60% zombi, 18% runner, 8% tank, 5% spitter,
             // 5% screamer, 4% exploder.

@@ -44,7 +44,12 @@ function buildBuilding(b, type) {
   const isCity = type === 'city';
   const floors = b.floors | 0 || 1;
   const kind = b.kind || 'normal';
-  // Materiales — police azul, hospital blanco, otros default.
+  // Ruined: top floor parcialmente derrumbado, no roof, paredes rotas.
+  // Visual decay para contrastar con bloques intactos controlados por cientificos.
+  const isRuined = kind === 'ruined';
+  const isHighLoot = kind === 'high_loot';
+  // Materiales — police azul, hospital blanco, ruined gris quemado,
+  // high_loot acero limpio (intact zone).
   const mats = isCity
     ? { wall: MATS.cityWall, trim: MATS.cityTrim, roof: MATS.cityRoof, glass: MATS.cityGlass }
     : { wall: MATS.townWall, trim: MATS.townTrim, roof: MATS.townRoof };
@@ -54,25 +59,50 @@ function buildBuilding(b, type) {
     wallMat = new THREE.MeshStandardMaterial({ color: 0x3a4a78, roughness: 0.7 });
   } else if (kind === 'hospital') {
     wallMat = new THREE.MeshStandardMaterial({ color: 0xe8e8ec, roughness: 0.7 });
+  } else if (isRuined) {
+    // Hormigon viejo, ennegrecido, oxidado por explosiones pasadas.
+    wallMat = new THREE.MeshStandardMaterial({ color: 0x5a5450, roughness: 0.95 });
+  } else if (isHighLoot) {
+    // Acero limpio + emisivo dorado tenue para indicar zona "viva".
+    wallMat = new THREE.MeshStandardMaterial({ color: 0x8a8e96, roughness: 0.55, metalness: 0.45, emissive: 0x402810, emissiveIntensity: 0.18 });
   }
 
   const w = b.w, h = b.h;
   const halfW = w / 2, halfH = h / 2;
   const groundY = heightAt(b.wx, b.wz);
-  const totalH = WALL_HEIGHT * floors;
+  // Ruined: el ultimo piso esta colapsado (mitad de altura, sin techo).
+  const totalH = isRuined && floors > 1
+    ? WALL_HEIGHT * (floors - 1) + WALL_HEIGHT * 0.5
+    : WALL_HEIGHT * floors;
+  const fullH = WALL_HEIGHT * floors;
 
   // Building con N pisos = paredes apiladas verticalmente.
-  // Back wall (-Z) — solid, alta.
-  const back = new THREE.Mesh(
-    new THREE.BoxGeometry(w, totalH, WALL_THICK), wallMat,
-  );
-  back.position.set(0, totalH / 2, -halfH + WALL_THICK / 2);
-  g.add(back);
-  for (const sx of [-1, 1]) {
-    const side = new THREE.Mesh(
-      new THREE.BoxGeometry(WALL_THICK, totalH, h), wallMat,
+  // Back wall (-Z) — solid, alta. Ruined: silueta dentada.
+  if (isRuined) {
+    // Back wall en 3 segmentos de altura desigual (silueta de pared rota).
+    const segs = [
+      { x: -halfW * 0.6, w: w * 0.35, h: totalH * 0.95 },
+      { x:  0,             w: w * 0.30, h: totalH * 0.65 },
+      { x:  halfW * 0.6, w: w * 0.30, h: totalH * 0.85 },
+    ];
+    for (const s of segs) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, WALL_THICK), wallMat);
+      m.position.set(s.x, s.h / 2, -halfH + WALL_THICK / 2);
+      g.add(m);
+    }
+  } else {
+    const back = new THREE.Mesh(
+      new THREE.BoxGeometry(w, totalH, WALL_THICK), wallMat,
     );
-    side.position.set(sx * (halfW - WALL_THICK / 2), totalH / 2, 0);
+    back.position.set(0, totalH / 2, -halfH + WALL_THICK / 2);
+    g.add(back);
+  }
+  for (const sx of [-1, 1]) {
+    const sideH = isRuined ? totalH * (0.6 + Math.random() * 0.35) : totalH;
+    const side = new THREE.Mesh(
+      new THREE.BoxGeometry(WALL_THICK, sideH, h), wallMat,
+    );
+    side.position.set(sx * (halfW - WALL_THICK / 2), sideH / 2, 0);
     g.add(side);
   }
   // Front: doorway en planta baja + slabs frontales en pisos superiores.
@@ -129,7 +159,25 @@ function buildBuilding(b, type) {
   }
 
   // Roof — flat para multipisos + city, pitched para town 1 piso.
-  if (isCity || floors > 1 || kind === 'police' || kind === 'hospital') {
+  // Ruined: NO roof (cielo abierto, escombros caidos).
+  if (isRuined) {
+    // Escombros al borde del techo: 5 boxes pequenos esparcidos.
+    const debrisMat = new THREE.MeshStandardMaterial({ color: 0x4a4440, roughness: 0.95 });
+    for (let i = 0; i < 5; i++) {
+      const dx = (Math.random() - 0.5) * w * 0.7;
+      const dz = (Math.random() - 0.5) * h * 0.7;
+      const ds = 0.4 + Math.random() * 0.7;
+      const debris = new THREE.Mesh(new THREE.BoxGeometry(ds, ds * 0.5, ds), debrisMat);
+      debris.position.set(dx, totalH * 0.5 + Math.random() * 1.5, dz);
+      debris.rotation.set(Math.random(), Math.random(), Math.random());
+      g.add(debris);
+    }
+    // Una viga colgando del techo roto.
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(w * 0.4, 0.18, 0.18), debrisMat);
+    beam.position.set(0, totalH * 0.85, halfH * 0.3);
+    beam.rotation.z = 0.35;
+    g.add(beam);
+  } else if (isCity || floors > 1 || kind === 'police' || kind === 'hospital') {
     const roof = new THREE.Mesh(
       new THREE.BoxGeometry(w + 0.4, 0.30, h + 0.4), mats.roof,
     );
@@ -139,6 +187,22 @@ function buildBuilding(b, type) {
       const glass = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.05, h * 0.3), mats.glass);
       glass.position.set(0, totalH + 0.30, 0);
       g.add(glass);
+    }
+    // High-loot rooftop: pilar emisivo dorado para flaggear desde lejos.
+    if (isHighLoot) {
+      const beaconMat = new THREE.MeshStandardMaterial({ color: 0xffc060, emissive: 0xffa030, emissiveIntensity: 1.4 });
+      const beacon = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.1, 0.45), beaconMat);
+      beacon.position.set(0, totalH + 0.85, 0);
+      g.add(beacon);
+      // Cuatro luces de alerta en las esquinas del techo.
+      const alertMat = new THREE.MeshStandardMaterial({ color: 0xff4020, emissive: 0xff4020, emissiveIntensity: 1.1 });
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const al = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), alertMat);
+        al.position.set(sx * (halfW - 0.5), totalH + 0.4, sz * (halfH - 0.5));
+        al.userData.isAlertLight = true;
+        g.add(al);
+        cityAlertLights.push(al);
+      }
     }
   } else {
     // Pitched wood roof (1 piso town).
@@ -190,6 +254,18 @@ function buildBuilding(b, type) {
     const sign = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.35, 0.05),
       new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x808080, emissiveIntensity: 0.4 }));
     sign.position.set(0, WALL_HEIGHT - 0.1, halfH + 0.06);
+    g.add(sign);
+  } else if (isHighLoot) {
+    // Emblema dorado romboide sobre la puerta: zona "viva" del laboratorio.
+    const emblemMat = new THREE.MeshStandardMaterial({ color: 0xffd060, emissive: 0xffa040, emissiveIntensity: 1.1, metalness: 0.6, roughness: 0.35 });
+    const emblem = new THREE.Mesh(new THREE.OctahedronGeometry(0.55, 0), emblemMat);
+    emblem.position.set(0, WALL_HEIGHT + 0.55, halfH + 0.05);
+    emblem.scale.set(1, 1, 0.25);
+    g.add(emblem);
+    // Sign dorado bajo el emblema.
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.4, 0.05),
+      new THREE.MeshStandardMaterial({ color: 0xffd060, emissive: 0xc09020, emissiveIntensity: 0.8 }));
+    sign.position.set(0, WALL_HEIGHT - 0.05, halfH + 0.06);
     g.add(sign);
   }
 
@@ -271,7 +347,10 @@ function buildSign(town) {
 // Returns { group, colliders } so the world can drop them in scene + obstacles.
 // =====================================================================
 
-const CITY_HALF = 60; // wall extends ±60 m from town center → 120x120 m walled compound
+// Helix Lab ahora tiene 80 edificios (9x9 grid x 10.5m = ~94m de span).
+// El muro perimetral se expande de ±60 a ±70 para envolver la ciudad densa
+// con margen visual entre las torres y la valla.
+const CITY_HALF = 70; // wall extends ±70 m from town center → 140x140 m walled compound
 const WALL_H = 4.5;
 const WALL_T = 0.55;
 const GATE_WIDTH = 7;
