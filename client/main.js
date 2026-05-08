@@ -640,8 +640,9 @@ function startGame() {
   menuEl.style.display = 'none';
   renderer.domElement.requestPointerLock?.();
   logLine(`Bienvenido ${profile.name || 'P1'}. Total bajas: ${profile.totalKills | 0}.`);
-  // Tutorial — solo se ejecuta la primera vez.
-  setTimeout(() => tutorial.start(), 1500);
+  // Tutorial deshabilitado por ahora — tenía bugs. Reactivar cuando se
+  // arregle el flow de los pasos.
+  // setTimeout(() => tutorial.start(), 1500);
 }
 
 playBtn.addEventListener('click', () => {
