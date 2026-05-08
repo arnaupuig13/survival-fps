@@ -985,6 +985,33 @@ function spawnTownCrates() {
 }
 spawnTownCrates();
 
+// Rooftop loot — para cada edificio multi-piso, 1 cofre encima del techo.
+// Recompensa para players que se atreven a subir (E para subir).
+// Tabla 'city' para edificios de la city, 'town' para los de pueblo.
+function spawnRoofCrates() {
+  for (const t of TOWNS) {
+    for (const b of t.buildings) {
+      const floors = b.floors | 0 || 1;
+      if (floors < 2) continue;
+      if (b.kind === 'ruined') continue;            // ruinas sin techo
+      // Boss tower: el boss + 4 elites estan abajo. Skip rooftop crate.
+      if (b.kind === 'boss_tower') continue;
+      const totalH = 3.0 * floors;       // WALL_HEIGHT del cliente = 3.0
+      const x = b.wx + (Math.random() - 0.5) * b.w * 0.4;
+      const z = b.wz + (Math.random() - 0.5) * b.h * 0.4;
+      const id = nextCrateId++;
+      const tableKey = t.type === 'city' ? 'city' : 'town';
+      crates.set(id, {
+        id, x, z,
+        y: heightAt(b.wx, b.wz) + totalH + 0.5,    // sobre el techo
+        tableKey, townId: t.id, taken: false,
+        onRoof: true,
+      });
+    }
+  }
+}
+spawnRoofCrates();
+
 // Ground loot — small street drops scattered across the wilderness. Same
 // crate plumbing as the town/POI crates, just a smaller mesh client-side
 // (mesh choice is by tableKey === 'street').

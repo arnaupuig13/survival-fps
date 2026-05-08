@@ -17,7 +17,7 @@ const __TOWN_CENTERS = [
 
 import { renderer, scene, camera, setTimeOfDay } from './three-setup.js';
 import * as THREE from 'three';
-import { heightAt, biomeAt } from './world.js';
+import { heightAt, biomeAt, buildingTops } from './world.js';
 import './world.js';                 // builds terrain + trees + rocks
 import { player, updatePlayer } from './player.js';
 import { network } from './network.js';
@@ -744,6 +744,7 @@ let nearbyTrader = null;
 let nearbyHeli = null;
 let nearbyStash = null;
 let nearbyFarmPlant = null;
+let nearbyBuildingForClimb = null;
 
 // Player.js applies player.mouseSensitivity if present (default 0.0022).
 // We just need the field to exist so applySettings can override it.
@@ -887,6 +888,26 @@ addEventListener('keydown', (e) => {
       sfx.playPickup?.();
     }
     nearbyLake = null;
+    hideInteract();
+  } else if (e.code === 'KeyE' && nearbyBuildingForClimb) {
+    // === ESCALERA / PORTAL ===
+    // Teleporta al player al techo del edificio cercano. Si ya esta arriba,
+    // teleporta abajo. Mecanica simple "elevator" para acceso vertical.
+    const top = nearbyBuildingForClimb;
+    const onRoof = player.pos.y >= top.topY;
+    if (onRoof) {
+      // Bajar al suelo en el borde sur del edificio.
+      const groundY = heightAt(top.cx, top.cz + top.hh + 1);
+      player.pos.set(top.cx, groundY + player.eyeHeightCurrent, top.cz + top.hh + 1);
+      logLine('Bajaste del techo');
+    } else {
+      player.pos.set(top.cx, top.topY + player.eyeHeightCurrent, top.cz);
+      player.vy = 0;
+      player.onGround = true;
+      logLine('★ Subiste al techo (E para bajar)');
+      sfx.playPickup?.();
+    }
+    nearbyBuildingForClimb = null;
     hideInteract();
   } else if (e.code === 'KeyH') {
     if (inv.useBandage(player)) {
@@ -1402,6 +1423,22 @@ function frame(now) {
     const bush = (!c && !tr && !heli && !sta && !fp && !plant) ? survival.nearestBushInRange(player.pos) : null;
     const lake = (!c && !tr && !heli && !sta && !fp && !plant && !bush) ? survival.nearestLakeInRange(player.pos) : null;
     const vp = (!c && !tr && !heli && !sta && !fp && !plant && !bush && !lake) ? vehicle.nearbyVehiclePrompt(player.pos) : null;
+    // Detect nearby building for rooftop climb (within 2.5m of any wall edge).
+    let bldgClimb = null;
+    if (!c && !tr && !heli && !sta && !fp && !plant && !bush && !lake && !vp) {
+      let bestDist = Infinity;
+      for (const top of buildingTops) {
+        const cosI = Math.cos(-(top.ry || 0));
+        const sinI = Math.sin(-(top.ry || 0));
+        const dx = player.pos.x - top.cx, dz = player.pos.z - top.cz;
+        const lx = cosI * dx - sinI * dz;
+        const lz = sinI * dx + cosI * dz;
+        const dxAbs = Math.abs(lx) - top.hw;
+        const dzAbs = Math.abs(lz) - top.hh;
+        const dist = Math.max(0, Math.max(dxAbs, dzAbs));
+        if (dist < 2.5 && dist < bestDist) { bestDist = dist; bldgClimb = top; }
+      }
+    }
     nearbyCrate = c || null;
     nearbyTrader = tr || null;
     nearbyHeli = heli || null;
@@ -1410,6 +1447,7 @@ function frame(now) {
     nearbyPlant = plant || null;
     nearbyBush = bush || null;
     nearbyLake = lake || null;
+    nearbyBuildingForClimb = bldgClimb;
     if (c) {
       const tier = c.localLoot ? 'item soltado'
                 : c.tableKey === 'boss' ? 'cofre del DOCTOR'
@@ -1425,6 +1463,10 @@ function frame(now) {
     else if (bush) showInteract('recoger bayas');
     else if (lake) showInteract('rellenar botella');
     else if (vp) showInteract(vp.replace('[F]', '').trim());
+    else if (bldgClimb) {
+      const onRoof = player.pos.y >= bldgClimb.topY;
+      showInteract(onRoof ? 'bajar del techo' : 'subir al techo (escalera)');
+    }
     else hideInteract();
   }
 

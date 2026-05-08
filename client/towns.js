@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import { scene } from './three-setup.js';
-import { heightAt, obstacles } from './world.js';
+import { heightAt, obstacles, buildingTops } from './world.js';
 
 const WALL_THICK = 0.25;
 const WALL_HEIGHT = 3.0;
@@ -776,9 +776,26 @@ export function setTownLayouts(towns) {
     const townGroup = new THREE.Group();
     townGroup.userData.townId = t.id;
     for (let i = 0; i < t.buildings.length; i++) {
-      const { group, colliders } = buildBuilding(t.buildings[i], t.type);
+      const b = t.buildings[i];
+      const { group, colliders } = buildBuilding(b, t.type);
       townGroup.add(group);
       for (const c of colliders) obstacles.push(c);
+      // Registrar el techo como walkable surface. Solo edificios >= 2 pisos.
+      // Player puede caminar encima despues de subir via portal/teleport.
+      const floors = b.floors | 0 || 1;
+      if (floors >= 2 && b.kind !== 'ruined') {
+        const groundY = heightAt(b.wx, b.wz);
+        const totalH = WALL_HEIGHT * floors;
+        buildingTops.push({
+          cx: b.wx,
+          cz: b.wz,
+          hw: b.w / 2 - 0.3,    // un poco menos para evitar quedarse en el borde exacto
+          hh: b.h / 2 - 0.3,
+          ry: b.ry || 0,
+          topY: groundY + totalH + 0.3,   // top of roof slab
+          buildingId: `${t.id}_${i}`,
+        });
+      }
     }
     scene.add(townGroup);
     _townGroups.set(t.id, townGroup);

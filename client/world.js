@@ -430,3 +430,6 @@ scene.add(buildBoundaryFence());
 // Building colliders are appended to this array by towns.js when the welcome
 // message arrives.
 export const obstacles = [...treeColliders, ...rockColliders];
+// Building rooftops — walkable. towns.js los puebla. Cada uno es
+// { cx, cz, hw, hh, ry, topY } con footprint y altura del techo.
+export const buildingTops = [];

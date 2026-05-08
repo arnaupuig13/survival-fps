@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { camera, renderer } from './three-setup.js';
-import { heightAt, obstacles, WORLD_HALF } from './world.js';
+import { heightAt, obstacles, WORLD_HALF, buildingTops } from './world.js';
 
 const EYE_HEIGHT = 1.65;
 const CROUCH_HEIGHT = 1.05;
@@ -350,7 +350,29 @@ export function updatePlayer(dt) {
       if (keys['Space'] && player.onGround && !player.crouching) { player.vy = JUMP_VEL; player.onGround = false; }
     }
     player.pos.y += player.vy * dt;
-    const groundY = heightAt(player.pos.x, player.pos.z) + player.eyeHeightCurrent;
+    let groundY = heightAt(player.pos.x, player.pos.z) + player.eyeHeightCurrent;
+    // === ROOFTOP WALKABILITY ===
+    // Si el player esta sobre la footprint de un building Y arriba del
+    // terrain (en el aire o sobre el techo), usamos el techo como suelo.
+    // Esto permite caminar sobre rooftops despues de teleportarse arriba
+    // via "portal" (E cerca de building).
+    for (const top of buildingTops) {
+      const cosI = Math.cos(-(top.ry || 0));
+      const sinI = Math.sin(-(top.ry || 0));
+      const dx = player.pos.x - top.cx, dz = player.pos.z - top.cz;
+      const lx = cosI * dx - sinI * dz;
+      const lz = sinI * dx + cosI * dz;
+      if (Math.abs(lx) <= top.hw && Math.abs(lz) <= top.hh) {
+        const roofGround = top.topY + player.eyeHeightCurrent;
+        // Solo aplica si el player ya esta arriba o cerca del techo
+        // (evita teleportarlo desde el suelo). Si esta abajo, el techo
+        // no es suelo (caminamos por la planta baja, no por debajo del techo).
+        if (player.pos.y >= top.topY - 0.5) {
+          if (roofGround > groundY) groundY = roofGround;
+        }
+        break;
+      }
+    }
     if (player.pos.y <= groundY) {
       player.pos.y = groundY;
       player.vy = 0;
