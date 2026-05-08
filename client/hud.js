@@ -101,6 +101,11 @@ export function setHotbarActive(slotIdx) {
 // Override de labels — los items de munición representan al arma cuando
 // están en el cinturón (ej. bullet_p → "PISTOLA").
 const HOTBAR_LABEL_OVERRIDE = {
+  pistol_pickup: 'PISTOLA',
+  rifle_pickup: 'RIFLE',
+  smg_pickup: 'SMG',
+  shotgun_pickup: 'ESCOPETA',
+  sniper_pickup: 'SNIPER',
   bullet_p: 'PISTOLA',
   bullet_r: 'RIFLE',
   bullet_smg: 'SMG',
@@ -124,7 +129,12 @@ export function paintHotbarSlot(idx, itemKey, count, itemMeta) {
   }
   const label = HOTBAR_LABEL_OVERRIDE[itemKey] || itemMeta?.label || itemKey;
   if (labelEl) labelEl.textContent = label.slice(0, 9);
-  if (countEl) countEl.textContent = (count | 0) > 0 ? (count | 0) : '';
+  // Items oneTime no muestran count (siempre 1 si lo tenés). Munición y
+  // consumibles sí muestran cantidad.
+  if (countEl) {
+    if (itemMeta?.oneTime) countEl.textContent = '';
+    else countEl.textContent = (count | 0) > 0 ? (count | 0) : '';
+  }
   // Disabled si oneTime y no lo tenés todavía, o si stack 0 sin oneTime.
   if (itemMeta?.oneTime && (count | 0) === 0) slot.classList.add('disabled');
   else if (!itemMeta?.oneTime && (count | 0) === 0) slot.classList.add('disabled');

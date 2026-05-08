@@ -52,7 +52,7 @@ const EQUIP_KEYS = new Set(['vest_armor', 'helmet_armor']);
 // Display order — Rust packs items in a logical order (weapons → ammo → meds → food → resources).
 const DISPLAY_ORDER = [
   // Weapons
-  'rifle_pickup', 'shotgun_pickup', 'smg_pickup', 'sniper_pickup',
+  'pistol_pickup', 'rifle_pickup', 'shotgun_pickup', 'smg_pickup', 'sniper_pickup',
   // Tools
   'axe', 'pickaxe',
   // Attachments
@@ -78,6 +78,7 @@ const DESCRIPTIONS = {
   sniper_round:   'Munición de calibre .50 para rifle de francotirador.',
   bandage:        'Restaura 30 HP al usar (tecla H).',
   grenade:        'Granada de fragmentación. Lanzar con G.',
+  pistol_pickup:  'Pistola estándar. Tu arma de inicio. Arrastrala al cinturón.',
   rifle_pickup:   'Rifle automático. Arma versátil de medio alcance.',
   shotgun_pickup: 'Escopeta de cañón corto. Letal a corta distancia.',
   smg_pickup:     'Subfusil. Cadencia alta, daño moderado.',
@@ -406,6 +407,10 @@ let _dropKey = null;
 function openDropDialog(key) {
   const max = inv.get(key);
   if (max <= 0 || !inv.ITEMS[key]) return;
+  if (inv.ITEMS[key].noDrop) {
+    logLine(`No se puede soltar ${inv.ITEMS[key].label}`);
+    return;
+  }
   _dropKey = key;
   if (ddTitle)  ddTitle.textContent = `SOLTAR ${inv.ITEMS[key].label}`;
   if (ddSlider) {

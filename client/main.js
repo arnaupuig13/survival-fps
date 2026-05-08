@@ -885,7 +885,7 @@ function handleHotbarSlot(slotIdx) {
   }
   // Mapeo item → acción.
   // ARMAS DE FUEGO (pickup): equipar el arma correspondiente.
-  if (itemKey === 'bullet_p' || itemKey === 'pistol') {
+  if (itemKey === 'pistol_pickup' || itemKey === 'bullet_p') {
     tools.setActiveTool(null);
     selectWeaponBySlot(0);
     setHotbarActive(slotIdx);

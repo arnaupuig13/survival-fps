@@ -34,7 +34,10 @@ export const ITEMS = {
   // Consumables.
   bandage:         { label: 'VENDAJES',       max: 9,  rarity: 'uncommon', weight: 0.15 },
   grenade:         { label: 'GRANADAS',       max: 6,  rarity: 'rare', weight: 0.6 },
-  // Weapons (oneTime — pickup unlocks the slot).
+  // Weapons (oneTime — pickup unlocks the slot). La pistola arranca con
+  // el jugador (state.pistol_pickup = 1) y tiene noDrop:true para que no
+  // se pueda perder al suelo accidentalmente.
+  pistol_pickup:   { label: 'PISTOLA',        max: 1, oneTime: true, rarity: 'common', weight: 1.5, noDrop: true },
   rifle_pickup:    { label: 'RIFLE',          max: 1, oneTime: true, rarity: 'rare', weight: 4 },
   shotgun_pickup:  { label: 'ESCOPETA',       max: 1, oneTime: true, rarity: 'epic', weight: 4 },
   smg_pickup:      { label: 'SMG',            max: 1, oneTime: true, rarity: 'rare', weight: 3 },
@@ -82,6 +85,8 @@ const state = {
   bullet_r_inc: 0,
   flashlight: 0,
   dog_collar: 0,
+  // La pistola arranca equipada con el jugador.
+  pistol_pickup: 1,
   bandage:  1,
   grenade:  2,
   rifle_pickup: 0,
