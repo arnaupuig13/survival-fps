@@ -72,25 +72,36 @@ rearL.position.set(0.165, -0.13, -0.32); gunGroup.add(rearL);
 const rearR = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.034, 0.024), sightMat);
 rearR.position.set(0.195, -0.13, -0.32); gunGroup.add(rearR);
 
-// Reflex sight — solo visible cuando tenés `scope` equipado. Caja con
-// vidrio y punto rojo emisivo central. Pegada arriba del gunBody.
-const reflexBase = new THREE.Mesh(
-  new THREE.BoxGeometry(0.06, 0.04, 0.10),
-  new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.3, metalness: 0.85 }),
+// Reflex sight — solo visible cuando tenés `scope` equipado.
+// Diseño: marco DORADO TIPO ANILLO + glass MUY transparente para ver
+// claramente lo que hay detrás + DOT ROJO grande emisivo. Cuando ADS
+// (gunGroup mueve a AIM_POS), el dot queda alineado con el centro de
+// la pantalla (la x=0.18 local cancela el AIM_POS.x=-0.18).
+const REFLEX_X = 0.18, REFLEX_Y = -0.06, REFLEX_Z = -0.40;
+// Marco — torus dorado emisivo bien visible.
+const reflexFrame = new THREE.Mesh(
+  new THREE.TorusGeometry(0.10, 0.012, 8, 24),
+  new THREE.MeshStandardMaterial({ color: 0xf0c060, emissive: 0xf0c060, emissiveIntensity: 0.6, metalness: 0.7, roughness: 0.4 }),
 );
-reflexBase.position.set(0.18, -0.10, -0.42);
+reflexFrame.position.set(REFLEX_X, REFLEX_Y, REFLEX_Z);
+// Glass casi totalmente transparente — solo un tinte azulado leve para
+// que se note el marco pero no bloquee la visión.
 const reflexGlass = new THREE.Mesh(
-  new THREE.PlaneGeometry(0.045, 0.045),
-  new THREE.MeshStandardMaterial({ color: 0x4080a0, transparent: true, opacity: 0.4, metalness: 0.9, roughness: 0.1 }),
+  new THREE.CircleGeometry(0.10, 24),
+  new THREE.MeshBasicMaterial({ color: 0x80b0d0, transparent: true, opacity: 0.10, depthWrite: false, side: THREE.DoubleSide }),
 );
-reflexGlass.position.set(0.18, -0.10, -0.36);
+reflexGlass.position.set(REFLEX_X, REFLEX_Y, REFLEX_Z);
+// Dot rojo grande y emisivo — sphere + plane chiquito al centro para
+// que se vea desde cualquier ángulo. depthTest:false así siempre se
+// pinta sobre lo que haya detrás (no se "esconde" detrás del glass).
 const reflexDot = new THREE.Mesh(
-  new THREE.SphereGeometry(0.005, 8, 6),
-  new THREE.MeshStandardMaterial({ color: 0xff3030, emissive: 0xff2020, emissiveIntensity: 2.0 }),
+  new THREE.SphereGeometry(0.014, 12, 10),
+  new THREE.MeshBasicMaterial({ color: 0xff2020, transparent: true, opacity: 0.95, depthTest: false }),
 );
-reflexDot.position.set(0.18, -0.10, -0.355);
+reflexDot.position.set(REFLEX_X, REFLEX_Y, REFLEX_Z + 0.001);
+reflexDot.renderOrder = 999;
 const reflexGroup = new THREE.Group();
-reflexGroup.add(reflexBase);
+reflexGroup.add(reflexFrame);
 reflexGroup.add(reflexGlass);
 reflexGroup.add(reflexDot);
 reflexGroup.visible = false;
