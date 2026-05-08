@@ -468,10 +468,34 @@ function makeBoarMesh() {
   return g;
 }
 
+// Elite tint — re-colorea los meshes de los 4 guardias para distinguirlos
+// del resto. Material rojo emisivo en la bata para que sean obvios.
+function tintElite(mesh) {
+  const tint = new THREE.Color(0xff5040);
+  mesh.traverse((obj) => {
+    if (obj.isMesh && obj.material && obj.material.color) {
+      const c = obj.material.color;
+      // Mezclá el color original con el tint (50/50) para que sigan
+      // siendo reconocibles como cientificos pero rojos.
+      c.r = c.r * 0.4 + tint.r * 0.6;
+      c.g = c.g * 0.4 + tint.g * 0.6;
+      c.b = c.b * 0.4 + tint.b * 0.6;
+    }
+  });
+  // Escala 1.15 para que se vean más grandes/intimidantes.
+  mesh.scale.setScalar(1.15);
+  return mesh;
+}
+
 function meshFor(etype) {
   if (etype === 'scientist')   return makeScientistMesh('rifle');
   if (etype === 'sci_shotgun') return makeScientistMesh('shotgun');
   if (etype === 'sci_sniper')  return makeScientistMesh('sniper');
+  // 4 ELITES — bata roja, escala 1.15, cada uno con su arma distintiva.
+  if (etype === 'sci_elite_rifle')   return tintElite(makeScientistMesh('rifle'));
+  if (etype === 'sci_elite_shotgun') return tintElite(makeScientistMesh('shotgun'));
+  if (etype === 'sci_elite_sniper')  return tintElite(makeScientistMesh('sniper'));
+  if (etype === 'sci_elite_ak')      return tintElite(makeScientistMesh('rifle'));
   if (etype === 'boss')        return makeBossMesh();
   if (etype === 'wolf')        return makeWolfMesh();
   if (etype === 'bear')        return makeBearMesh();

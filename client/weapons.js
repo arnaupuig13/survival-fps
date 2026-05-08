@@ -398,6 +398,14 @@ function tryFire() {
     incendiary: !!ammoMeta.burn,
     silenced: silencedShot,
   });
+  // === NUKE === — además del raycast, mandamos un mensaje 'nuke' al
+  // server con la posición de impacto. Si cae dentro del radio de Helix
+  // Lab, el server destruye la ciudad y manda banner de victoria.
+  if (cfg.isNuke) {
+    // Punto de impacto = donde el rayo llegó (lejos si no pegó nada).
+    const impact = _origin.clone().add(_dir.clone().multiplyScalar(cfg.range));
+    network.fireNuke?.(impact.x, impact.z);
+  }
 
   // Damage number floats up at impact.
   if (hitId !== null && hitPoint) {

@@ -10,20 +10,26 @@
 import * as THREE from 'three';
 import { scene } from './three-setup.js';
 
-export const WORLD_HALF = 400;
+export const WORLD_HALF = 800;   // v1.3: 1600x1600 m (4x área del v1.2)
 const WORLD_SEED = 1337;
-const TERRAIN_RES = 144;         // grid resolución, mantiene buen detalle a 800m
-const TREE_COUNT = 800;          // 4x árboles → densidad similar al mapa viejo
-const ROCK_COUNT = 240;          // 4x rocas
+const TERRAIN_RES = 200;          // grid res — mantiene detalle a 1600m
+const TREE_COUNT = 1500;          // densidad similar al mapa viejo
+const ROCK_COUNT = 450;
 
-// Town clearings — alineadas con server.TOWN_FLAT. Towns nuevas son más
-// densas (18 edificios) por lo que el clearing es más grande.
+// Town clearings — alineadas con server.TOWN_FLAT. v1.3: 10 pueblos +
+// Helix Lab mega-grande (~150 edificios).
 const TOWN_CLEARINGS = [
-  { cx: -300, cz:  280, r: 65 },
-  { cx:  310, cz:  300, r: 65 },
-  { cx: -320, cz: -260, r: 65 },
-  { cx:  280, cz: -320, r: 65 },
-  { cx:    0, cz: -200, r: 140 }, // Helix Lab — 40 edificios
+  { cx: -600, cz:  560, r: 70 },
+  { cx:  620, cz:  600, r: 70 },
+  { cx: -640, cz: -520, r: 70 },
+  { cx:  560, cz: -640, r: 70 },
+  { cx: -300, cz:  640, r: 65 },
+  { cx:  300, cz: -680, r: 65 },
+  { cx: -700, cz:  100, r: 65 },
+  { cx:  720, cz:  -80, r: 65 },
+  { cx:  100, cz:  680, r: 65 },
+  { cx: -180, cz: -700, r: 65 },
+  { cx:    0, cz: -200, r: 200 }, // Helix Lab — mega ciudad
 ];
 
 // =====================================================================
@@ -78,36 +84,56 @@ function _rawHeight(x, z) {
 }
 
 // Town flat areas — debe matchear server.TOWN_FLAT byte-identical.
+// v1.3: 10 pueblos + Helix Lab mega + bunkers/heli/gas/cabin/cuevas
+// repartidos por el mapa expandido.
 const TOWN_FLAT = [
-  { cx: -300, cz:  280, r: 60, transition: 22 },
-  { cx:  310, cz:  300, r: 60, transition: 22 },
-  { cx: -320, cz: -260, r: 60, transition: 22 },
-  { cx:  280, cz: -320, r: 60, transition: 22 },
-  { cx:    0, cz: -200, r: 130, transition: 35 },
-  { cx:  150, cz:    0, r: 14, transition: 8 },
-  { cx: -240, cz:  240, r: 14, transition: 8 },
-  { cx:  100, cz: -260, r: 14, transition: 8 },
-  { cx: -160, cz:  120, r: 10, transition: 6 },
-  { cx:  160, cz:  140, r: 10, transition: 6 },
-  { cx:  -80, cz:   20, r: 10, transition: 6 },
-  { cx:  220, cz: -100, r: 10, transition: 6 },
-  { cx: -200, cz:  -50, r: 10, transition: 6 },
-  { cx: -180, cz:  -80, r: 9, transition: 6 },
-  { cx:  200, cz:  -60, r: 9, transition: 6 },
-  { cx:    0, cz:  340, r: 9, transition: 6 },
-  { cx: -350, cz:    0, r: 9, transition: 6 },
-  { cx:  120, cz:  200, r: 8, transition: 5 },
-  { cx: -200, cz:  180, r: 8, transition: 5 },
-  { cx:   60, cz: -100, r: 8, transition: 5 },
-  { cx:  -80, cz: -100, r: 8, transition: 5 },
-  { cx:  220, cz:  180, r: 8, transition: 5 },
-  { cx: -260, cz:  100, r: 8, transition: 5 },
-  { cx:  340, cz:   40, r: 8, transition: 5 },
-  { cx: -100, cz:  340, r: 8, transition: 5 },
-  { cx: -260, cz:  340, r: 12, transition: 7 },
-  { cx:  280, cz:  260, r: 12, transition: 7 },
-  { cx:  340, cz: -200, r: 12, transition: 7 },
-  { cx: -260, cz: -340, r: 12, transition: 7 },
+  // 10 pueblos
+  { cx: -600, cz:  560, r: 65, transition: 25 },
+  { cx:  620, cz:  600, r: 65, transition: 25 },
+  { cx: -640, cz: -520, r: 65, transition: 25 },
+  { cx:  560, cz: -640, r: 65, transition: 25 },
+  { cx: -300, cz:  640, r: 60, transition: 22 },
+  { cx:  300, cz: -680, r: 60, transition: 22 },
+  { cx: -700, cz:  100, r: 60, transition: 22 },
+  { cx:  720, cz:  -80, r: 60, transition: 22 },
+  { cx:  100, cz:  680, r: 60, transition: 22 },
+  { cx: -180, cz: -700, r: 60, transition: 22 },
+  // Helix Lab mega
+  { cx:    0, cz: -200, r: 180, transition: 50 },
+  // Bunkers
+  { cx:  300, cz:    0, r: 14, transition: 8 },
+  { cx: -480, cz:  480, r: 14, transition: 8 },
+  { cx:  200, cz: -520, r: 14, transition: 8 },
+  { cx:  480, cz:  300, r: 14, transition: 8 },
+  { cx: -300, cz: -380, r: 14, transition: 8 },
+  // Helicópteros
+  { cx: -320, cz:  240, r: 10, transition: 6 },
+  { cx:  320, cz:  280, r: 10, transition: 6 },
+  { cx: -160, cz:   40, r: 10, transition: 6 },
+  { cx:  440, cz: -200, r: 10, transition: 6 },
+  { cx: -400, cz: -100, r: 10, transition: 6 },
+  { cx:  100, cz:  440, r: 10, transition: 6 },
+  { cx: -100, cz: -440, r: 10, transition: 6 },
+  // Gas stations
+  { cx: -360, cz: -160, r: 9, transition: 6 },
+  { cx:  400, cz: -120, r: 9, transition: 6 },
+  { cx:    0, cz:  500, r: 9, transition: 6 },
+  { cx: -700, cz:    0, r: 9, transition: 6 },
+  { cx:  700, cz:  400, r: 9, transition: 6 },
+  // Cabins
+  { cx:  240, cz:  400, r: 8, transition: 5 },
+  { cx: -400, cz:  360, r: 8, transition: 5 },
+  { cx:  120, cz: -200, r: 8, transition: 5 },
+  { cx: -160, cz: -200, r: 8, transition: 5 },
+  { cx:  440, cz:  360, r: 8, transition: 5 },
+  { cx: -520, cz:  200, r: 8, transition: 5 },
+  { cx:  680, cz:   80, r: 8, transition: 5 },
+  { cx: -200, cz:  680, r: 8, transition: 5 },
+  // Cuevas
+  { cx: -520, cz:  680, r: 12, transition: 7 },
+  { cx:  560, cz:  520, r: 12, transition: 7 },
+  { cx:  680, cz: -400, r: 12, transition: 7 },
+  { cx: -520, cz: -680, r: 12, transition: 7 },
 ];
 
 export function heightAt(x, z) {
@@ -331,6 +357,73 @@ function buildBoundaryFence() {
     }
   }
   return group;
+}
+
+// =====================================================================
+// ROADS — carreteras amarillas conectando pueblos. Recibimos los segmentos
+// del server via welcome.roads. Cada segmento se renderiza como una tira
+// amarilla plana sobre el terreno (un BoxGeometry rotado al ángulo del
+// segmento, ligeramente sobre el suelo para evitar z-fighting).
+// =====================================================================
+const ROAD_WIDTH = 5;          // metros de ancho de la carretera
+const ROAD_LIFT  = 0.06;        // m sobre el terreno
+
+const roadMat = new THREE.MeshStandardMaterial({
+  color: 0xd0c050,            // amarillo deslavado (carretera vieja)
+  roughness: 0.9,
+  metalness: 0,
+});
+const roadEdgeMat = new THREE.MeshStandardMaterial({
+  color: 0x6a5e30,            // borde más oscuro
+  roughness: 0.95,
+  metalness: 0,
+});
+
+const roadGroup = new THREE.Group();
+let _roadsBuilt = false;
+
+export function buildRoads(roads) {
+  if (_roadsBuilt) return roadGroup;
+  _roadsBuilt = true;
+  for (const r of roads || []) {
+    const dx = r.x2 - r.x1, dz = r.z2 - r.z1;
+    const len = Math.hypot(dx, dz);
+    if (len < 1) continue;
+    const ang = Math.atan2(dx, dz);     // yaw del segmento
+    // Subdividimos el segmento en sub-tramos cortos para que la
+    // carretera siga la curvatura del terreno (cada 6m).
+    const STEP = 6;
+    const steps = Math.ceil(len / STEP);
+    for (let i = 0; i < steps; i++) {
+      const t1 = i / steps, t2 = (i + 1) / steps;
+      const cx = r.x1 + dx * (t1 + t2) / 2;
+      const cz = r.z1 + dz * (t1 + t2) / 2;
+      const segLen = len / steps;
+      const y = heightAt(cx, cz) + ROAD_LIFT;
+      // Asfalto principal.
+      const slab = new THREE.Mesh(
+        new THREE.BoxGeometry(ROAD_WIDTH, 0.05, segLen),
+        roadMat,
+      );
+      slab.position.set(cx, y, cz);
+      slab.rotation.y = ang;
+      roadGroup.add(slab);
+      // Borde del camino — dos tiras finas más oscuras a los lados.
+      for (const side of [-1, 1]) {
+        const edge = new THREE.Mesh(
+          new THREE.BoxGeometry(0.5, 0.04, segLen),
+          roadEdgeMat,
+        );
+        const ex = cx + Math.cos(ang) * side * (ROAD_WIDTH / 2 + 0.1);
+        const ez = cz - Math.sin(ang) * side * (ROAD_WIDTH / 2 + 0.1);
+        edge.position.set(ex, y - 0.005, ez);
+        edge.rotation.y = ang;
+        roadGroup.add(edge);
+      }
+    }
+  }
+  scene.add(roadGroup);
+  return roadGroup;
 }
 
 // =====================================================================

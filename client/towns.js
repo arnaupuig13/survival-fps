@@ -48,8 +48,9 @@ function buildBuilding(b, type) {
   // Visual decay para contrastar con bloques intactos controlados por cientificos.
   const isRuined = kind === 'ruined';
   const isHighLoot = kind === 'high_loot';
+  const isBossTower = kind === 'boss_tower';
   // Materiales — police azul, hospital blanco, ruined gris quemado,
-  // high_loot acero limpio (intact zone).
+  // high_loot acero limpio (intact zone), boss_tower acero rojizo intimidante.
   const mats = isCity
     ? { wall: MATS.cityWall, trim: MATS.cityTrim, roof: MATS.cityRoof, glass: MATS.cityGlass }
     : { wall: MATS.townWall, trim: MATS.townTrim, roof: MATS.townRoof };
@@ -65,6 +66,9 @@ function buildBuilding(b, type) {
   } else if (isHighLoot) {
     // Acero limpio + emisivo dorado tenue para indicar zona "viva".
     wallMat = new THREE.MeshStandardMaterial({ color: 0x8a8e96, roughness: 0.55, metalness: 0.45, emissive: 0x402810, emissiveIntensity: 0.18 });
+  } else if (isBossTower) {
+    // Acero industrial muy oscuro con tinte rojizo emisivo — torre del jefe.
+    wallMat = new THREE.MeshStandardMaterial({ color: 0x2c2025, roughness: 0.5, metalness: 0.6, emissive: 0x401010, emissiveIntensity: 0.25 });
   }
 
   const w = b.w, h = b.h;
@@ -203,6 +207,36 @@ function buildBuilding(b, type) {
         g.add(al);
         cityAlertLights.push(al);
       }
+    }
+    // BOSS TOWER rooftop: antena masiva + faro rojo pulsante visible desde
+    // todo el mapa. Marca el edificio del boss desde lejos.
+    if (isBossTower) {
+      // Antena central (masiva).
+      const antMat = new THREE.MeshStandardMaterial({ color: 0x404044, roughness: 0.5, metalness: 0.8 });
+      const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 18, 8), antMat);
+      antenna.position.set(0, totalH + 9, 0);
+      g.add(antenna);
+      // Punta emisiva roja parpadeante.
+      const tipMat = new THREE.MeshStandardMaterial({ color: 0xff2010, emissive: 0xff2010, emissiveIntensity: 2.0 });
+      const tip = new THREE.Mesh(new THREE.OctahedronGeometry(0.7, 0), tipMat);
+      tip.position.set(0, totalH + 18.5, 0);
+      tip.userData.isAlertLight = true;
+      g.add(tip);
+      cityAlertLights.push(tip);
+      // 4 reflectores rojos en las esquinas del techo.
+      const spotMat = new THREE.MeshStandardMaterial({ color: 0xff3020, emissive: 0xff3020, emissiveIntensity: 1.6 });
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const sp = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), spotMat);
+        sp.position.set(sx * (halfW - 1.2), totalH + 0.5, sz * (halfH - 1.2));
+        sp.userData.isAlertLight = true;
+        g.add(sp);
+        cityAlertLights.push(sp);
+      }
+      // Letrero gigante "HELIX" sobre la fachada principal.
+      const labelMat = new THREE.MeshStandardMaterial({ color: 0xff4020, emissive: 0xff4020, emissiveIntensity: 1.4 });
+      const label = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, 1.5, 0.15), labelMat);
+      label.position.set(0, totalH * 0.85, halfH + 0.1);
+      g.add(label);
     }
   } else {
     // Pitched wood roof (1 piso town).
@@ -601,6 +635,8 @@ export function updateCityLights(dt) {
 // =====================================================================
 // Public API — main.js calls setTownLayouts() once welcome arrives.
 // =====================================================================
+const _townGroups = new Map();   // townId → THREE.Group con todos los edificios
+
 export function setTownLayouts(towns) {
   for (const t of towns) {
     // Place absolute coords on each building (server already includes wx/wz
@@ -609,18 +645,56 @@ export function setTownLayouts(towns) {
       b.wx = t.cx + b.dx;
       b.wz = t.cz + b.dz;
     }
+    const townGroup = new THREE.Group();
+    townGroup.userData.townId = t.id;
     for (let i = 0; i < t.buildings.length; i++) {
       const { group, colliders } = buildBuilding(t.buildings[i], t.type);
-      scene.add(group);
+      townGroup.add(group);
       for (const c of colliders) obstacles.push(c);
     }
+    scene.add(townGroup);
+    _townGroups.set(t.id, townGroup);
     scene.add(buildSign(t));
     // Cities (Helix Lab) get a perimeter wall + watchtowers + props for
     // a Rust-like dangerous-base feel.
     if (t.type === 'city') {
       const cityExtras = buildCityFortifications(t);
-      scene.add(cityExtras.group);
+      townGroup.add(cityExtras.group);
       for (const c of cityExtras.colliders) obstacles.push(c);
+    }
+  }
+}
+
+// =====================================================================
+// markCityDestroyed — el jugador disparó el cañón nuclear contra Helix
+// Lab. Bajamos los edificios al suelo (escombro) o los hundimos parcial-
+// mente para visualizar la destrucción. Versión simple: tinta a gris
+// quemado + escala vertical 0.4 + offset hacia abajo.
+// =====================================================================
+const _destroyedTowns = new Set();
+export function isCityDestroyed(townId) { return _destroyedTowns.has(townId); }
+export function markCityDestroyed(townId) {
+  if (_destroyedTowns.has(townId)) return;
+  _destroyedTowns.add(townId);
+  const tg = _townGroups.get(townId);
+  if (!tg) return;
+  // Para cada building del grupo, lo aplastamos al ~30% de altura y lo
+  // ennegrecemos (override material a uno común "ash").
+  const ashMat = new THREE.MeshStandardMaterial({ color: 0x2a2825, roughness: 1.0 });
+  tg.traverse((obj) => {
+    if (obj.isMesh) {
+      obj.material = ashMat;
+    }
+  });
+  // Aplastá el grupo entero — escala Y 0.3, ligero hundimiento.
+  tg.scale.y = 0.3;
+  tg.position.y -= 0.5;
+  // Quitá las luces de alerta (la ciudad está muerta).
+  for (let i = cityAlertLights.length - 1; i >= 0; i--) {
+    const al = cityAlertLights[i];
+    if (al.material) {
+      al.material.emissiveIntensity = 0;
+      al.material.color = new THREE.Color(0x222222);
     }
   }
 }

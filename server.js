@@ -51,7 +51,9 @@ const httpServer = http.createServer((req, res) => {
 // Procedural world heightmap. MUST be byte-identical to client/world.js.
 // =====================================================================
 const WORLD_SEED = 1337;
-export const WORLD_HALF = 400; // 800x800 m playable (4x área del original)
+// v1.3 — mapa 4x más grande (era 800x800, ahora 1600x1600).
+// Más pueblos, carreteras amarillas conectándolos, Helix Lab mega-rework.
+export const WORLD_HALF = 800; // 1600x1600 m playable
 
 function hash(x, y) {
   let h = (x * 374761393 + y * 668265263 + WORLD_SEED * 982451653) | 0;
@@ -96,41 +98,82 @@ function _rawHeight(x, z) {
 // Town flat areas — el terreno se aplana dentro de estos radios.
 // Se incluyen TOWNS, BUNKERS y POIs (cabins/heli/gas) para que ningún
 // edificio quede atascado en pendiente.
+// v1.3: 10 pueblos repartidos por el mapa 1600x1600 + Helix Lab mega-grande.
 const TOWN_FLAT = [
-  { cx: -300, cz:  280, r: 60, transition: 22 },
-  { cx:  310, cz:  300, r: 60, transition: 22 },
-  { cx: -320, cz: -260, r: 60, transition: 22 },
-  { cx:  280, cz: -320, r: 60, transition: 22 },
-  { cx:    0, cz: -200, r: 130, transition: 35 },
+  // === 10 PUEBLOS ===
+  { cx: -600, cz:  560, r: 65, transition: 25 },     // Westhaven NW
+  { cx:  620, cz:  600, r: 65, transition: 25 },     // Eastfield NE
+  { cx: -640, cz: -520, r: 65, transition: 25 },     // Pinecreek SW
+  { cx:  560, cz: -640, r: 65, transition: 25 },     // Southridge SE
+  { cx: -300, cz:  640, r: 60, transition: 22 },     // Northgate
+  { cx:  300, cz: -680, r: 60, transition: 22 },     // Sandwell
+  { cx: -700, cz:  100, r: 60, transition: 22 },     // Westmark
+  { cx:  720, cz:  -80, r: 60, transition: 22 },     // Eastmark
+  { cx:  100, cz:  680, r: 60, transition: 22 },     // Snowhold
+  { cx: -180, cz: -700, r: 60, transition: 22 },     // Burntpoint
+  // === HELIX LAB — mega ciudad central ===
+  { cx:    0, cz: -200, r: 180, transition: 50 },    // 150 edificios + boss tower
   // Bunkers
-  { cx:  150, cz:    0, r: 14, transition: 8 },
-  { cx: -240, cz:  240, r: 14, transition: 8 },
-  { cx:  100, cz: -260, r: 14, transition: 8 },
-  // Helicópteros
-  { cx: -160, cz:  120, r: 10, transition: 6 },
-  { cx:  160, cz:  140, r: 10, transition: 6 },
-  { cx:  -80, cz:   20, r: 10, transition: 6 },
-  { cx:  220, cz: -100, r: 10, transition: 6 },
-  { cx: -200, cz:  -50, r: 10, transition: 6 },
+  { cx:  300, cz:    0, r: 14, transition: 8 },
+  { cx: -480, cz:  480, r: 14, transition: 8 },
+  { cx:  200, cz: -520, r: 14, transition: 8 },
+  { cx:  480, cz:  300, r: 14, transition: 8 },
+  { cx: -300, cz: -380, r: 14, transition: 8 },
+  // Helicópteros — repartidos por el mapa expandido
+  { cx: -320, cz:  240, r: 10, transition: 6 },
+  { cx:  320, cz:  280, r: 10, transition: 6 },
+  { cx: -160, cz:   40, r: 10, transition: 6 },
+  { cx:  440, cz: -200, r: 10, transition: 6 },
+  { cx: -400, cz: -100, r: 10, transition: 6 },
+  { cx:  100, cz:  440, r: 10, transition: 6 },
+  { cx: -100, cz: -440, r: 10, transition: 6 },
   // Gas stations
-  { cx: -180, cz:  -80, r: 9, transition: 6 },
-  { cx:  200, cz:  -60, r: 9, transition: 6 },
-  { cx:    0, cz:  340, r: 9, transition: 6 },
-  { cx: -350, cz:    0, r: 9, transition: 6 },
+  { cx: -360, cz: -160, r: 9, transition: 6 },
+  { cx:  400, cz: -120, r: 9, transition: 6 },
+  { cx:    0, cz:  500, r: 9, transition: 6 },
+  { cx: -700, cz:    0, r: 9, transition: 6 },
+  { cx:  700, cz:  400, r: 9, transition: 6 },
   // Cabins
-  { cx:  120, cz:  200, r: 8, transition: 5 },
-  { cx: -200, cz:  180, r: 8, transition: 5 },
-  { cx:   60, cz: -100, r: 8, transition: 5 },
-  { cx:  -80, cz: -100, r: 8, transition: 5 },
-  { cx:  220, cz:  180, r: 8, transition: 5 },
-  { cx: -260, cz:  100, r: 8, transition: 5 },
-  { cx:  340, cz:   40, r: 8, transition: 5 },
-  { cx: -100, cz:  340, r: 8, transition: 5 },
+  { cx:  240, cz:  400, r: 8, transition: 5 },
+  { cx: -400, cz:  360, r: 8, transition: 5 },
+  { cx:  120, cz: -200, r: 8, transition: 5 },
+  { cx: -160, cz: -200, r: 8, transition: 5 },
+  { cx:  440, cz:  360, r: 8, transition: 5 },
+  { cx: -520, cz:  200, r: 8, transition: 5 },
+  { cx:  680, cz:   80, r: 8, transition: 5 },
+  { cx: -200, cz:  680, r: 8, transition: 5 },
   // Cuevas
-  { cx: -260, cz:  340, r: 12, transition: 7 },
-  { cx:  280, cz:  260, r: 12, transition: 7 },
-  { cx:  340, cz: -200, r: 12, transition: 7 },
-  { cx: -260, cz: -340, r: 12, transition: 7 },
+  { cx: -520, cz:  680, r: 12, transition: 7 },
+  { cx:  560, cz:  520, r: 12, transition: 7 },
+  { cx:  680, cz: -400, r: 12, transition: 7 },
+  { cx: -520, cz: -680, r: 12, transition: 7 },
+];
+
+// =====================================================================
+// ROADS — caminos amarillos antiguos que conectan pueblos entre sí y
+// llevan a Helix Lab. Cada road es un segmento recto. El cliente los
+// renderiza como tiras amarillas sobre el terreno. El server spawnea
+// crates de "road tier" cada ~70m con loot bajo (balas, basura).
+// =====================================================================
+export const ROADS = [
+  // Anillo exterior: conecta los 4 pueblos de las esquinas
+  { x1: -600, z1:  560, x2: -300, z2:  640 },  // Westhaven → Northgate
+  { x1: -300, z1:  640, x2:  100, z2:  680 },  // Northgate → Snowhold
+  { x1:  100, z1:  680, x2:  620, z2:  600 },  // Snowhold → Eastfield
+  { x1:  620, z1:  600, x2:  720, z2:  -80 },  // Eastfield → Eastmark
+  { x1:  720, z1:  -80, x2:  560, z2: -640 },  // Eastmark → Southridge
+  { x1:  560, z1: -640, x2:  300, z2: -680 },  // Southridge → Sandwell
+  { x1:  300, z1: -680, x2: -180, z2: -700 },  // Sandwell → Burntpoint
+  { x1: -180, z1: -700, x2: -640, z2: -520 },  // Burntpoint → Pinecreek
+  { x1: -640, z1: -520, x2: -700, z2:  100 },  // Pinecreek → Westmark
+  { x1: -700, z1:  100, x2: -600, z2:  560 },  // Westmark → Westhaven
+  // Caminos radiales hacia Helix Lab (centro del mapa)
+  { x1: -300, z1:  640, x2:    0, z2: -200 },  // Northgate → Helix
+  { x1:  100, z1:  680, x2:    0, z2: -200 },  // Snowhold → Helix
+  { x1:  720, z1:  -80, x2:    0, z2: -200 },  // Eastmark → Helix
+  { x1:  300, z1: -680, x2:    0, z2: -200 },  // Sandwell → Helix
+  { x1: -180, z1: -700, x2:    0, z2: -200 },  // Burntpoint → Helix
+  { x1: -700, z1:  100, x2:    0, z2: -200 },  // Westmark → Helix
 ];
 
 // =====================================================================
@@ -201,7 +244,16 @@ const ETYPES = {
   scientist:    { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 60, ranged: true,  weapon: 'rifle'   },
   sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 22, range: 12,  cd: 1.5, aggro: 50, ranged: true,  weapon: 'shotgun' },
   sci_sniper:   { hp: 16,  speed: 1.0, dmg: 32, range: 60,  cd: 2.4, aggro: 90, ranged: true,  weapon: 'sniper'  },
-  boss:         { hp: 240, speed: 1.7, dmg: 16, range: 32,  cd: 0.55, aggro: 50, ranged: true, weapon: 'ak', isBoss: true },
+  // === ELITES — 4 guardias del boss en la torre central. Cada uno con
+  //     un arma distinta. Mucho más HP que un cientifico normal pero
+  //     no tanto como el boss. ===
+  sci_elite_rifle:   { hp: 110, speed: 1.5, dmg: 12, range: 40,  cd: 0.6, aggro: 70, ranged: true,  weapon: 'rifle',   special: 'elite' },
+  sci_elite_shotgun: { hp: 130, speed: 1.4, dmg: 30, range: 14,  cd: 1.2, aggro: 60, ranged: true,  weapon: 'shotgun', special: 'elite' },
+  sci_elite_sniper:  { hp:  90, speed: 1.2, dmg: 50, range: 80,  cd: 1.8, aggro: 95, ranged: true,  weapon: 'sniper',  special: 'elite' },
+  sci_elite_ak:      { hp: 140, speed: 1.6, dmg: 18, range: 35,  cd: 0.18,aggro: 75, ranged: true,  weapon: 'ak',      special: 'elite' },
+  // Boss — extremadamente fuerte, mucha vida. Era 240/16, ahora 1200/30
+  // para que sea un combate real. Drops nuke gun directamente.
+  boss:         { hp: 1200, speed: 1.8, dmg: 30, range: 35,  cd: 0.40, aggro: 60, ranged: true, weapon: 'ak', isBoss: true },
   // Hostile wildlife — bear is a slow tank with huge melee damage; boar is
   // a sprinter that charges and bowls the player over.
   bear:         { hp: 90,  speed: 3.4, dmg: 28, range: 2.2, cd: 1.6, aggro: 36, ranged: false },
@@ -229,27 +281,35 @@ function genTownBuildings(centerX, centerZ, count, seed) {
   let s = seed;
   const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
   const buildings = [];
-  const isCity = count >= 30;
+  const isCity = count >= 80;
   // CELL — calles entre edificios:
   //   towns: 11m (edificios de ~7m → 4m de calle)
-  //   cities: 10.5m (edificios ~9m → 1.5m calle = pared con pared)
-  const cell = isCity ? 10.5 : 11;
+  //   cities: 11m con "calles internas" más anchas cada N filas
+  const cell = isCity ? 11 : 11;
   const cols = Math.ceil(Math.sqrt(count));
   // 1 comisaría + 1 hospital obligatorios por town (no en city).
   const policeIdx = isCity ? -1 : 0;
   const hospitalIdx = isCity ? -1 : 1;
-  // En city, marcamos algunos índices como "high_loot" (zona controlada
-  // por más científicos con más cofres) y otros como "ruined" (fachada
-  // rota, sin techo, abandonada). Con 80 edificios elegimos 6 bloques de
-  // loot concentrado repartidos por la ciudad.
-  const highLootIndices = isCity ? new Set([12, 24, 38, 51, 63, 75]) : new Set();
+  // En city marcamos:
+  //   - boss_tower en el CENTRO (índice central): torre de 3 plantas gigante
+  //   - high_loot: 8 bloques con cofres premium custodiados
+  //   - ruined: ~20% restantes con fachada rota
+  const centerIdx = isCity ? Math.floor(cols / 2) * cols + Math.floor(cols / 2) : -1;
+  const highLootIndices = isCity ? new Set([18, 32, 47, 65, 82, 98, 115, 130]) : new Set();
+  // "Calles internas" — cada 4 filas y cada 4 columnas se deja un gap más
+  // ancho entre celdas para simular avenidas dentro de la ciudad.
+  function isStreetRow(row) { return isCity && row > 0 && row % 4 === 0; }
+  function isStreetCol(col) { return isCity && col > 0 && col % 4 === 0; }
   for (let i = 0; i < count; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    // Jitter MUY pequeño (0.5m) para que las casas queden alineadas
-    // tipo manzana de ciudad real.
-    const ox = (col - (cols - 1) / 2) * cell + (rng() - 0.5) * 1;
-    const oz = (row - (cols - 1) / 2) * cell + (rng() - 0.5) * 1;
+    // Calle ancha cada 4 filas/cols → desplaza la posición lateralmente
+    // para crear espacios visibles entre manzanas.
+    const streetGap = 3;       // metros extra de calle
+    const streetXOff = streetGap * (col >= cols / 2 ? Math.floor(col / 4) : -Math.floor((cols - col - 1) / 4));
+    const streetZOff = streetGap * (row >= cols / 2 ? Math.floor(row / 4) : -Math.floor((cols - row - 1) / 4));
+    const ox = (col - (cols - 1) / 2) * cell + streetXOff + (rng() - 0.5) * 1;
+    const oz = (row - (cols - 1) / 2) * cell + streetZOff + (rng() - 0.5) * 1;
     let kind = 'normal';
     let floors = 1;
     let w, h;
@@ -259,29 +319,37 @@ function genTownBuildings(centerX, centerZ, count, seed) {
     } else if (i === hospitalIdx) {
       kind = 'hospital';
       w = 9; h = 8.5; floors = 2;
+    } else if (isCity && i === centerIdx) {
+      // BOSS TOWER — edificio gigante de 3 plantas (cada planta = 5 pisos
+      // visualmente, total 15 pisos = 45m de altura). Custodia al boss
+      // y 4 elites. Footprint 24×24m para que lea dominante.
+      kind = 'boss_tower';
+      w = 24; h = 24; floors = 15;
     } else if (isCity) {
-      // Helix Lab — vieja ciudad medio en ruinas. Mucha variabilidad.
+      // Helix Lab — skyline tipo ciudad real. Distribución muy variada
+      // con rascacielos altos para que se vea desde lejos.
       const r = rng();
-      if      (r > 0.78) floors = 7 + Math.floor(rng() * 6);    // 7-12 rascacielos (22%)
-      else if (r > 0.55) floors = 4 + Math.floor(rng() * 3);    // 4-6 pisos (23%)
-      else if (r > 0.30) floors = 2 + Math.floor(rng() * 2);    // 2-3 pisos (25%)
-      else               floors = 1;                             // 1 piso (30%)
-      w = 8.5 + rng() * 1.5;     // 8.5-10m (más uniforme para "manzana")
-      h = 8.5 + rng() * 1.5;
-      // Marcar ~25% de buildings como "ruined" (no police/hospital/highloot).
+      if      (r > 0.85) floors = 12 + Math.floor(rng() * 8);    // 12-19 rascacielos (15%)
+      else if (r > 0.65) floors = 7  + Math.floor(rng() * 5);    // 7-11 torres (20%)
+      else if (r > 0.45) floors = 4  + Math.floor(rng() * 3);    // 4-6 pisos (20%)
+      else if (r > 0.20) floors = 2  + Math.floor(rng() * 2);    // 2-3 pisos (25%)
+      else               floors = 1;                              // 1 piso (20%)
+      w = 8 + rng() * 3;     // 8-11m
+      h = 8 + rng() * 3;
       if (highLootIndices.has(i)) {
-        kind = 'high_loot';     // zona de loot concentrado
-      } else if (rng() < 0.25) {
-        kind = 'ruined';        // fachada rota
+        kind = 'high_loot';
+      } else if (rng() < 0.20) {
+        kind = 'ruined';
       }
     } else {
-      // Towns regulares: mayoría 2-3 pisos, varios de 4-6, alguna torre.
-      // Antes: 70% 1 piso. Ahora: 25% 1, 35% 2-3, 25% 4-5, 15% 6-9.
+      // Towns regulares — skyline más bajo pero con torres ocasionales.
+      // 20% 1, 35% 2-3, 25% 4-6, 20% 7-12 (¡torres altas!) para que se
+      // vean desde lejos como una ciudad de verdad.
       const r = rng();
-      if      (r > 0.85) floors = 6 + Math.floor(rng() * 4);    // 6-9 torre (15%)
-      else if (r > 0.60) floors = 4 + Math.floor(rng() * 2);    // 4-5 (25%)
-      else if (r > 0.25) floors = 2 + Math.floor(rng() * 2);    // 2-3 (35%)
-      else               floors = 1;                             // 1 piso (25%)
+      if      (r > 0.80) floors = 7 + Math.floor(rng() * 6);    // 7-12 torre (20%)
+      else if (r > 0.55) floors = 4 + Math.floor(rng() * 3);    // 4-6 (25%)
+      else if (r > 0.20) floors = 2 + Math.floor(rng() * 2);    // 2-3 (35%)
+      else               floors = 1;                             // 1 piso (20%)
       w = 6 + rng() * 2;
       h = 6 + rng() * 2;
     }
@@ -291,15 +359,21 @@ function genTownBuildings(centerX, centerZ, count, seed) {
 }
 
 const TOWNS = [
-  // Towns más densos: 18 edificios c/u (incluye 1 comisaría + 1 hospital).
-  { id: 'westhaven',  cx: -300, cz:  280, type: 'town', buildings: genTownBuildings(-300,  280, 18, 11), label: 'Westhaven' },
-  { id: 'eastfield',  cx:  310, cz:  300, type: 'town', buildings: genTownBuildings( 310,  300, 18, 22), label: 'Eastfield' },
-  { id: 'pinecreek',  cx: -320, cz: -260, type: 'town', buildings: genTownBuildings(-320, -260, 18, 33), label: 'Pinecreek' },
-  { id: 'southridge', cx:  280, cz: -320, type: 'town', buildings: genTownBuildings( 280, -320, 18, 44), label: 'Southridge' },
-  // Helix Lab — ciudad densa con rascacielos. 80 edificios = 9x9 grid,
-  // ~94m de ancho. Mezcla de torres (7-12 pisos), edificios medianos,
-  // ruinas con fachada rota, y 6 bloques de loot concentrado.
-  { id: 'helix-lab',  cx:  0,   cz: -200, type: 'city', buildings: genTownBuildings(  0, -200, 80, 77), label: 'Helix Lab' },
+  // === 10 PUEBLOS — 18 edificios c/u con torres altas para skyline real ===
+  { id: 'westhaven',  cx: -600, cz:  560, type: 'town', buildings: genTownBuildings(-600,  560, 18, 11), label: 'Westhaven' },
+  { id: 'eastfield',  cx:  620, cz:  600, type: 'town', buildings: genTownBuildings( 620,  600, 18, 22), label: 'Eastfield' },
+  { id: 'pinecreek',  cx: -640, cz: -520, type: 'town', buildings: genTownBuildings(-640, -520, 18, 33), label: 'Pinecreek' },
+  { id: 'southridge', cx:  560, cz: -640, type: 'town', buildings: genTownBuildings( 560, -640, 18, 44), label: 'Southridge' },
+  { id: 'northgate',  cx: -300, cz:  640, type: 'town', buildings: genTownBuildings(-300,  640, 18, 55), label: 'Northgate' },
+  { id: 'sandwell',   cx:  300, cz: -680, type: 'town', buildings: genTownBuildings( 300, -680, 18, 66), label: 'Sandwell' },
+  { id: 'westmark',   cx: -700, cz:  100, type: 'town', buildings: genTownBuildings(-700,  100, 18, 88), label: 'Westmark' },
+  { id: 'eastmark',   cx:  720, cz:  -80, type: 'town', buildings: genTownBuildings( 720,  -80, 18, 99), label: 'Eastmark' },
+  { id: 'snowhold',   cx:  100, cz:  680, type: 'town', buildings: genTownBuildings( 100,  680, 18,123), label: 'Snowhold' },
+  { id: 'burntpoint', cx: -180, cz: -700, type: 'town', buildings: genTownBuildings(-180, -700, 18,145), label: 'Burntpoint' },
+  // === HELIX LAB — mega ciudad con boss tower central ===
+  // 144 edificios (12x12 grid + boss tower al centro), ~135m de span,
+  // skyline con rascacielos 12-19 pisos visibles desde lejos.
+  { id: 'helix-lab',  cx:    0, cz: -200, type: 'city', buildings: genTownBuildings(    0, -200, 144, 77), label: 'Helix Lab' },
 ];
 
 // Compute world-space center of each building so spawn / wake checks
@@ -624,8 +698,10 @@ const LOOT_TABLES = {
     { item: 'vest_armor',     chance: 0.85 },
     { item: 'ext_mag',        chance: 0.7 },
     { item: 'rifle_pickup',   chance: 1.0 },
-    // ★ DROP EXCLUSIVO BOSS ★ — nuke body garantizado.
-    { item: 'nuke_body',      chance: 1.0 },
+    // ★ DROP EXCLUSIVO BOSS ★ — nuke gun + ammo garantizado.
+    // El usuario lo pidió directo: "el final boss cientifico dropea el nuke gun".
+    { item: 'nuke_pickup',    chance: 1.0 },
+    { item: 'nuke_body',      chance: 1.0 },   // por si querés re-craftear
     { item: 'nuke_round',     chance: 1.0 },
     { item: 'gatling_body',   chance: 0.6 },
     { item: 'gl_body',        chance: 0.8 },
@@ -650,6 +726,30 @@ const LOOT_TABLES = {
     { item: 'bandage',     chance: 0.3 },
     { item: 'rabbit_pelt', chance: 0.6 },
     { item: 'deer_pelt',   chance: 0.4 },
+  ],
+  // ROAD — crates dejados a la vera de las carreteras amarillas. Loot
+  // bajo: balas, basura, raramente una pistola. Sin custodios.
+  // El usuario lo describió: "loot aceptable pero nada muy bueno
+  // (dificilmente una pistola y algunas balas)".
+  road: [
+    { item: 'bullet_p',     range: [1, 4] },
+    { item: 'wood',         range: [0, 2] },
+    { item: 'stone',        range: [0, 1] },
+    { item: 'cloth',        range: [0, 2] },
+    { item: 'scrap',        chance: 0.30 },
+    { item: 'bandage',      chance: 0.15 },
+    { item: 'water_bottle', chance: 0.15 },
+    { item: 'dirty_water',  chance: 0.25 },
+    { item: 'berry',        range: [0, 2] },
+    { item: 'mushroom',     chance: 0.10 },
+    { item: 'meat_raw',     chance: 0.08 },
+    { item: 'pistol_pickup',chance: 0.04 },   // raro: una pistola en la carretera
+    { item: 'bullet_r',     chance: 0.10 },
+    { item: 'shell',        chance: 0.05 },
+    { item: 'iron',         chance: 0.10 },
+    { item: 'nail',         range: [0, 2] },
+    { item: 'rope',         chance: 0.08 },
+    { item: 'cloth_helmet', chance: 0.03 },   // raro: ropa básica
   ],
 };
 
@@ -757,6 +857,11 @@ let nextCrateId = 1;
 let nextGrenadeId = 1;
 const GRENADE_DAMAGE = 70;
 const GRENADE_RADIUS = 6;
+// Estado de fin de juego — true cuando el jugador disparó el cañón
+// nuclear contra Helix Lab. Bloquea respawn del boss/elites/cientificos
+// del lab. El cliente recibe esto en welcome + via cityDestroyed
+// broadcast cuando ocurre en vivo.
+let helixDestroyed = false;
 
 // Build crates at boot — varios cofres por edificio. Towns: 2-4 cofres
 // dispersos en esquinas del piso. Cities: 1-3 (más loot por cofre, ya
@@ -857,6 +962,44 @@ function spawnGroundLoot() {
 }
 spawnGroundLoot();
 
+// Road crates — cofres pequeños distribuidos cada ~70m a lo largo de
+// las carreteras amarillas que conectan los pueblos. Loot bajo (road tier).
+// Pequeño jitter lateral para que no queden todos en el centro de la calle.
+function spawnRoadCrates() {
+  let s = 5511;
+  const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+  const SPACING = 75;       // metros entre cofres
+  const JITTER  = 4;        // m laterales
+  for (const r of ROADS) {
+    const dx = r.x2 - r.x1, dz = r.z2 - r.z1;
+    const len = Math.hypot(dx, dz);
+    if (len < SPACING) continue;
+    const ux = dx / len, uz = dz / len;
+    // Vector perpendicular para jitter lateral.
+    const px = -uz, pz = ux;
+    const count = Math.floor(len / SPACING);
+    for (let i = 1; i <= count; i++) {
+      const t = i / (count + 1);
+      const cx = r.x1 + dx * t;
+      const cz = r.z1 + dz * t;
+      const off = (rng() - 0.5) * JITTER;
+      const x = cx + px * off;
+      const z = cz + pz * off;
+      // Skip si cae dentro de un town footprint.
+      let inTown = false;
+      for (const t2 of TOWNS) {
+        const ddx = t2.cx - x, ddz = t2.cz - z;
+        const radius = t2.type === 'city' ? 130 : 60;
+        if (ddx * ddx + ddz * ddz < radius * radius) { inTown = true; break; }
+      }
+      if (inTown) continue;
+      const id = nextCrateId++;
+      crates.set(id, { id, x, z, y: heightAt(x, z), tableKey: 'road', townId: null, taken: false });
+    }
+  }
+}
+spawnRoadCrates();
+
 // Per-town streaming state.
 const townState = new Map(); // townId → { spawned, enemyIds: Set, scientistsDead, bossSpawned }
 for (const t of TOWNS) {
@@ -920,24 +1063,13 @@ function killEnemy(e, byId = null) {
   if (e.etype === 'deer' || e.etype === 'rabbit') {
     dropAnimalLoot(e);
   }
-  // Any of the three scientist variants count toward the boss spawn.
+  // Boss + elites ya spawnean con la boss tower al aproximarse — no hay
+  // threshold-based spawn como antes. Solo trackeamos kills de scientists
+  // por si alguna mecánica futura lo necesita.
   const isScientist = e.etype === 'scientist' || e.etype === 'sci_shotgun' || e.etype === 'sci_sniper';
   if (e.townId === 'helix-lab' && isScientist) {
     const ts = townState.get('helix-lab');
     ts.scientistsDead++;
-    // Boss appears once una buena tanda de scientists ha caido. Con 80
-    // edificios y ~150-200 cientificos en total, necesitamos algo razonable
-    // para que el jefe llegue tras una pelea sustancial pero no tarde horas.
-    if (!ts.bossSpawned && ts.scientistsDead >= 25) {
-      const t = TOWNS.find(x => x.id === 'helix-lab');
-      ts.bossSpawned = true;
-      const boss = makeEnemy({
-        etype: 'boss', x: t.cx, z: t.cz + 4, townId: 'helix-lab',
-      });
-      ts.enemyIds.add(boss.id);
-      broadcast({ type: 'eSpawn', e: ePub(boss) });
-      broadcast({ type: 'banner', text: '⚠ EL DOCTOR ESTA EN EL LABORATORIO' });
-    }
   }
   enemies.delete(e.id);
   if (e.townId) {
@@ -1023,6 +1155,9 @@ function streamTowns() {
       if (d < nearestD) nearestD = d;
     }
 
+    // Si el Helix Lab fue destruido por el nuke, ya no se spawna nada
+    // dentro. Es la "victoria" — el lab queda en ruinas para siempre.
+    if (t.id === 'helix-lab' && helixDestroyed) continue;
     if (!ts.spawned && nearestD < STREAM_RADIUS) {
       // Spawn varios enemigos por edificio.
       // Towns: 1-3 zombies durmiendo en cada casa.
@@ -1033,6 +1168,33 @@ function streamTowns() {
         const isCity = t.type === 'city';
         const isHighLoot = b.kind === 'high_loot';
         const isRuined = b.kind === 'ruined';
+        const isBossTower = b.kind === 'boss_tower';
+        // === BOSS TOWER === — spawn 1 boss + 4 elites con armas distintas
+        // y nada más. Ya están dentro de la torre desde que el player se
+        // acerca. Cada elite tiene un arma específica (rifle/shotgun/
+        // sniper/ak). NUNCA se llena con cientificos normales aunque el
+        // jugador entre/salga (importante: skip normal spawn siempre).
+        if (isBossTower) {
+          if (!ts.bossSpawned) {
+            ts.bossSpawned = true;
+            const boss = makeEnemy({ etype: 'boss', x: b.wx, z: b.wz, townId: t.id });
+            ts.enemyIds.add(boss.id);
+            broadcast({ type: 'eSpawn', e: ePub(boss) });
+            // 4 elites en las 4 esquinas, cada uno con un arma distinta.
+            const eliteTypes = ['sci_elite_rifle', 'sci_elite_shotgun', 'sci_elite_sniper', 'sci_elite_ak'];
+            const corners = [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]];
+            for (let k = 0; k < 4; k++) {
+              const [ox, oz] = corners[k];
+              const ex = b.wx + ox * b.w;
+              const ez = b.wz + oz * b.h;
+              const elite = makeEnemy({ etype: eliteTypes[k], x: ex, z: ez, townId: t.id });
+              ts.enemyIds.add(elite.id);
+              broadcast({ type: 'eSpawn', e: ePub(elite) });
+            }
+            broadcast({ type: 'banner', text: '⚠ EL DOCTOR Y SUS 4 ELITES TE ESPERAN EN LA TORRE CENTRAL' });
+          }
+          continue;   // siempre skip spawn normal en boss_tower
+        }
         // City spawns:
         //   high_loot: 4-6 cientificos guardia (zona controlada)
         //   ruined:    0-1 cientifico (abandonado)
@@ -1086,12 +1248,15 @@ function streamTowns() {
         }
       }
     } else if (ts.spawned && nearestD > DESPAWN_RADIUS) {
-      // Despawn — release CPU on a town nobody's near. Keep the boss alive
-      // even if despawned far (he stays around the lab).
+      // Despawn — release CPU on a town nobody's near. Mantenemos vivos
+      // al boss + sus 4 elites (son el endgame, no quemamos sus HP al
+      // alejarse el player). Es importante que el progreso del fight no
+      // se resetee al salir del lab.
       for (const id of ts.enemyIds) {
         const e = enemies.get(id);
         if (!e) continue;
         if (e.isBoss) continue;
+        if (ETYPES[e.etype]?.special === 'elite') continue;
         enemies.delete(id);
         broadcast({ type: 'eDead', id, despawn: true });
       }
@@ -2069,10 +2234,15 @@ wss.on('connection', (ws) => {
     enemies: [...enemies.values()].map(ePub),
     towns: TOWNS.map(t => ({
       id: t.id, cx: t.cx, cz: t.cz, type: t.type, label: t.label,
-      buildings: t.buildings.map(b => ({ dx: b.dx, dz: b.dz, w: b.w, h: b.h, ry: b.ry })),
+      buildings: t.buildings.map(b => ({
+        dx: b.dx, dz: b.dz, w: b.w, h: b.h, ry: b.ry,
+        floors: b.floors || 1, kind: b.kind || 'normal',
+      })),
     })),
     crates: [...crates.values()].filter(c => !c.taken).map(cPub),
     pois: POIS.map(p => ({ id: p.id, kind: p.kind, cx: p.cx, cz: p.cz, ry: p.ry || 0 })),
+    roads: ROADS,
+    helixDestroyed,
   }));
   broadcast({ type: 'peerJoin', p: pPub(player) }, id);
 
@@ -2199,6 +2369,46 @@ wss.on('connection', (ws) => {
       };
       grenades.set(gid, g);
       broadcast({ type: 'grenadeSpawn', g: { id: gid, x: g.x, y: g.y, z: g.z, vx: g.vx, vy: g.vy, vz: g.vz, fuse: g.fuse } });
+    } else if (msg.type === 'nuke') {
+      // El jugador disparó el cañón nuclear. Si el impacto cae dentro
+      // del radio de Helix Lab → "te has pasado el juego": destruir la
+      // ciudad, despawnear todos los enemigos del lab, broadcast al
+      // resto. La ciudad queda como ruinas y el boss no respawnea.
+      if (!helixDestroyed) {
+        const helix = TOWNS.find(t => t.id === 'helix-lab');
+        if (helix) {
+          const dx = (msg.x ?? player.x) - helix.cx;
+          const dz = (msg.z ?? player.z) - helix.cz;
+          const dist = Math.hypot(dx, dz);
+          if (dist < 200) {                // dentro del radio del lab
+            helixDestroyed = true;
+            // Despawnear todos los enemigos del lab.
+            const ts = townState.get('helix-lab');
+            if (ts) {
+              for (const eid of ts.enemyIds) {
+                const e = enemies.get(eid);
+                if (!e) continue;
+                enemies.delete(eid);
+                broadcast({ type: 'eDead', id: eid, despawn: true });
+              }
+              ts.enemyIds.clear();
+              ts.spawned = true;           // bloquea futuro spawn
+              ts.bossSpawned = true;
+            }
+            broadcast({ type: 'cityDestroyed', townId: 'helix-lab', x: msg.x, z: msg.z });
+            broadcast({ type: 'banner', text: '☢ HELIX LAB DESTRUIDO — TE HAS PASADO EL JUEGO ☢' });
+          }
+        }
+      }
+      // Daño colateral en cualquier caso: matar todos los enemigos en
+      // 30m del impacto (incluyendo zombies si pegás en un pueblo).
+      const ix = msg.x ?? player.x, iz = msg.z ?? player.z;
+      for (const e of [...enemies.values()]) {
+        if (Math.hypot(e.x - ix, e.z - iz) < 30) {
+          enemies.delete(e.id);
+          broadcast({ type: 'eDead', id: e.id, by: id });
+        }
+      }
     } else if (msg.type === 'openCrate') {
       // Player wants to open crate `id`. We accept if it exists, isn't
       // taken yet, and the player is reasonably close (within 3.5 m of

@@ -5,9 +5,10 @@ import {
   spawnEnemy, removeEnemy, wakeEnemy, triggerEnemyAttack, markDespawn,
   spawnPeer, removePeer, peers, enemies, setPeerName, showPeerBubble, setPeerHP,
 } from './entities.js';
-import { setTownLayouts } from './towns.js';
+import { setTownLayouts, markCityDestroyed } from './towns.js';
 import { setPoiLayouts } from './poi.js';
 import { spawnCrate, removeCrate } from './loot.js';
+import { buildRoads } from './world.js';
 
 const SEND_HZ = 10;
 
@@ -68,7 +69,9 @@ class NetworkClient {
     if (msg.type === 'welcome') {
       this.selfId = msg.you;
       this.onWelcome?.(msg.you);
+      if (msg.roads) buildRoads(msg.roads);
       if (msg.towns) setTownLayouts(msg.towns);
+      if (msg.helixDestroyed) markCityDestroyed?.('helix-lab');
       if (msg.pois) setPoiLayouts(msg.pois);
       for (const peer of msg.peers) spawnPeer(peer);
       const initial = msg.enemies || msg.zombies || [];
@@ -105,6 +108,9 @@ class NetworkClient {
       removeEnemy(msg.id);
       if (msg.isBoss) this.onBanner?.('★ EL DOCTOR HA CAIDO');
       this.onEnemyDead?.(msg.id, msg);
+    } else if (msg.type === 'cityDestroyed') {
+      // Nuke impactó en Helix Lab — la ciudad queda en ruinas para siempre.
+      markCityDestroyed?.(msg.townId);
     } else if (msg.type === 'eHit' || msg.type === 'zHit') {
       const e = enemies.get(msg.id);
       if (e) e.target.hp = msg.hp;
@@ -223,6 +229,9 @@ class NetworkClient {
   setName(name) { this._send({ type: 'name', name }); }
   chat(text) { this._send({ type: 'chat', text }); }
   throwGrenade(dx, dy, dz) { this._send({ type: 'grenade', dx, dy, dz }); }
+  // Nuke fire — el server detecta si impacta dentro de Helix Lab y
+  // dispara la destrucción de la ciudad. Mata enemigos en 30m radio.
+  fireNuke(x, z) { this._send({ type: 'nuke', x, z }); }
   registerSmoke(x, z, r, dur) { this._send({ type: 'smokeArea', x, z, r, dur }); }
   detonateFlashbang(x, z) { this._send({ type: 'flashbang', x, z }); }
   togglePvP() { this._send({ type: 'pvpToggle' }); }
