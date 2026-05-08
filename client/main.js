@@ -1052,8 +1052,12 @@ function frame(now) {
   else if (!inCombat && _combatMusic) { _combatMusic = false; sfx.setMusicMode?.(isNightServer ? 'night' : 'day'); }
 
   // ADS FOV lerp — sniper auto-zooms further while ADS held.
+  // Mirilla equipada: reduce el FOV de ADS (más zoom = más precisión) en
+  // todas las armas que no sean sniper (que ya tiene zoom intrínseco).
   const isSniper = getActiveWeapon() === 'sniper';
-  const targetFov = _ads ? (isSniper ? 22 : ADS_FOV) : BASE_FOV;
+  const hasScope = inv.has('scope', 1);
+  const adsFov = isSniper ? 22 : (hasScope ? 32 : ADS_FOV);
+  const targetFov = _ads ? adsFov : BASE_FOV;
   camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-15 * dt));
   camera.updateProjectionMatrix();
 
