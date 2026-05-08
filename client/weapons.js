@@ -154,6 +154,24 @@ let _aimTarget = 0;
 export function setAimMode(on) { _aimTarget = on ? 1 : 0; }
 
 camera.add(gunGroup);
+
+// Mesh de granada en mano — visible solo cuando player.grenadeMode == true.
+const grenadeMat = new THREE.MeshStandardMaterial({ color: 0x3a4a28, roughness: 0.85 });
+const grenadeAccentMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.5, metalness: 0.6 });
+const grenadeMesh = new THREE.Group();
+const grenadeBody = new THREE.Mesh(new THREE.SphereGeometry(0.10, 10, 8), grenadeMat);
+grenadeBody.scale.set(1, 1.2, 1);
+grenadeMesh.add(grenadeBody);
+const grenadePin = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.06, 6), grenadeAccentMat);
+grenadePin.position.y = 0.13;
+grenadeMesh.add(grenadePin);
+const grenadeRing = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.012, 6, 12), grenadeAccentMat);
+grenadeRing.position.y = 0.18;
+grenadeMesh.add(grenadeRing);
+grenadeMesh.position.set(0.18, -0.18, -0.45);
+grenadeMesh.visible = false;
+gunGroup.add(grenadeMesh);
+
 scene.add(camera); // make sure camera is in scene so its children render
 
 // =====================================================================
@@ -233,10 +251,10 @@ function tryFire() {
   if (!player.locked || player.hp <= 0) return;
   if (!active) return;        // sin arma equipada → no disparo
   if (cooldown > 0 || reloading) return;
-  // Si hay una herramienta melee activa (cuchillo/hacha/pico), NO disparamos
-  // — ese click corresponde al swing manejado por tools.js. Esto evita
-  // disparar la pistola con el hacha en la mano.
+  // Si hay una herramienta melee activa (cuchillo/hacha/pico) o estás en
+  // modo granada, NO disparamos.
   if (getActiveTool()) return;
+  if (player.grenadeMode) return;
   const cfg = WEAPONS[active];
   // Resuelve el tipo de munición activo. Si elegiste especial pero no
   // tenés stock, fallback automático a normal.
@@ -422,8 +440,26 @@ let _swayX = 0, _swayY = 0;
 let _lastYaw = 0, _lastPitch = 0;
 
 export function updateWeapons(dt) {
-  // Ocultar el arma de fuego cuando NO hay arma equipada o hay tool melee.
-  gunGroup.visible = !!active && !getActiveTool();
+  // Ocultar el arma de fuego cuando NO hay arma equipada, hay tool melee
+  // o estás en modo granada.
+  gunGroup.visible = (!!active && !getActiveTool()) || player.grenadeMode;
+  // Granada visible solo en modo granada. Las miras + reflex se ocultan.
+  grenadeMesh.visible = !!player.grenadeMode;
+  if (player.grenadeMode) {
+    // Ocultar el resto del arma para que solo se vea la granada.
+    gunBody.visible = false;
+    barrel.visible = false;
+    frontSight.visible = false;
+    rearL.visible = false;
+    rearR.visible = false;
+    reflexGroup.visible = false;
+  } else {
+    gunBody.visible = true;
+    barrel.visible = true;
+    frontSight.visible = true;
+    rearL.visible = true;
+    rearR.visible = true;
+  }
   // Lerp ADS: muever el grupo a posición AIM (centrada) cuando _aimTarget=1.
   _aimT += (_aimTarget - _aimT) * (1 - Math.exp(-12 * dt));
   // Walk bob — figura 8, atenuado durante ADS.

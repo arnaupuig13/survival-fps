@@ -347,7 +347,7 @@ const BASE_FOV = camera.fov;
 const ADS_FOV  = 45;
 let _ads = false;
 const scopeVignette = document.getElementById('scopeVignette');
-addEventListener('mousedown', (e) => { if (e.button === 2) setADS(true); });
+addEventListener('mousedown', (e) => { if (e.button === 2 && !_grenadeMode) setADS(true); });
 addEventListener('mouseup',   (e) => { if (e.button === 2) setADS(false); });
 function setADS(on) {
   _ads = on;
@@ -730,15 +730,25 @@ addEventListener('keydown', (e) => {
     openChat();
     return;
   }
-  // Cocinar granada — G keydown empieza cocinado, keyup la tira con la
-  // mecha proporcionalmente más corta. Si pasan 3.5s sin tirar, te
-  // explota en la mano.
+  // Granada modo — G entra/sale del modo. En modo granada:
+  //   click DERECHO mantenido = cocinar (empieza al apretar)
+  //   click IZQUIERDO = tirar con cooking_t actual
+  //   Si pasan 3.5s cocinando sin tirar, te explota en la mano.
   if (e.code === 'KeyG' && player.locked && !e.repeat) {
-    if (inv.has('grenade', 1)) {
-      _cookingGrenade = true;
-      _cookingStart = performance.now() / 1000;
-      logLine('Granada cocinándose... soltá G para tirar');
-      sfx.playEmpty?.();
+    if (!_grenadeMode) {
+      if (!inv.has('grenade', 1)) {
+        logLine('Sin granadas');
+        return;
+      }
+      _grenadeMode = true;
+      _cookingGrenade = false;
+      player.grenadeMode = true;
+      logLine('Granada equipada — click derecho cocina, click izquierdo tira (G para guardar)');
+    } else {
+      _grenadeMode = false;
+      _cookingGrenade = false;
+      player.grenadeMode = false;
+      logLine('Granada guardada');
     }
     return;
   }
@@ -1431,23 +1441,34 @@ function frame(now) {
 let _combatMusic = false;
 let _ambientAccum = 0;
 let _nextAmbientAt = 6;
+let _grenadeMode = false;
 let _cookingGrenade = false;
 let _cookingStart = 0;
 const COOK_MAX = 3.5;
 const COOK_FUSE_BASE = 2.4;
 
-addEventListener('keyup', (e) => {
-  if (e.code === 'KeyG' && _cookingGrenade) {
-    _cookingGrenade = false;
+// Click derecho mantenido en modo granada = cocinar. setADS sigue siendo
+// el handler para apuntar cuando NO estás en modo granada.
+addEventListener('mousedown', (e) => {
+  if (e.button === 2 && _grenadeMode && !_cookingGrenade) {
+    _cookingGrenade = true;
+    _cookingStart = performance.now() / 1000;
+    logLine('Cocinando granada...');
+  } else if (e.button === 0 && _grenadeMode) {
+    // Click izquierdo en modo granada = tirar.
     if (inv.consume?.('grenade', 1)) {
       const dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
-      const cookT = performance.now() / 1000 - _cookingStart;
+      const cookT = _cookingGrenade ? (performance.now() / 1000 - _cookingStart) : 0;
       const yArc = Math.max(0.05, 0.25 - cookT * 0.05);
       network.throwGrenade(dir.x, dir.y + yArc, dir.z);
       sfx.playEmpty?.();
-      logLine(`Granada lanzada (cocinada ${cookT.toFixed(1)}s)`);
+      logLine(`Granada lanzada${cookT > 0.2 ? ` (cocinada ${cookT.toFixed(1)}s)` : ''}`);
     }
+    // Salir del modo granada. Si tenés más, podés volver a entrar con G.
+    _cookingGrenade = false;
+    _grenadeMode = false;
+    player.grenadeMode = false;
   }
 });
 let _recoilKick = 0;
