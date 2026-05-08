@@ -31,6 +31,17 @@ const WEAPONS = {
   sniper:   { dmg: 90, cooldown: 1.6,  range: 500, auto: false, name: 'SNIPER',      ammo: 'sniper_round', requires: 'sniper_pickup',  magazineSize: 5,  reloadTime: 2.8, aggroRange: 42, noDrop: true },
   // Ballesta — silenciosa por naturaleza. Caída de dardo significativa.
   crossbow: { dmg: 60, cooldown: 1.2,  range: 150, auto: false, name: 'BALLESTA',    ammo: 'bolt',         requires: 'crossbow_pickup',magazineSize: 1,  reloadTime: 1.4, aggroRange: 12, intrinsicSilence: true },
+  // ====== Nuevas armas v1.2 ======
+  // AK — full auto, mucha potencia, cadencia más lenta que rifle, aggroRange grande.
+  ak:       { dmg: 12, cooldown: 0.16, range: 280, auto: true,  name: 'AK-47',       ammo: 'bullet_762',     requires: 'ak_pickup',      magazineSize: 30, reloadTime: 2.2, aggroRange: 40 },
+  // Semi-auto — alta precisión, sin auto, daño alto.
+  semi:     { dmg: 22, cooldown: 0.35, range: 320, auto: false, name: 'SEMI-AUTO',   ammo: 'bullet_marksman',requires: 'semi_pickup',    magazineSize: 10, reloadTime: 2.0, aggroRange: 36 },
+  // Lanzagranadas — proyectil que explota en impacto. ammo gl_round.
+  gl:       { dmg: 80, cooldown: 1.5,  range: 200, auto: false, name: 'LANZAGRANADAS', ammo: 'gl_round',     requires: 'gl_pickup',      magazineSize: 1,  reloadTime: 2.6, aggroRange: 50, explosive: true, explosionRadius: 6 },
+  // Gatling — cadencia extrema, daño bajo por bala, magazín enorme.
+  gatling:  { dmg: 4,  cooldown: 0.04, range: 200, auto: true,  name: 'GATLING',     ammo: 'bullet_r',       requires: 'gatling_pickup', magazineSize: 200,reloadTime: 5.0, aggroRange: 50 },
+  // Nuke — 1 shot. Mata todo en 30m radio. Solo 1 ammo (de boss body).
+  nuke:     { dmg: 9999, cooldown: 5,  range: 100, auto: false, name: 'CAÑON NUCLEAR', ammo: 'nuke_round',   requires: 'nuke_pickup',    magazineSize: 1,  reloadTime: 99, aggroRange: 100, explosive: true, explosionRadius: 30, isNuke: true },
 };
 
 // =====================================================================
@@ -40,7 +51,7 @@ const WEAPONS = {
 let active = null;
 let cooldown = 0;
 let mouseDown = false;
-const loaded = { pistol: 12, rifle: 0, smg: 0, shotgun: 0, sniper: 0 };
+const loaded = { pistol: 12, rifle: 0, smg: 0, shotgun: 0, sniper: 0, crossbow: 0, ak: 0, semi: 0, gl: 0, gatling: 0, nuke: 0 };
 let reloading = false;
 let reloadTimer = 0;
 const ray = new THREE.Raycaster();
@@ -514,6 +525,7 @@ export function activeWeaponMeta() {
   return { name: cfg.name, loaded: loaded[active] | 0, ammo: inv.get(cfg.ammo), cap };
 }
 // Allow main.js to drive weapon selection via the hotbar.
+// (Legacy slot-based — main.js prefers selectWeapon(name) directly now.)
 export function selectWeaponBySlot(slotIdx) {
   if (slotIdx === 0) selectWeapon('pistol');
   else if (slotIdx === 1) selectWeapon('rifle');
@@ -521,6 +533,9 @@ export function selectWeaponBySlot(slotIdx) {
   else if (slotIdx === 8) selectWeapon('sniper');
   // Slots 2..6 reserved for non-firing tools (handled in main.js).
 }
+
+// Helper para que el HUD/UI sepa qué armas existen.
+export function listWeapons() { return Object.keys(WEAPONS); }
 
 // Recoil exposed so main.js can drain it into the camera each frame.
 let pendingRecoil = 0;

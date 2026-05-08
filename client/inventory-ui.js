@@ -48,27 +48,53 @@ const resRad       = $('resRad');
 const paperdollName= $('paperdollName');
 const paperdollHotbar = $('paperdollHotbar');
 
-// Equipment items live on the paperdoll, not in the grid.
-const EQUIP_KEYS = new Set(['vest_armor', 'helmet_armor']);
+// Equipment items live on the paperdoll, not in the grid. Incluye los
+// 28 pieces armor 4-tier 7-slot + legacy vest/helmet.
+const EQUIP_KEYS = new Set([
+  'vest_armor', 'helmet_armor',
+  // T1 cloth
+  'cloth_helmet', 'cloth_shirt', 'cloth_pants', 'cloth_shoes', 'cloth_body', 'cloth_legs', 'cloth_gloves',
+  // T2 leather
+  'leather_helmet', 'leather_shirt', 'leather_pants', 'leather_shoes', 'leather_body', 'leather_legs', 'leather_gloves',
+  // T3 iron
+  'iron_helmet', 'iron_shirt', 'iron_pants', 'iron_shoes', 'iron_body', 'iron_legs', 'iron_gloves',
+  // T4 mil
+  'mil_helmet', 'mil_shirt', 'mil_pants', 'mil_shoes', 'mil_body', 'mil_legs', 'mil_gloves',
+]);
 
 // Display order — Rust packs items in a logical order (weapons → ammo → meds → food → resources).
+// v1.2: incluye TODOS los items nuevos (armas, bodies, ammo, food, materials).
 const DISPLAY_ORDER = [
   // Weapons
-  'pistol_pickup', 'rifle_pickup', 'shotgun_pickup', 'smg_pickup', 'sniper_pickup',
-  // Tools
-  'axe', 'pickaxe',
+  'pistol_pickup', 'rifle_pickup', 'ak_pickup', 'semi_pickup', 'smg_pickup',
+  'shotgun_pickup', 'sniper_pickup', 'crossbow_pickup', 'gl_pickup', 'gatling_pickup', 'nuke_pickup',
+  'knife', 'axe', 'pickaxe', 'hammer',
+  // Weapon bodies (rare drops)
+  'rifle_body', 'shotgun_body', 'smg_body', 'sniper_body',
+  'ak_body', 'semi_body', 'gl_body', 'gatling_body', 'nuke_body',
   // Attachments
-  'scope', 'silencer', 'ext_mag',
+  'scope', 'silencer', 'ext_mag', 'grip', 'laser_sight',
   // Ammo
-  'bullet_p', 'bullet_r', 'bullet_smg', 'shell', 'sniper_round',
+  'bullet_p', 'bullet_r', 'bullet_762', 'bullet_marksman', 'bullet_smg',
+  'shell', 'sniper_round', 'gl_round', 'nuke_round',
+  'bullet_p_ap', 'bullet_r_ap', 'bullet_r_inc', 'bolt',
   // Throwables / meds
-  'bandage', 'grenade',
+  'bandage', 'medkit', 'antibiotics', 'painkillers', 'morphine', 'adrenaline',
+  'grenade', 'smoke_grenade', 'flashbang', 'molotov', 'c4', 'mine',
   // Food / drink
-  'meat_cooked', 'meat_raw', 'berry', 'water_bottle',
+  'meat_cooked', 'meat_raw', 'fish_cooked', 'fish_raw',
+  'jerky', 'bread', 'soup', 'stew', 'canned_food', 'energy_bar',
+  'mushroom', 'herbs', 'berry', 'honey',
+  'water_bottle', 'dirty_water', 'purified_water', 'coffee', 'milk', 'tea',
   // Resources
-  'wood', 'stone',
+  'wood', 'stone', 'cloth', 'iron', 'coal', 'sulfur', 'copper',
+  'rabbit_pelt', 'deer_pelt', 'leather', 'nail', 'gunpowder', 'circuit', 'battery', 'rope', 'scrap',
+  // Utility gear
+  'flashlight', 'compass', 'binoculars', 'fishing_rod', 'lockpick',
+  'radio', 'gas_mask', 'parachute', 'rope_climb', 'nvg', 'dog_collar', 'seeds',
   // Placeables
-  'campfire', 'wall_piece', 'bedroll_item',
+  'campfire', 'furnace', 'wall_piece', 'bedroll_item',
+  'bear_trap', 'spike_trap', 'stash_box',
 ];
 
 // Short item descriptions used in the info panel.
@@ -104,7 +130,15 @@ const DESCRIPTIONS = {
 };
 
 // Items that can be "used" from the inventory ctx menu.
-const USABLE = new Set(['bandage', 'meat_cooked', 'meat_raw', 'berry', 'water_bottle', 'dog_collar', 'antibiotics', 'smoke_grenade', 'flashbang', 'stash_box', 'seeds']);
+const USABLE = new Set([
+  'bandage', 'medkit', 'antibiotics', 'painkillers', 'morphine', 'adrenaline',
+  'meat_cooked', 'meat_raw', 'fish_cooked', 'fish_raw',
+  'jerky', 'bread', 'soup', 'stew', 'canned_food', 'energy_bar',
+  'mushroom', 'herbs', 'berry', 'honey',
+  'water_bottle', 'dirty_water', 'purified_water', 'coffee', 'milk', 'tea',
+  'dog_collar', 'smoke_grenade', 'flashbang', 'molotov',
+  'stash_box', 'seeds',
+]);
 
 // =====================================================================
 // State
@@ -615,18 +649,110 @@ window.addEventListener('blur', () => {
 // =====================================================================
 // Use actions (mirrors keybinds H / J / U)
 // =====================================================================
+// Heal genérico: consume el item y restaura HP+hunger/thirst según tabla.
+function consumeFood(key, hpDelta, hungerDelta = 0, thirstDelta = 0, label = '') {
+  if (!inv.consume(key, 1)) return false;
+  if (hpDelta) {
+    const max = player.maxHp || 100;
+    player.hp = Math.max(0, Math.min(max, (player.hp || 0) + hpDelta));
+    if (player.hp <= 0) player.hp = 0;
+  }
+  if (hungerDelta && player.hunger != null) {
+    player.hunger = Math.min(100, player.hunger + hungerDelta);
+  }
+  if (thirstDelta && player.thirst != null) {
+    player.thirst = Math.min(100, player.thirst + thirstDelta);
+  }
+  logLine(`+ ${label || inv.ITEMS[key].label}`);
+  sfx.playPickup?.();
+  return true;
+}
+
 async function useItem(key) {
   if (key === 'bandage') {
     if (inv.useBandage(player)) { logLine('+30 HP (vendaje)'); sfx.playPickup?.(); }
     else logLine('Sin vendas o HP llena');
+  } else if (key === 'medkit') {
+    if (inv.consume('medkit', 1)) {
+      const max = player.maxHp || 100;
+      player.hp = max;
+      logLine('+HP FULL (botiquín)');
+      sfx.playPickup?.();
+    }
+  } else if (key === 'painkillers') {
+    if (inv.consume('painkillers', 1)) {
+      player.painkillerUntil = (performance.now() / 1000) + 60;
+      logLine('Calmantes activos 60s — resistencia daño +20%');
+      sfx.playPickup?.();
+    }
+  } else if (key === 'morphine') {
+    if (inv.consume('morphine', 1)) {
+      player.morphineUntil = (performance.now() / 1000) + 30;
+      logLine('Morfina — regen HP 30s');
+      sfx.playPickup?.();
+    }
+  } else if (key === 'adrenaline') {
+    if (inv.consume('adrenaline', 1)) {
+      player.adrenalineUntil = (performance.now() / 1000) + 30;
+      logLine('Adrenalina — +velocidad +daño 30s');
+      sfx.playPickup?.();
+    }
   } else if (key === 'meat_cooked') {
     if (inv.consume('meat_cooked', 1)) { player.eat?.('meat_cooked'); logLine('+ CARNE COCIDA'); sfx.playPickup?.(); }
   } else if (key === 'meat_raw') {
     if (inv.consume('meat_raw', 1)) { player.eat?.('meat_raw'); logLine('+ CARNE CRUDA (-5 HP)'); sfx.playPickup?.(); }
+  } else if (key === 'fish_cooked') {
+    consumeFood('fish_cooked', 3, 35, 0, 'PESCADO COCIDO');
+  } else if (key === 'fish_raw') {
+    consumeFood('fish_raw', -3, 20, 0, 'PESCADO CRUDO (-3 HP)');
+  } else if (key === 'jerky') {
+    consumeFood('jerky', 2, 25, 0);
+  } else if (key === 'bread') {
+    consumeFood('bread', 5, 40, 0);
+  } else if (key === 'soup') {
+    consumeFood('soup', 8, 35, 25);
+  } else if (key === 'stew') {
+    consumeFood('stew', 12, 50, 15);
+  } else if (key === 'canned_food') {
+    consumeFood('canned_food', 5, 45, 0);
+  } else if (key === 'energy_bar') {
+    consumeFood('energy_bar', 8, 30, 10);
+  } else if (key === 'mushroom') {
+    consumeFood('mushroom', 0, 12, 0);
+  } else if (key === 'herbs') {
+    consumeFood('herbs', 2, 4, 4);
   } else if (key === 'berry') {
     if (inv.consume('berry', 1)) { player.eat?.('berry'); logLine('+ BAYAS'); sfx.playPickup?.(); }
+  } else if (key === 'honey') {
+    consumeFood('honey', 6, 25, 0);
   } else if (key === 'water_bottle') {
     if (inv.consume('water_bottle', 1)) { player.drink?.(); logLine('+ AGUA'); sfx.playPickup?.(); }
+  } else if (key === 'dirty_water') {
+    if (inv.consume('dirty_water', 1)) {
+      if (player.thirst != null) player.thirst = Math.min(100, player.thirst + 30);
+      // Riesgo: 30% de infección.
+      if (Math.random() < 0.3) {
+        const status = await import('./status.js');
+        status.applyInfection?.();
+        logLine('AGUA SUCIA — te enfermaste');
+      } else {
+        logLine('+ AGUA (sucia, no pasó nada)');
+      }
+      sfx.playPickup?.();
+    }
+  } else if (key === 'purified_water') {
+    consumeFood('purified_water', 2, 0, 50, 'AGUA PURA');
+  } else if (key === 'coffee') {
+    if (inv.consume('coffee', 1)) {
+      player.adrenalineUntil = (performance.now() / 1000) + 20;
+      if (player.thirst != null) player.thirst = Math.min(100, player.thirst + 25);
+      logLine('+ CAFE — boost 20s');
+      sfx.playPickup?.();
+    }
+  } else if (key === 'milk') {
+    consumeFood('milk', 3, 15, 30, 'LECHE');
+  } else if (key === 'tea') {
+    consumeFood('tea', 4, 5, 30, 'TE');
   } else if (key === 'dog_collar') {
     const dog = await import('./dog.js');
     if (dog.isSummoned()) { logLine('Ya tenés un perro aliado'); return; }
@@ -643,6 +769,16 @@ async function useItem(key) {
     if (inv.consume('flashbang', 1)) {
       const flashbang = await import('./flashbang.js');
       flashbang.throwFlashbang();
+    }
+  } else if (key === 'molotov') {
+    // Molotov: similar a flashbang pero con DoT de fuego al frente del player.
+    if (inv.consume('molotov', 1)) {
+      const yaw = player.yaw?.() ?? 0;
+      const fx = player.pos.x + Math.sin(yaw) * -8;
+      const fz = player.pos.z + Math.cos(yaw) * -8;
+      const network = (await import('./network.js')).network;
+      network?.send?.({ type: 'molotov', x: fx, z: fz });
+      logLine('+ MOLOTOV lanzado');
     }
   } else if (key === 'stash_box') {
     // Coloca un nuevo stash al frente del player.

@@ -96,7 +96,9 @@ const respawnBtn = document.getElementById('respawnBtn');
 inv.onChange(setInventory);
 inv.onChange((state) => {
   // Sync armor onto the player so takeDamage applies the reduction.
+  // Sumamos TODAS las piezas armor (4 tiers x 7 slots + legacy).
   player.armorState = { vest: !!state.vest_armor, helmet: !!state.helmet_armor };
+  player.armorReduction = inv.getArmorReduction();
   repaintHotbar();
 });
 
@@ -1132,6 +1134,41 @@ function handleHotbarSlot(slotIdx) {
     if (!inv.has('crossbow_pickup', 1)) { logLine('Necesitás una ballesta'); return; }
     tools.setActiveTool(null);
     selectWeapon('crossbow');
+    setHotbarActive(slotIdx);
+    return;
+  }
+  if (itemKey === 'ak_pickup' || itemKey === 'bullet_762') {
+    if (!inv.has('ak_pickup', 1)) { logLine('Necesitás un AK'); return; }
+    tools.setActiveTool(null);
+    selectWeapon('ak');
+    setHotbarActive(slotIdx);
+    return;
+  }
+  if (itemKey === 'semi_pickup' || itemKey === 'bullet_marksman') {
+    if (!inv.has('semi_pickup', 1)) { logLine('Necesitás un semi-auto'); return; }
+    tools.setActiveTool(null);
+    selectWeapon('semi');
+    setHotbarActive(slotIdx);
+    return;
+  }
+  if (itemKey === 'gl_pickup' || itemKey === 'gl_round') {
+    if (!inv.has('gl_pickup', 1)) { logLine('Necesitás un lanzagranadas'); return; }
+    tools.setActiveTool(null);
+    selectWeapon('gl');
+    setHotbarActive(slotIdx);
+    return;
+  }
+  if (itemKey === 'gatling_pickup') {
+    if (!inv.has('gatling_pickup', 1)) { logLine('Necesitás una gatling'); return; }
+    tools.setActiveTool(null);
+    selectWeapon('gatling');
+    setHotbarActive(slotIdx);
+    return;
+  }
+  if (itemKey === 'nuke_pickup' || itemKey === 'nuke_round') {
+    if (!inv.has('nuke_pickup', 1)) { logLine('Necesitás un cañón nuclear'); return; }
+    tools.setActiveTool(null);
+    selectWeapon('nuke');
     setHotbarActive(slotIdx);
     return;
   }

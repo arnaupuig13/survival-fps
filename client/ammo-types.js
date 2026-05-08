@@ -23,13 +23,26 @@ export const AMMO_TYPES = {
     { type: 'ap',     item: 'bullet_r_ap',  label: 'AP',     dmgMul: 1.3 },
     { type: 'inc',    item: 'bullet_r_inc', label: 'INCEND.', burn: true },
   ],
-  smg:     [{ type: 'normal', item: 'bullet_smg',   label: 'NORMAL' }],
-  shotgun: [{ type: 'normal', item: 'shell',        label: 'NORMAL' }],
-  sniper:  [{ type: 'normal', item: 'sniper_round', label: 'NORMAL' }],
+  smg:      [{ type: 'normal', item: 'bullet_smg',     label: 'NORMAL' }],
+  shotgun:  [{ type: 'normal', item: 'shell',          label: 'NORMAL' }],
+  sniper:   [{ type: 'normal', item: 'sniper_round',   label: 'NORMAL' }],
+  crossbow: [{ type: 'normal', item: 'bolt',           label: 'NORMAL' }],
+  // Nuevas armas v1.2
+  ak: [
+    { type: 'normal', item: 'bullet_762',    label: 'NORMAL' },
+    { type: 'inc',    item: 'bullet_r_inc',  label: 'INCEND.', burn: true },
+  ],
+  semi: [
+    { type: 'normal', item: 'bullet_marksman', label: 'NORMAL' },
+    { type: 'ap',     item: 'bullet_r_ap',     label: 'AP', dmgMul: 1.3 },
+  ],
+  gl:       [{ type: 'normal', item: 'gl_round',       label: 'NORMAL' }],
+  gatling:  [{ type: 'normal', item: 'bullet_r',       label: 'NORMAL' }],
+  nuke:     [{ type: 'normal', item: 'nuke_round',     label: 'NUCLEAR' }],
 };
 
 // Estado: índice activo por arma.
-const activeIdx = { pistol: 0, rifle: 0, smg: 0, shotgun: 0, sniper: 0 };
+const activeIdx = { pistol: 0, rifle: 0, smg: 0, shotgun: 0, sniper: 0, crossbow: 0, ak: 0, semi: 0, gl: 0, gatling: 0, nuke: 0 };
 
 const listeners = new Set();
 function notify() { for (const fn of listeners) fn(); }

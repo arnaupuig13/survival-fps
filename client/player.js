@@ -81,11 +81,17 @@ export const player = {
     if (this.hp <= 0 || this.invulnerable) return;
     if (performance.now() / 1000 < this.invulnGraceUntil) return;
     if (this.godMode) return;
-    // Armor reduction. Vest 25%, helmet 25% — combined 50%. Read from
-    // inventory at hit time (cheap; no caching needed at this scale).
-    const armorReduction = (this.armorState?.vest ? 0.25 : 0) + (this.armorState?.helmet ? 0.25 : 0);
-    // Perk: thick_skin agrega 10% adicional.
-    const totalReduction = Math.min(0.85, armorReduction + (this.dmgReduction || 0));
+    // Armor reduction — sum of all 4-tier 7-slot armor pieces equipped
+    // (passively counted from inventory). Read by main.js each frame
+    // and synced to this.armorReduction. Cap 80%.
+    // Perks add bonus on top: thick_skin +10%.
+    let totalReduction = (this.armorReduction || 0) / 100;
+    totalReduction += (this.dmgReduction || 0);
+    // Painkillers active: +20% extra reduction.
+    if (this.painkillerUntil && performance.now() / 1000 < this.painkillerUntil) {
+      totalReduction += 0.20;
+    }
+    totalReduction = Math.min(0.90, totalReduction);
     const after = Math.max(1, Math.round(dmg * (1 - totalReduction)));
     this.hp = Math.max(0, this.hp - after);
     this.lastHitAt = performance.now() / 1000;
@@ -107,15 +113,32 @@ export const player = {
   },
   // HP regen — sumar lentamente si no fuiste hit en los ultimos 5s.
   // HP regen también requiere comer y beber: si hunger o thirst en 0, no regen.
+  // Morfina activa = regen rápida sin importar el hit cooldown.
   regen(dt) {
     const max = this.maxHp || 100;
+    const now = performance.now() / 1000;
+    // Morfina — +12 HP/s mientras dure (30s post-uso).
+    if (this.morphineUntil && now < this.morphineUntil && this.hp > 0 && this.hp < max) {
+      this.hp = Math.min(max, this.hp + 12 * dt);
+    }
     if (this.hp > 0 && this.hp < max) {
-      const now = performance.now() / 1000;
       if (now - (this.lastHitAt || 0) >= 5 && this.hunger > 10 && this.thirst > 10) {
         const rate = 4 * (this.regenMult || 1);
         this.hp = Math.min(max, this.hp + rate * dt);
       }
     }
+  },
+  // Speed multiplier para adrenalina (player.js movement reads this).
+  getSpeedMul() {
+    const now = performance.now() / 1000;
+    if (this.adrenalineUntil && now < this.adrenalineUntil) return 1.35;
+    return 1.0;
+  },
+  // Damage multiplier para adrenalina (weapons.js / tools.js read this).
+  getDamageMul() {
+    const now = performance.now() / 1000;
+    if (this.adrenalineUntil && now < this.adrenalineUntil) return 1.30;
+    return 1.0;
   },
   // Drain hambre / sed / calor con el tiempo. Si llegan a 0, el player sufre
   // damage continuo hasta que coma / beba / se caliente. Llamado desde main loop.
