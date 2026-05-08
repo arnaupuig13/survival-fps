@@ -241,19 +241,22 @@ const ETYPES = {
   // Three scientist variants. Same lab coat but different weapon profile.
   // Aggro subido para que detecten al player desde más lejos en el mapa
   // grande (era 30-60, ahora 60-90).
-  scientist:    { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 60, ranged: true,  weapon: 'rifle'   },
-  sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 22, range: 12,  cd: 1.5, aggro: 50, ranged: true,  weapon: 'shotgun' },
-  sci_sniper:   { hp: 16,  speed: 1.0, dmg: 32, range: 60,  cd: 2.4, aggro: 90, ranged: true,  weapon: 'sniper'  },
+  // Aggro subido para que detecten al player desde más lejos. La ciudad
+  // de los cientificos tiene que sentirse muy hostil — si entrás te ven.
+  scientist:    { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 100, ranged: true,  weapon: 'rifle'   },
+  sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 22, range: 12,  cd: 1.5, aggro:  80, ranged: true,  weapon: 'shotgun' },
+  sci_sniper:   { hp: 16,  speed: 1.0, dmg: 32, range: 60,  cd: 2.4, aggro: 150, ranged: true,  weapon: 'sniper'  },
   // === ELITES — 4 guardias del boss en la torre central. Cada uno con
   //     un arma distinta. Mucho más HP que un cientifico normal pero
-  //     no tanto como el boss. ===
-  sci_elite_rifle:   { hp: 110, speed: 1.5, dmg: 12, range: 40,  cd: 0.6, aggro: 70, ranged: true,  weapon: 'rifle',   special: 'elite' },
-  sci_elite_shotgun: { hp: 130, speed: 1.4, dmg: 30, range: 14,  cd: 1.2, aggro: 60, ranged: true,  weapon: 'shotgun', special: 'elite' },
-  sci_elite_sniper:  { hp:  90, speed: 1.2, dmg: 50, range: 80,  cd: 1.8, aggro: 95, ranged: true,  weapon: 'sniper',  special: 'elite' },
-  sci_elite_ak:      { hp: 140, speed: 1.6, dmg: 18, range: 35,  cd: 0.18,aggro: 75, ranged: true,  weapon: 'ak',      special: 'elite' },
-  // Boss — extremadamente fuerte, mucha vida. Era 240/16, ahora 1200/30
-  // para que sea un combate real. Drops nuke gun directamente.
-  boss:         { hp: 1200, speed: 1.8, dmg: 30, range: 35,  cd: 0.40, aggro: 60, ranged: true, weapon: 'ak', isBoss: true },
+  //     no tanto como el boss. Aggro enorme: te detectan en cuanto
+  //     entrás a la torre y nunca te pierden. ===
+  sci_elite_rifle:   { hp: 110, speed: 1.5, dmg: 12, range: 40,  cd: 0.6, aggro: 200, ranged: true,  weapon: 'rifle',   special: 'elite' },
+  sci_elite_shotgun: { hp: 130, speed: 1.4, dmg: 30, range: 14,  cd: 1.2, aggro: 200, ranged: true,  weapon: 'shotgun', special: 'elite' },
+  sci_elite_sniper:  { hp:  90, speed: 1.2, dmg: 50, range: 80,  cd: 1.8, aggro: 250, ranged: true,  weapon: 'sniper',  special: 'elite' },
+  sci_elite_ak:      { hp: 140, speed: 1.6, dmg: 18, range: 35,  cd: 0.18,aggro: 200, ranged: true,  weapon: 'ak',      special: 'elite' },
+  // Boss — extremadamente fuerte, mucha vida. Aggro 250 = te ve desde
+  // cualquier parte del tower. Drops nuke gun directamente.
+  boss:         { hp: 1200, speed: 1.8, dmg: 30, range: 35,  cd: 0.40, aggro: 250, ranged: true, weapon: 'ak', isBoss: true },
   // Hostile wildlife — bear is a slow tank with huge melee damage; boar is
   // a sprinter that charges and bowls the player over.
   bear:         { hp: 90,  speed: 3.4, dmg: 28, range: 2.2, cd: 1.6, aggro: 36, ranged: false },
@@ -827,9 +830,25 @@ function rollLoot(tableKey, x, z) {
 //   wild → players solamente (no atacan zombies — los animales y los
 //          zombies se ignoran; los lobos no son tan tontos)
 // =====================================================================
+// Helper para detectar TODOS los tipos de cientifico (incluyendo elites).
+// IMPORTANTE: si te olvidás un etype acá, ese cientifico se va a faction
+// 'zombie' por default y los demás cientificos lo van a atacar como
+// enemigo (friendly fire). Esto pasaba con los 4 elites del boss tower —
+// se mataban entre ellos antes de que el jugador llegara.
+function isAnyScientist(etype) {
+  return etype === 'scientist'
+      || etype === 'sci_shotgun'
+      || etype === 'sci_sniper'
+      || etype === 'sci_elite_rifle'
+      || etype === 'sci_elite_shotgun'
+      || etype === 'sci_elite_sniper'
+      || etype === 'sci_elite_ak'
+      || etype === 'boss';
+}
+
 function factionOf(e) {
   const t = e.etype;
-  if (t === 'scientist' || t === 'sci_shotgun' || t === 'sci_sniper' || t === 'boss') return 'human';
+  if (isAnyScientist(t)) return 'human';
   if (t === 'wolf' || t === 'bear' || t === 'boar') return 'wild';
   if (t === 'deer' || t === 'rabbit') return 'passive';
   return 'zombie';
@@ -1066,8 +1085,7 @@ function killEnemy(e, byId = null) {
   // Boss + elites ya spawnean con la boss tower al aproximarse — no hay
   // threshold-based spawn como antes. Solo trackeamos kills de scientists
   // por si alguna mecánica futura lo necesita.
-  const isScientist = e.etype === 'scientist' || e.etype === 'sci_shotgun' || e.etype === 'sci_sniper';
-  if (e.townId === 'helix-lab' && isScientist) {
+  if (e.townId === 'helix-lab' && isAnyScientist(e.etype) && !e.isBoss) {
     const ts = townState.get('helix-lab');
     ts.scientistsDead++;
   }
@@ -2005,8 +2023,21 @@ setInterval(() => {
     // Patrulla de scientists o aggro boost (por scream / disparo no
     // silenciado) ignora el aggro range normal.
     const aggroBoosted = e._aggroBoostUntil && Date.now() < e._aggroBoostUntil;
-    const isScientist = e.etype === 'scientist' || e.etype === 'sci_shotgun' || e.etype === 'sci_sniper';
-    if (!e.patrol && !aggroBoosted && d > cfg.aggro) {
+    const isScientist = isAnyScientist(e.etype);
+    // === FORCE AGGRO EN HELIX LAB ===
+    // Si sos cientifico (cualquier variante) Y estás en helix-lab Y hay
+    // un jugador a < 250m del centro de la ciudad → aggro inmediato sin
+    // importar tu cfg.aggro. Meterse en la ciudad = muerte asegurada.
+    let cityForceAggro = false;
+    if (isScientist && e.townId === 'helix-lab' && nearestKind === 'player') {
+      const helix = TOWNS.find(x => x.id === 'helix-lab');
+      if (helix) {
+        const pdx = nearest.x - helix.cx, pdz = nearest.z - helix.cz;
+        const playerInLab = (pdx * pdx + pdz * pdz) < (250 * 250);
+        if (playerInLab) cityForceAggro = true;
+      }
+    }
+    if (!e.patrol && !aggroBoosted && !cityForceAggro && d > cfg.aggro) {
       // IDLE WANDER para TODOS los scientists (no solo helix-lab) —
       // patrullan cerca de su posición de spawn. Antes solo se aplicaba
       // a helix-lab, dejando guards de bunkers/heli/poi congelados.
@@ -2031,17 +2062,25 @@ setInterval(() => {
       continue;
     }
     // ALERTA: si un scientist ENTRA en aggro y no estaba alertado
-    // recientemente, alerta a otros scientists en 35m (boostea su aggro).
+    // recientemente, alerta a otros scientists en 80m (era 35m). En
+    // Helix Lab además se propaga a TODOS los cientificos del lab
+    // (alarma de ciudad — entrar = todos van a por vos).
     if (isScientist && (!e._lastAlerted || Date.now() - e._lastAlerted > 30000)) {
       e._lastAlerted = Date.now();
       let alerted = 0;
+      const isHelixSci = e.townId === 'helix-lab';
       for (const other of enemies.values()) {
         if (other.id === e.id) continue;
-        const otherIsSci = other.etype === 'scientist' || other.etype === 'sci_shotgun' || other.etype === 'sci_sniper';
-        if (!otherIsSci) continue;
+        if (!isAnyScientist(other.etype)) continue;
+        // Helix Lab: alerta city-wide. Otros sites: 80m.
+        if (isHelixSci && other.townId === 'helix-lab') {
+          other._aggroBoostUntil = Date.now() + 60000;   // 60s
+          alerted++;
+          continue;
+        }
         const od = Math.hypot(other.x - e.x, other.z - e.z);
-        if (od < 35) {
-          other._aggroBoostUntil = Date.now() + 12000;  // 12s de alerta
+        if (od < 80) {
+          other._aggroBoostUntil = Date.now() + 30000;   // 30s
           alerted++;
         }
       }
