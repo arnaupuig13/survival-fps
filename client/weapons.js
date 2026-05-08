@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { camera, scene } from './three-setup.js';
 import { enemies } from './entities.js';
 import { network } from './network.js';
-import { player } from './player.js';
+import { player, keys } from './player.js';
 import * as inv from './inventory.js';
 import * as sfx from './sounds.js';
 import { spawnTracer, spawnDamageNumber, spawnBulletHole } from './effects.js';
@@ -21,11 +21,14 @@ import * as attachments from './attachments.js';
 // shotgun fires `pellets` per shot at high spread.
 // sniper has a slow cooldown but huge damage; auto-zooms when ADS held.
 const WEAPONS = {
-  pistol:  { dmg: 4,  cooldown: 0.5,  range: 50,  auto: false, name: 'PISTOLA',     ammo: 'bullet_p',     magazineSize: 12, reloadTime: 1.2, aggroRange: 18 },
-  rifle:   { dmg: 6,  cooldown: 0.12, range: 100, auto: true,  name: 'RIFLE',       ammo: 'bullet_r',     requires: 'rifle_pickup',   magazineSize: 30, reloadTime: 1.8, aggroRange: 32 },
-  smg:     { dmg: 3,  cooldown: 0.07, range: 70,  auto: true,  name: 'SMG',         ammo: 'bullet_smg',   requires: 'smg_pickup',     magazineSize: 35, reloadTime: 2.0, aggroRange: 24 },
-  shotgun: { dmg: 5,  cooldown: 0.85, range: 35,  auto: false, name: 'ESCOPETA',    ammo: 'shell',        requires: 'shotgun_pickup', magazineSize: 6,  reloadTime: 2.4, aggroRange: 30, pellets: 8, spread: 0.18 },
-  sniper:  { dmg: 90, cooldown: 1.6,  range: 220, auto: false, name: 'SNIPER',      ammo: 'sniper_round', requires: 'sniper_pickup',  magazineSize: 5,  reloadTime: 2.8, aggroRange: 42 },
+  pistol:   { dmg: 4,  cooldown: 0.5,  range: 50,  auto: false, name: 'PISTOLA',     ammo: 'bullet_p',     magazineSize: 12, reloadTime: 1.2, aggroRange: 18 },
+  rifle:    { dmg: 6,  cooldown: 0.12, range: 100, auto: true,  name: 'RIFLE',       ammo: 'bullet_r',     requires: 'rifle_pickup',   magazineSize: 30, reloadTime: 1.8, aggroRange: 32 },
+  smg:      { dmg: 3,  cooldown: 0.07, range: 70,  auto: true,  name: 'SMG',         ammo: 'bullet_smg',   requires: 'smg_pickup',     magazineSize: 35, reloadTime: 2.0, aggroRange: 24 },
+  shotgun:  { dmg: 5,  cooldown: 0.85, range: 35,  auto: false, name: 'ESCOPETA',    ammo: 'shell',        requires: 'shotgun_pickup', magazineSize: 6,  reloadTime: 2.4, aggroRange: 30, pellets: 8, spread: 0.18 },
+  sniper:   { dmg: 90, cooldown: 1.6,  range: 220, auto: false, name: 'SNIPER',      ammo: 'sniper_round', requires: 'sniper_pickup',  magazineSize: 5,  reloadTime: 2.8, aggroRange: 42 },
+  // Ballesta — silenciosa por naturaleza (no levanta zombies). Daño alto,
+  // 1 dardo por carga, recarga lenta. Ideal para sigilo.
+  crossbow: { dmg: 60, cooldown: 1.2,  range: 80,  auto: false, name: 'BALLESTA',    ammo: 'bolt',         requires: 'crossbow_pickup',magazineSize: 1,  reloadTime: 1.4, aggroRange: 12, intrinsicSilence: true },
 };
 
 // =====================================================================
@@ -160,7 +163,7 @@ addEventListener('keydown', (e) => {
   // selectWeaponBySlot). Direct number keys here would conflict.
 });
 
-function selectWeapon(name) {
+export function selectWeapon(name) {
   const cfg = WEAPONS[name];
   if (!cfg) return;
   if (cfg.requires && !inv.has(cfg.requires, 1)) return;
@@ -252,8 +255,9 @@ function tryFire() {
     }
   }
   cooldown = cfg.cooldown;
-  // Sound — silencer mutes the report. Picks per weapon kind.
-  const silent = attachments.has(active, 'silencer');
+  // Sound — silencer mutes the report. La ballesta es silenciosa por
+  // naturaleza (intrinsicSilence en su cfg).
+  const silent = attachments.has(active, 'silencer') || cfg.intrinsicSilence;
   if (silent) sfx.playEmpty?.();
   else if (active === 'rifle' || active === 'sniper') sfx.playRifle(0);
   else sfx.playPistol(0);
@@ -377,13 +381,42 @@ function flashHitMarker(hit, isKill = false) {
 // =====================================================================
 // Per-frame
 // =====================================================================
+// Walk bob — el arma se mueve en figura de 8 mientras caminás. ADS
+// reduce el bob a casi cero. Sway responde al mover el mouse.
+let _bobPhase = 0;
+let _swayX = 0, _swayY = 0;
+let _lastYaw = 0, _lastPitch = 0;
+
 export function updateWeapons(dt) {
   // Ocultar el arma de fuego cuando NO hay arma equipada o hay tool melee.
   gunGroup.visible = !!active && !getActiveTool();
   // Lerp ADS: muever el grupo a posición AIM (centrada) cuando _aimTarget=1.
   _aimT += (_aimTarget - _aimT) * (1 - Math.exp(-12 * dt));
-  gunGroup.position.x = HIP_POS.x + (AIM_POS.x - HIP_POS.x) * _aimT;
-  gunGroup.position.y = HIP_POS.y + (AIM_POS.y - HIP_POS.y) * _aimT;
+  // Walk bob — figura 8, atenuado durante ADS.
+  const moving = !!(keys['KeyW'] || keys['KeyA'] || keys['KeyS'] || keys['KeyD']);
+  const sprint = !!(keys['ShiftLeft'] || keys['ShiftRight']);
+  if (moving) {
+    _bobPhase += dt * (sprint ? 14 : 9);
+  } else {
+    _bobPhase *= 0.92;
+  }
+  const bobAmpX = (1 - _aimT) * (sprint ? 0.040 : 0.022) * (moving ? 1 : 0.18);
+  const bobAmpY = (1 - _aimT) * (sprint ? 0.030 : 0.018) * (moving ? 1 : 0.18);
+  const bobX = Math.sin(_bobPhase) * bobAmpX;
+  const bobY = Math.abs(Math.cos(_bobPhase)) * bobAmpY - bobAmpY * 0.4;
+  // Weapon sway — el arma reacciona ligeramente al mover el mouse (yaw/pitch).
+  const yaw = player.yaw(), pitch = player.pitch();
+  const dyaw = yaw - _lastYaw;
+  const dpitch = pitch - _lastPitch;
+  _lastYaw = yaw; _lastPitch = pitch;
+  // Lerp del sway hacia 0 + add el delta del frame con factor.
+  _swayX = _swayX * Math.exp(-8 * dt) + dyaw * 0.15;
+  _swayY = _swayY * Math.exp(-8 * dt) + dpitch * 0.15;
+  // Clamp para no romper visual.
+  _swayX = Math.max(-0.05, Math.min(0.05, _swayX));
+  _swayY = Math.max(-0.05, Math.min(0.05, _swayY));
+  gunGroup.position.x = HIP_POS.x + (AIM_POS.x - HIP_POS.x) * _aimT + bobX + _swayX;
+  gunGroup.position.y = HIP_POS.y + (AIM_POS.y - HIP_POS.y) * _aimT + bobY + _swayY;
   gunGroup.position.z = HIP_POS.z + (AIM_POS.z - HIP_POS.z) * _aimT;
   // Reflex sight visible solo si hay arma activa y tiene scope equipado.
   reflexGroup.visible = !!active && attachments.has(active, 'scope');

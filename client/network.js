@@ -38,6 +38,7 @@ class NetworkClient {
     this.onDifficulty = null;
     this.onWeather = null;
     this.onHeliTrader = null;
+    this.onStorm = null;
     this.onSupplyDrop = null;
     this._sendAccum = 0;
   }
@@ -151,6 +152,8 @@ class NetworkClient {
       this.onWeather?.(msg);
     } else if (msg.type === 'heliTrader') {
       this.onHeliTrader?.(msg);
+    } else if (msg.type === 'storm') {
+      this.onStorm?.(msg);
     } else if (msg.type === 'supplyDrop') {
       this.onSupplyDrop?.(msg.x, msg.z);
     } else if (msg.type === 'fire') {

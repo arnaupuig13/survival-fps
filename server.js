@@ -298,6 +298,8 @@ const LOOT_TABLES = {
     { item: 'rifle_pickup',   chance: 0.20 },
     { item: 'shotgun_pickup', chance: 0.15 },
     { item: 'smg_pickup',     chance: 0.10 },
+    { item: 'crossbow_pickup',chance: 0.12 },
+    { item: 'bolt',           range: [0, 4] },
     { item: 'vest_armor',     chance: 0.08 },
     { item: 'ext_mag',        chance: 0.07 },
     { item: 'axe',            chance: 0.10 },
@@ -305,6 +307,8 @@ const LOOT_TABLES = {
     { item: 'campfire',       chance: 0.20 },
     { item: 'bear_trap',      chance: 0.10 },
     { item: 'flashlight',     chance: 0.08 },
+    { item: 'smoke_grenade',  chance: 0.18 },
+    { item: 'flashbang',      chance: 0.10 },
   ],
   // MILITARY — POIs militares (helicópteros) custodiados por científicos.
   // Cantidad similar a town pero bias a armas/ammo/AP, no comida ni recursos.
@@ -345,10 +349,14 @@ const LOOT_TABLES = {
     { item: 'rifle_pickup',  chance: 0.55 },
     { item: 'shotgun_pickup',chance: 0.30 },
     { item: 'smg_pickup',    chance: 0.30 },
+    { item: 'crossbow_pickup',chance: 0.20 },
+    { item: 'bolt',          range: [0, 6] },
     { item: 'vest_armor',    chance: 0.30 },
     { item: 'helmet_armor',  chance: 0.18 },
     { item: 'scope',         chance: 0.22 },
     { item: 'ext_mag',       chance: 0.18 },
+    { item: 'smoke_grenade', chance: 0.25 },
+    { item: 'flashbang',     chance: 0.18 },
     { item: 'scrap',         range: [2, 6] },
   ],
   // Boss drop — guaranteed legendary plus full attachment kit.
@@ -839,6 +847,60 @@ let weatherCheckAccum = 60; // primer tick de clima a los 30s
 let currentWeather = 'clear';
 
 // =====================================================================
+// Tormenta radioactiva — battle-royale-ish. Cada 8-12 min se anuncia
+// un círculo seguro. Después de 60s warning, players FUERA del círculo
+// reciben 3 HP/s. Dura 90s, después se libera.
+// =====================================================================
+let stormCd = 360;        // primera tormenta a los 6 min
+let stormState = 'idle';  // 'idle' | 'warning' | 'active'
+let stormCenter = { x: 0, z: 0 };
+let stormRadius = 0;
+let stormEndsAt = 0;
+let stormWarnEndsAt = 0;
+
+function maybeTriggerStorm() {
+  if (players.size === 0) return;
+  if (stormState === 'idle') {
+    stormCd -= AI_DT;
+    if (stormCd > 0) return;
+    // Nueva tormenta — elige centro random y radius proporcional a escala.
+    stormCd = 480 + Math.random() * 240; // 8-12 min
+    stormCenter.x = (Math.random() * 2 - 1) * (WORLD_HALF * 0.5);
+    stormCenter.z = (Math.random() * 2 - 1) * (WORLD_HALF * 0.5);
+    stormRadius = 110;   // safe zone radius
+    stormState = 'warning';
+    stormWarnEndsAt = Date.now() + 60 * 1000;  // 60s para llegar
+    broadcast({ type: 'banner', text: '☢ TORMENTA RADIOACTIVA EN 60s — busquen zona segura' });
+    broadcast({ type: 'storm', state: 'warning', x: stormCenter.x, z: stormCenter.z, r: stormRadius, until: stormWarnEndsAt });
+  } else if (stormState === 'warning') {
+    if (Date.now() >= stormWarnEndsAt) {
+      stormState = 'active';
+      stormEndsAt = Date.now() + 90 * 1000;
+      broadcast({ type: 'banner', text: '☢ TORMENTA ACTIVA — daño fuera del círculo' });
+      broadcast({ type: 'storm', state: 'active', x: stormCenter.x, z: stormCenter.z, r: stormRadius, until: stormEndsAt });
+    }
+  } else if (stormState === 'active') {
+    // Daño 3 HP/s a players fuera del radio.
+    for (const p of players.values()) {
+      if (p.hp <= 0) continue;
+      const d = Math.hypot(p.x - stormCenter.x, p.z - stormCenter.z);
+      if (d > stormRadius) {
+        const dmg = Math.round(3 * AI_DT * 10) / 10;
+        p.hp = Math.max(0, p.hp - dmg);
+        if (Math.random() < 0.05) {  // ~tick spo a 1/2s
+          sendTo(p, { type: 'youHit', dmg: 1, by: 0, sx: p.x, sy: p.y, sz: p.z, source: 'storm' });
+        }
+      }
+    }
+    if (Date.now() >= stormEndsAt) {
+      stormState = 'idle';
+      broadcast({ type: 'banner', text: '✓ La tormenta pasó' });
+      broadcast({ type: 'storm', state: 'end' });
+    }
+  }
+}
+
+// =====================================================================
 // Wave system — every WAVE_INTERVAL seconds (with jitter), the server
 // announces an inbound wave and bursts a horde of hostiles around each
 // connected player. Banner broadcast lets clients sting + warn.
@@ -1012,6 +1074,7 @@ setInterval(() => {
     maybeTriggerNightHorde();
     maybeTriggerScientistPatrol();
     maybeTriggerHeliTrader();
+    maybeTriggerStorm();
   }
 
   // Clima: cada 90s real chequeamos si cambia. Lluvia 25%, niebla 15%

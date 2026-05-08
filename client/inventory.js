@@ -42,6 +42,8 @@ export const ITEMS = {
   shotgun_pickup:  { label: 'ESCOPETA',       max: 1, oneTime: true, rarity: 'epic', weight: 4 },
   smg_pickup:      { label: 'SMG',            max: 1, oneTime: true, rarity: 'rare', weight: 3 },
   sniper_pickup:   { label: 'RIFLE FRANCOTIRADOR', max: 1, oneTime: true, rarity: 'legendary', weight: 6 },
+  crossbow_pickup: { label: 'BALLESTA',       max: 1, oneTime: true, rarity: 'rare', weight: 3 },
+  bolt:            { label: 'DARDOS',         max: 30, rarity: 'uncommon', weight: 0.04 },
   axe:             { label: 'HACHA',          max: 1, oneTime: true, rarity: 'uncommon', weight: 2 },
   pickaxe:         { label: 'PICO',           max: 1, oneTime: true, rarity: 'uncommon', weight: 2 },
   // Attachments (oneTime).
@@ -67,6 +69,9 @@ export const ITEMS = {
   antibiotics:     { label: 'ANTIBIOTICOS',   max: 5,  rarity: 'rare', weight: 0.1 },
   // Trampas.
   bear_trap:       { label: 'CEPO',           max: 5,  rarity: 'uncommon', weight: 3 },
+  // Granadas de utilidad.
+  smoke_grenade:   { label: 'GRANADA HUMO',   max: 5,  rarity: 'uncommon', weight: 0.4 },
+  flashbang:       { label: 'GRANADA CIEGA',  max: 5,  rarity: 'rare', weight: 0.4 },
   // Survival gear nuevo.
   flashlight:      { label: 'LINTERNA',       max: 1, oneTime: true, rarity: 'uncommon', weight: 0.4 },
   dog_collar:      { label: 'COLLAR PERRO',   max: 1, oneTime: true, rarity: 'epic', weight: 0.3 },
@@ -87,6 +92,10 @@ const state = {
   dog_collar: 0,
   // La pistola arranca equipada con el jugador.
   pistol_pickup: 1,
+  crossbow_pickup: 0,
+  bolt: 0,
+  smoke_grenade: 0,
+  flashbang: 0,
   bandage:  1,
   grenade:  2,
   rifle_pickup: 0,

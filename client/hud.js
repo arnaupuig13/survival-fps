@@ -105,11 +105,13 @@ const HOTBAR_LABEL_OVERRIDE = {
   smg_pickup: 'SMG',
   shotgun_pickup: 'ESCOPETA',
   sniper_pickup: 'SNIPER',
+  crossbow_pickup: 'BALLESTA',
   bullet_p: 'PISTOLA',
   bullet_r: 'RIFLE',
   bullet_smg: 'SMG',
   shell: 'ESCOPETA',
   sniper_round: 'SNIPER',
+  bolt: 'BALLESTA',
 };
 
 // Pinta TODOS los slots con data-slot=idx (HUD principal + modal mirror).

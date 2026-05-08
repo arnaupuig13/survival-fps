@@ -103,7 +103,7 @@ const DESCRIPTIONS = {
 };
 
 // Items that can be "used" from the inventory ctx menu.
-const USABLE = new Set(['bandage', 'meat_cooked', 'meat_raw', 'berry', 'water_bottle', 'dog_collar', 'antibiotics']);
+const USABLE = new Set(['bandage', 'meat_cooked', 'meat_raw', 'berry', 'water_bottle', 'dog_collar', 'antibiotics', 'smoke_grenade', 'flashbang']);
 
 // =====================================================================
 // State

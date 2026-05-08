@@ -36,7 +36,7 @@ import { nearestInRange, removeCrate } from './loot.js';
 import { renderMinimap } from './minimap.js';
 import {
   lastShotWithinKillWindow, getActive as getActiveWeapon,
-  selectWeaponBySlot, isReloading, activeWeaponMeta, consumeRecoil,
+  selectWeaponBySlot, selectWeapon, isReloading, activeWeaponMeta, consumeRecoil,
   setAimMode,
 } from './weapons.js';
 import { updateEffects, spawnBloodDecal, spawnGoreBurst } from './effects.js';
@@ -55,6 +55,8 @@ import * as dog from './dog.js';
 import * as heliTrader from './heli-trader.js';
 import * as hotbar from './hotbar.js';
 import * as attachments from './attachments.js';
+import * as smoke from './smoke.js';
+import * as storm from './storm.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -370,6 +372,10 @@ network.onHeliTrader = (msg) => {
   } else if (msg.state === 'leave') {
     heliTrader.despawn();
   }
+};
+network.onStorm = (msg) => {
+  storm.setFromServer(msg);
+  if (msg.state === 'warning') sfx.playBossSting?.();
 };
 network.onEnemyDead = (id, msg) => {
   const e = enemies.get(id);
@@ -716,6 +722,13 @@ addEventListener('keydown', (e) => {
   } else if (e.code === 'KeyP' && !e.repeat) {
     // Antibióticos — cura infección.
     status.tryAntibiotics();
+  } else if (e.code === 'KeyV' && !e.repeat) {
+    // Granada de humo — cobertura visual.
+    if (inv.consume('smoke_grenade', 1)) {
+      smoke.throwSmoke();
+    } else {
+      logLine('Sin granadas de humo');
+    }
   } else if (e.code === 'KeyF') {
     if (vehicle.isDriving()) {
       vehicle.exit();
@@ -919,6 +932,13 @@ function handleHotbarSlot(slotIdx) {
     setHotbarActive(slotIdx);
     return;
   }
+  if (itemKey === 'crossbow_pickup' || itemKey === 'bolt') {
+    if (!inv.has('crossbow_pickup', 1)) { logLine('Necesitás una ballesta'); return; }
+    tools.setActiveTool(null);
+    selectWeapon('crossbow');
+    setHotbarActive(slotIdx);
+    return;
+  }
   // HERRAMIENTAS MELEE.
   if (itemKey === 'axe') {
     if (!inv.has('axe', 1)) { logLine('Necesitás un hacha'); return; }
@@ -1036,6 +1056,8 @@ function frame(now) {
   flashlight.tick();
   dog.update(dt);
   heliTrader.update(dt);
+  smoke.update(dt);
+  storm.tickHud();
   setHP(player.hp);
   setSurvival(player.hunger, player.thirst, player.warmth);
   setCompass(player.yaw());
