@@ -2027,6 +2027,39 @@ setInterval(() => {
     } else if (e._burnUntil) {
       e._burnUntil = 0;
     }
+    // === CLAMP HELPER ===
+    // Aplicado al final del tick para evitar que el AI movement deje al
+    // enemigo atravesar paredes / salir de Helix Lab / abandonar el tower.
+    // Ejecutado via `clampPos(e)` en cada code path que mueve al enemigo
+    // (idle wander, chase, special) Y al final del iteration loop.
+    const clampPos = (en) => {
+      if (en._bldgBox) {
+        const dxb = en.x - en._bldgBox.cx;
+        const dzb = en.z - en._bldgBox.cz;
+        if (Math.abs(dxb) > en._bldgBox.hw) en.x = en._bldgBox.cx + Math.sign(dxb) * en._bldgBox.hw;
+        if (Math.abs(dzb) > en._bldgBox.hh) en.z = en._bldgBox.cz + Math.sign(dzb) * en._bldgBox.hh;
+      }
+      if (en.townId === 'helix-lab' && isAnyScientist(en.etype)) {
+        const HCX = 0, HCZ = -200, HR = 110;
+        const dxh = en.x - HCX, dzh = en.z - HCZ;
+        const distH = Math.hypot(dxh, dzh);
+        if (distH > HR) {
+          const k = HR / distH;
+          en.x = HCX + dxh * k;
+          en.z = HCZ + dzh * k;
+        }
+      }
+      if ((en.isBoss || ETYPES[en.etype]?.special === 'elite') && en._anchor) {
+        const dxa = en.x - en._anchor.x, dza = en.z - en._anchor.z;
+        const distA = Math.hypot(dxa, dza);
+        if (distA > 8) {
+          const k = 8 / distA;
+          en.x = en._anchor.x + dxa * k;
+          en.z = en._anchor.z + dza * k;
+        }
+      }
+      en.y = heightAt(en.x, en.z);
+    };
 
     // Find nearest target — players + enemigos de faction opuesta.
     // Players dentro de humo son invisibles. nearestKind dice si el
@@ -2075,8 +2108,8 @@ setInterval(() => {
       const sp = cfg.speed * 0.3;
       e.x += Math.sin(e._idleHeading.angle) * sp * AI_DT;
       e.z += Math.cos(e._idleHeading.angle) * sp * AI_DT;
-      e.y = heightAt(e.x, e.z);
       e.ry = e._idleHeading.angle;
+      clampPos(e);
       continue;
     }
     if (!nearest) continue;
@@ -2154,9 +2187,9 @@ setInterval(() => {
         const speed = cfg.speed * 0.4;
         e.x += Math.sin(e._idleHeading.angle) * speed * AI_DT;
         e.z += Math.cos(e._idleHeading.angle) * speed * AI_DT;
-        e.y = heightAt(e.x, e.z);
         e.ry = e._idleHeading.angle;
       }
+      clampPos(e);
       continue;
     }
     // ALERTA: si un scientist ENTRA en aggro y no estaba alertado
@@ -2291,50 +2324,9 @@ setInterval(() => {
       }
     }
 
-    // === BUILDING BOX CLAMP ===
-    // Enemigos spawneados dentro de un edificio se quedan dentro de su
-    // footprint — antes atravesaban paredes porque el server no tiene
-    // collision detection. Ahora chequeamos el _bldgBox del enemigo y lo
-    // metemos de vuelta si su movimiento lo dejo fuera.
-    if (e._bldgBox) {
-      const dxb = e.x - e._bldgBox.cx;
-      const dzb = e.z - e._bldgBox.cz;
-      if (Math.abs(dxb) > e._bldgBox.hw) e.x = e._bldgBox.cx + Math.sign(dxb) * e._bldgBox.hw;
-      if (Math.abs(dzb) > e._bldgBox.hh) e.z = e._bldgBox.cz + Math.sign(dzb) * e._bldgBox.hh;
-      e.y = heightAt(e.x, e.z);
-    }
-    // === HELIX LAB CLAMP ===
-    // Cientificos del lab NUNCA salen del muro perimetral. Si su
-    // movimiento (chase del player o idle wander) los lleva fuera del
-    // radio CITY_HALF, los devolvemos al borde. Es como si estuvieran
-    // protegiendo la ciudad y no quisieran salir nunca.
-    if (e.townId === 'helix-lab' && isAnyScientist(e.etype)) {
-      const HELIX_CX = 0, HELIX_CZ = -200;
-      const HELIX_RADIUS = 110;     // 5m de margen contra el muro a 115
-      const dxh = e.x - HELIX_CX, dzh = e.z - HELIX_CZ;
-      const distH = Math.hypot(dxh, dzh);
-      if (distH > HELIX_RADIUS) {
-        const k = HELIX_RADIUS / distH;
-        e.x = HELIX_CX + dxh * k;
-        e.z = HELIX_CZ + dzh * k;
-        e.y = heightAt(e.x, e.z);
-      }
-    }
-    // === BOSS + ELITES CLAMP TO TOWER ===
-    // El boss y los 4 elites quedan ANCLADOS al boss tower. Aunque
-    // chaseen al player, no se alejan más de 8m de su posición spawn.
-    // Antes el boss caminaba 90m hacia un zombie y abandonaba la torre.
-    if ((e.isBoss || ETYPES[e.etype]?.special === 'elite') && e._anchor) {
-      const ANCHOR_RADIUS = 8;
-      const dxa = e.x - e._anchor.x, dza = e.z - e._anchor.z;
-      const distA = Math.hypot(dxa, dza);
-      if (distA > ANCHOR_RADIUS) {
-        const k = ANCHOR_RADIUS / distA;
-        e.x = e._anchor.x + dxa * k;
-        e.z = e._anchor.z + dza * k;
-        e.y = heightAt(e.x, e.z);
-      }
-    }
+    // Final clamp para chase movement / melee chase. Idle wander ya
+    // llamo clampPos antes del continue.
+    clampPos(e);
   }
 }, 1000 / AI_HZ);
 
