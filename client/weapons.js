@@ -21,14 +21,14 @@ import * as attachments from './attachments.js';
 // shotgun fires `pellets` per shot at high spread.
 // sniper has a slow cooldown but huge damage; auto-zooms when ADS held.
 const WEAPONS = {
-  pistol:   { dmg: 4,  cooldown: 0.5,  range: 50,  auto: false, name: 'PISTOLA',     ammo: 'bullet_p',     magazineSize: 12, reloadTime: 1.2, aggroRange: 18 },
-  rifle:    { dmg: 6,  cooldown: 0.12, range: 100, auto: true,  name: 'RIFLE',       ammo: 'bullet_r',     requires: 'rifle_pickup',   magazineSize: 30, reloadTime: 1.8, aggroRange: 32 },
-  smg:      { dmg: 3,  cooldown: 0.07, range: 70,  auto: true,  name: 'SMG',         ammo: 'bullet_smg',   requires: 'smg_pickup',     magazineSize: 35, reloadTime: 2.0, aggroRange: 24 },
-  shotgun:  { dmg: 5,  cooldown: 0.85, range: 35,  auto: false, name: 'ESCOPETA',    ammo: 'shell',        requires: 'shotgun_pickup', magazineSize: 6,  reloadTime: 2.4, aggroRange: 30, pellets: 8, spread: 0.18 },
-  sniper:   { dmg: 90, cooldown: 1.6,  range: 220, auto: false, name: 'SNIPER',      ammo: 'sniper_round', requires: 'sniper_pickup',  magazineSize: 5,  reloadTime: 2.8, aggroRange: 42 },
-  // Ballesta — silenciosa por naturaleza (no levanta zombies). Daño alto,
-  // 1 dardo por carga, recarga lenta. Ideal para sigilo.
-  crossbow: { dmg: 60, cooldown: 1.2,  range: 80,  auto: false, name: 'BALLESTA',    ammo: 'bolt',         requires: 'crossbow_pickup',magazineSize: 1,  reloadTime: 1.4, aggroRange: 12, intrinsicSilence: true },
+  pistol:   { dmg: 4,  cooldown: 0.5,  range: 120, auto: false, name: 'PISTOLA',     ammo: 'bullet_p',     magazineSize: 12, reloadTime: 1.2, aggroRange: 18 },
+  rifle:    { dmg: 6,  cooldown: 0.12, range: 250, auto: true,  name: 'RIFLE',       ammo: 'bullet_r',     requires: 'rifle_pickup',   magazineSize: 30, reloadTime: 1.8, aggroRange: 32 },
+  smg:      { dmg: 3,  cooldown: 0.07, range: 180, auto: true,  name: 'SMG',         ammo: 'bullet_smg',   requires: 'smg_pickup',     magazineSize: 35, reloadTime: 2.0, aggroRange: 24 },
+  shotgun:  { dmg: 5,  cooldown: 0.85, range: 60,  auto: false, name: 'ESCOPETA',    ammo: 'shell',        requires: 'shotgun_pickup', magazineSize: 6,  reloadTime: 2.4, aggroRange: 30, pellets: 8, spread: 0.18 },
+  // Sniper — sin caída de bala (noDrop). Trayectoria recta hasta 500m.
+  sniper:   { dmg: 90, cooldown: 1.6,  range: 500, auto: false, name: 'SNIPER',      ammo: 'sniper_round', requires: 'sniper_pickup',  magazineSize: 5,  reloadTime: 2.8, aggroRange: 42, noDrop: true },
+  // Ballesta — silenciosa por naturaleza. Caída de dardo significativa.
+  crossbow: { dmg: 60, cooldown: 1.2,  range: 150, auto: false, name: 'BALLESTA',    ammo: 'bolt',         requires: 'crossbow_pickup',magazineSize: 1,  reloadTime: 1.4, aggroRange: 12, intrinsicSilence: true },
 };
 
 // =====================================================================
@@ -267,9 +267,6 @@ function tryFire() {
   // Build raycast from camera center, transformed into world space.
   camera.getWorldPosition(_origin);
   camera.getWorldDirection(_dir);
-  ray.set(_origin, _dir);
-  ray.far = cfg.range;
-
   // Build candidate list: every enemy's mesh subtree.
   const candidates = [];
   const eMap = new Map();
@@ -277,9 +274,29 @@ function tryFire() {
     e.mesh.traverse(c => { if (c.isMesh) { candidates.push(c); eMap.set(c, id); } });
   }
 
-  // Wider raycast against scene as fallback for surface hits — used to
-  // place bullet holes when we miss enemies (we don't want to miss-trace
-  // through the world). We cap recursive=true so building children count.
+  // BULLET DROP — armas estándar tienen caída a partir de 100m. El sniper
+  // y la ballesta tienen `noDrop` o son intrínsecamente rectos (ballesta
+  // tiene noDrop:false → cae más por su naturaleza). Implementación:
+  //   1. Probe inicial raycast lineal para estimar distancia objetivo.
+  //   2. Si pasa de 100m (y la arma tiene drop), ajustar dir.y hacia
+  //      abajo proporcional al exceso de distancia, y re-raycastear.
+  let probeRay = new THREE.Raycaster(_origin.clone(), _dir.clone(), 0.3, cfg.range);
+  probeRay.camera = camera;
+  const probeHits = probeRay.intersectObjects(candidates, false);
+  let estimatedDist = cfg.range;
+  if (probeHits.length > 0) estimatedDist = probeHits[0].distance;
+  // Aplica drop si la arma no es noDrop y la distancia excede 100m.
+  if (!cfg.noDrop && estimatedDist > 100) {
+    // 4 cm de caída por metro extra después de 100m. A 200m son 4m de
+    // drop — tenés que apuntar más arriba.
+    const dropMeters = (estimatedDist - 100) * 0.04;
+    // Convertimos drop en metros a un ángulo aproximado (drop / dist).
+    const yOffset = -dropMeters / estimatedDist;
+    _dir.y += yOffset;
+    _dir.normalize();
+  }
+  ray.set(_origin, _dir);
+  ray.far = cfg.range;
   const hits = ray.intersectObjects(candidates, false);
   let hitId = null;
   let isHeadshot = false;

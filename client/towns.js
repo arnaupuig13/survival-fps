@@ -14,7 +14,7 @@ import { heightAt, obstacles } from './world.js';
 
 const WALL_THICK = 0.25;
 const WALL_HEIGHT = 3.0;
-const DOOR_WIDTH = 2.6;          // wider so the player + closest-point pushout has clear room
+const DOOR_WIDTH = 3.0;          // ampliado para evitar atascos en doorway
 const DOOR_HEIGHT = 2.4;
 
 // Cached materials so we don't allocate one per wall.

@@ -66,7 +66,7 @@ function _rawHeight(x, z) {
   return h;
 }
 
-// Town flat areas — el terreno se aplana dentro de estos radios.
+// Town flat areas — debe matchear server.TOWN_FLAT byte-identical.
 const TOWN_FLAT = [
   { cx: -300, cz:  280, r: 38, transition: 18 },
   { cx:  310, cz:  300, r: 38, transition: 18 },
@@ -76,6 +76,23 @@ const TOWN_FLAT = [
   { cx:  150, cz:    0, r: 14, transition: 8 },
   { cx: -240, cz:  240, r: 14, transition: 8 },
   { cx:  100, cz: -260, r: 14, transition: 8 },
+  { cx: -160, cz:  120, r: 10, transition: 6 },
+  { cx:  160, cz:  140, r: 10, transition: 6 },
+  { cx:  -80, cz:   20, r: 10, transition: 6 },
+  { cx:  220, cz: -100, r: 10, transition: 6 },
+  { cx: -200, cz:  -50, r: 10, transition: 6 },
+  { cx: -180, cz:  -80, r: 9, transition: 6 },
+  { cx:  200, cz:  -60, r: 9, transition: 6 },
+  { cx:    0, cz:  340, r: 9, transition: 6 },
+  { cx: -350, cz:    0, r: 9, transition: 6 },
+  { cx:  120, cz:  200, r: 8, transition: 5 },
+  { cx: -200, cz:  180, r: 8, transition: 5 },
+  { cx:   60, cz: -100, r: 8, transition: 5 },
+  { cx:  -80, cz: -100, r: 8, transition: 5 },
+  { cx:  220, cz:  180, r: 8, transition: 5 },
+  { cx: -260, cz:  100, r: 8, transition: 5 },
+  { cx:  340, cz:   40, r: 8, transition: 5 },
+  { cx: -100, cz:  340, r: 8, transition: 5 },
 ];
 
 export function heightAt(x, z) {
