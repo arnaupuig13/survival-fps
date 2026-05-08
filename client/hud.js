@@ -515,6 +515,34 @@ export function closeStash() {
 }
 
 // ----------------------------------------------------------------------
+// Stats modal — totales de la partida.
+// ----------------------------------------------------------------------
+const statsPanel = document.getElementById('statsPanel');
+const statsList = document.getElementById('statsList');
+let _statsOpen = false;
+export function isStatsOpen() { return _statsOpen; }
+export function openStats(rows) {
+  _statsOpen = true;
+  if (!statsPanel || !statsList) return;
+  statsList.innerHTML = '';
+  for (const [k, v] of rows) {
+    const ks = document.createElement('span');
+    ks.className = 'skey';
+    ks.textContent = k;
+    const vs = document.createElement('span');
+    vs.className = 'sval';
+    vs.textContent = String(v);
+    statsList.appendChild(ks);
+    statsList.appendChild(vs);
+  }
+  statsPanel.classList.remove('hidden');
+}
+export function closeStats() {
+  _statsOpen = false;
+  if (statsPanel) statsPanel.classList.add('hidden');
+}
+
+// ----------------------------------------------------------------------
 // Peso de mochila
 // ----------------------------------------------------------------------
 const weightRow = document.getElementById('weightRow');

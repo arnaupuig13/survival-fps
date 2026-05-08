@@ -75,6 +75,9 @@ export const ITEMS = {
   // Survival gear nuevo.
   flashlight:      { label: 'LINTERNA',       max: 1, oneTime: true, rarity: 'uncommon', weight: 0.4 },
   dog_collar:      { label: 'COLLAR PERRO',   max: 1, oneTime: true, rarity: 'epic', weight: 0.3 },
+  nvg:             { label: 'GAFAS NOCT.',    max: 1, oneTime: true, rarity: 'epic', weight: 0.5 },
+  fishing_rod:     { label: 'CAÑA DE PESCAR', max: 1, oneTime: true, rarity: 'uncommon', weight: 1.5 },
+  seeds:           { label: 'SEMILLAS',       max: 10, rarity: 'common', weight: 0.05 },
 };
 
 export const BASE_WEIGHT_CAPACITY = 30;
@@ -90,6 +93,9 @@ const state = {
   bullet_r_inc: 0,
   flashlight: 0,
   dog_collar: 0,
+  nvg: 0,
+  fishing_rod: 0,
+  seeds: 0,
   // La pistola arranca equipada con el jugador.
   pistol_pickup: 1,
   crossbow_pickup: 0,

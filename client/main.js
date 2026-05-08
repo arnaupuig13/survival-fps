@@ -21,6 +21,7 @@ import {
   openPerksPanel, closePerksPanel, isPerksOpen, setPerkPending,
   setDifficulty, setWeather,
   openStash, closeStash, isStashOpen,
+  openStats, closeStats, isStatsOpen,
 } from './hud.js';
 import * as survival from './survival.js';
 import * as tools from './tools.js';
@@ -61,6 +62,9 @@ import * as storm from './storm.js';
 import * as flashbang from './flashbang.js';
 import * as convoyPlane from './convoy-plane.js';
 import * as stashPersonal from './stash-personal.js';
+import * as nvg from './nvg.js';
+import * as fishing from './fishing.js';
+import { setPeerPvP } from './entities.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -454,7 +458,7 @@ network.onPvpStatus = (on) => {
   logLine(on ? 'Estás en modo PvP — otros con PvP on pueden atacarte' : 'PvP desactivado');
 };
 network.onPeerPvp = (id, on) => {
-  // Indicador visual ya gestionado por entities — TODO highlight peer.
+  setPeerPvP(id, !!on);
 };
 network.onEnemyDead = (id, msg) => {
   const e = enemies.get(id);
@@ -781,8 +785,10 @@ addEventListener('keydown', (e) => {
     nearbyPlant = null;
     hideInteract();
   } else if (e.code === 'KeyE' && nearbyLake) {
-    if (inv.add('water_bottle', 1) || true) {
-      // add returns nothing meaningful; just give one and check max via has logic.
+    // Si tenés caña, pescá. Sino llená botella.
+    if (inv.has('fishing_rod', 1)) {
+      fishing.startFishing();
+    } else if (inv.add('water_bottle', 1) || true) {
       logLine('+1 BOTELLA AGUA');
       sfx.playPickup?.();
     }
@@ -824,6 +830,31 @@ addEventListener('keydown', (e) => {
   } else if (e.code === 'F2' && !e.repeat) {
     // PvP toggle — ambos players con PvP on pueden dañarse entre sí.
     network.togglePvP();
+  } else if (e.code === 'F3' && !e.repeat) {
+    // Stats panel — totales locales de la partida + perfil.
+    e.preventDefault();
+    if (isStatsOpen()) {
+      closeStats();
+      if (player.hp > 0) setTimeout(() => { _voluntaryUnlock = false; renderer.domElement.requestPointerLock?.(); }, 60);
+    } else {
+      _voluntaryUnlock = true;
+      document.exitPointerLock?.();
+      const lvl = progression.getLevel();
+      const xp = progression.getXp();
+      openStats([
+        ['NIVEL', lvl],
+        ['XP TOTAL', xp],
+        ['BAJAS TOTALES', profile.totalKills | 0],
+        ['DIAS SOBREVIVIDOS', profile.daysSurvived | 0],
+        ['BAJAS ESTA SESION', lifeKills | 0],
+        ['CHATARRA ACTUAL', inv.get('scrap') | 0],
+        ['NIVEL DE DIA ACTUAL', inSessionDay],
+        ['JUGADOR', profile.name || '—'],
+      ]);
+    }
+  } else if (e.code === 'Digit0' && !e.repeat) {
+    // NVG toggle (visión nocturna).
+    nvg.toggle();
   } else if (e.code === 'KeyF') {
     if (vehicle.isDriving()) {
       vehicle.exit();
@@ -1156,6 +1187,8 @@ function frame(now) {
   flashbang.tick();
   convoyPlane.update(dt);
   tickCorpses(dt);
+  nvg.tick();
+  fishing.tick();
   setHP(player.hp);
   setSurvival(player.hunger, player.thirst, player.warmth);
   setCompass(player.yaw());

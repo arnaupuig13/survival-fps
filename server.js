@@ -146,6 +146,9 @@ const ETYPES = {
   exploder:     { hp: 12, speed: 2.4, dmg: 30, range: 2.5, cd: 0.4, aggro: 28, ranged: false, special: 'exploder' },
   // Brute — mini-boss melee. Más resistente y dañino que el tank, raro.
   brute:        { hp: 80, speed: 1.4, dmg: 35, range: 2.4, cd: 1.8, aggro: 30, ranged: false, special: 'brute' },
+  // Zombi alfa — boss random que aparece cada 15-25 min. Mucho HP, dmg
+  // muy alto, persigue con aggro infinito (patrol-like). Drop boss-tier.
+  alpha:        { hp: 220, speed: 2.5, dmg: 50, range: 2.8, cd: 1.4, aggro: 80, ranged: false, special: 'alpha', isBoss: false },
   // Three scientist variants. Same lab coat but different weapon profile.
   scientist:    { hp: 18,  speed: 1.4, dmg: 6,  range: 30,  cd: 1.0, aggro: 40, ranged: true,  weapon: 'rifle'   },
   sci_shotgun:  { hp: 26,  speed: 1.3, dmg: 22, range: 12,  cd: 1.5, aggro: 30, ranged: true,  weapon: 'shotgun' },
@@ -320,6 +323,8 @@ const LOOT_TABLES = {
     { item: 'flashlight',     chance: 0.08 },
     { item: 'smoke_grenade',  chance: 0.18 },
     { item: 'flashbang',      chance: 0.10 },
+    { item: 'fishing_rod',    chance: 0.12 },
+    { item: 'seeds',          range: [0, 2] },
   ],
   // MILITARY — POIs militares (helicópteros) custodiados por científicos.
   // Cantidad similar a town pero bias a armas/ammo/AP, no comida ni recursos.
@@ -342,6 +347,7 @@ const LOOT_TABLES = {
     { item: 'silencer',       chance: 0.12 },
     { item: 'ext_mag',        chance: 0.18 },
     { item: 'flashlight',     chance: 0.50 },
+    { item: 'nvg',            chance: 0.30 },        // NVG en convoy/heli
     { item: 'scrap',          range: [3, 7] },
   ],
   // Helix Lab + city POIs — strongly tilted toward attachments + armor.
@@ -368,6 +374,8 @@ const LOOT_TABLES = {
     { item: 'ext_mag',       chance: 0.18 },
     { item: 'smoke_grenade', chance: 0.25 },
     { item: 'flashbang',     chance: 0.18 },
+    { item: 'nvg',           chance: 0.20 },
+    { item: 'fishing_rod',   chance: 0.15 },
     { item: 'scrap',         range: [2, 6] },
   ],
   // Boss drop — guaranteed legendary plus full attachment kit.
@@ -604,6 +612,14 @@ function killEnemy(e, byId = null) {
     const id = nextCrateId++;
     crates.set(id, { id, x: e.x, z: e.z, y: e.y, tableKey: 'boss', townId: 'helix-lab', taken: false });
     broadcast({ type: 'crateSpawn', c: cPub(crates.get(id)) });
+  }
+  // Alfa drop — boss-tier crate también.
+  if (e.etype === 'alpha') {
+    const id = nextCrateId++;
+    crates.set(id, { id, x: e.x, z: e.z, y: e.y, tableKey: 'boss', townId: null, taken: false });
+    broadcast({ type: 'crateSpawn', c: cPub(crates.get(id)) });
+    broadcast({ type: 'banner', text: '★ ZOMBI ALFA DERROTADO — loot legendario disponible' });
+    alphaActive = null;
   }
 }
 
@@ -880,6 +896,38 @@ function cleanupSmoke() {
 }
 
 // =====================================================================
+// Zombi alfa boss — cada 15-25 min, 50% chance, spawnea un alfa cerca
+// de un jugador random. Persigue sin aggro limit, dropea boss-tier
+// crate al morir.
+// =====================================================================
+let alphaCd = 540;        // primer alfa a los 9 min
+let alphaActive = null;   // id del alfa vivo, o null
+function maybeTriggerAlpha() {
+  if (players.size === 0) return;
+  if (alphaActive != null) {
+    if (!enemies.has(alphaActive)) alphaActive = null;
+    return;
+  }
+  alphaCd -= AI_DT;
+  if (alphaCd > 0) return;
+  alphaCd = 900 + Math.random() * 600;  // 15-25 min
+  if (Math.random() > 0.5) return;       // 50% chance, sino skip a la próxima
+  // Spawn cerca de un player random.
+  const list = [...players.values()];
+  const anchor = list[Math.floor(Math.random() * list.length)];
+  const angle = Math.random() * Math.PI * 2;
+  const r = 35 + Math.random() * 25;
+  const x = anchor.x + Math.cos(angle) * r;
+  const z = anchor.z + Math.sin(angle) * r;
+  if (Math.abs(x) > WORLD_HALF - 5 || Math.abs(z) > WORLD_HALF - 5) return;
+  const e = makeEnemy({ etype: 'alpha', x, z });
+  e.patrol = true;          // ignora aggro range
+  alphaActive = e.id;
+  broadcast({ type: 'eSpawn', e: ePub(e) });
+  broadcast({ type: 'banner', text: '⚠⚠ ZOMBI ALFA HA APARECIDO ⚠⚠' });
+}
+
+// =====================================================================
 // Convoy aéreo — cada 12-18 min anuncia "AVIÓN DE SUMINISTROS"
 // y dropea 3 cajas en una línea recta a través del mapa.
 // =====================================================================
@@ -1141,6 +1189,7 @@ setInterval(() => {
     maybeTriggerHeliTrader();
     maybeTriggerStorm();
     maybeTriggerConvoy();
+    maybeTriggerAlpha();
   }
 
   // Clima: cada 90s real chequeamos si cambia. Lluvia 22%, niebla 12%

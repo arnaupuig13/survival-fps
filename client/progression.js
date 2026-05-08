@@ -26,6 +26,7 @@ export const XP_PER_KILL = {
   screamer:    18,
   exploder:    25,   // poco porque es fácil de matar a distancia
   brute:       80,   // mini-boss
+  alpha:      300,   // alfa zombi raro
   scientist:   30,
   sci_shotgun: 35,
   sci_sniper:  35,

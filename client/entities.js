@@ -19,6 +19,7 @@ function makeZombieMesh(variant = 'zombie') {
   if (variant === 'runner')   { skin = 0x8a8055; cloth = 0x55452a; scale = 0.95; }
   if (variant === 'tank')     { skin = 0x4a5a3a; cloth = 0x222a18; scale = 1.25; }
   if (variant === 'brute')    { skin = 0x2a3a18; cloth = 0x18200c; scale = 1.6; }
+  if (variant === 'alpha')    { skin = 0x301010; cloth = 0x180404; scale = 2.0; glow = 0xff2020; }
   if (variant === 'spitter')  { skin = 0x6a8a30; cloth = 0x4a3a10; glow = 0x88ff20; }
   if (variant === 'screamer') { skin = 0xc05050; cloth = 0x401818; glow = 0xff4040; }
   if (variant === 'exploder') { skin = 0xa05a20; cloth = 0x3a2008; glow = 0xff6010; scale = 0.92; }
@@ -467,6 +468,7 @@ function meshFor(etype) {
   if (etype === 'runner')      return makeZombieMesh('runner');
   if (etype === 'tank')        return makeZombieMesh('tank');
   if (etype === 'brute')       return makeZombieMesh('brute');
+  if (etype === 'alpha')       return makeZombieMesh('alpha');
   if (etype === 'spitter')     return makeZombieMesh('spitter');
   if (etype === 'screamer')    return makeZombieMesh('screamer');
   if (etype === 'exploder')    return makeZombieMesh('exploder');
@@ -618,6 +620,26 @@ export function setPeerName(id, name) {
     }
   }
   p.mesh.add(makePeerLabel(name, p.hp ?? 100, p.maxHp ?? 100));
+}
+
+// PvP indicator — when a peer toggles PvP, paint the body red/glow.
+export function setPeerPvP(id, on) {
+  const p = peers.get(id); if (!p) return;
+  p.pvp = on;
+  // Re-tint el cuerpo. Buscá las meshes con material y aplicá emissive.
+  p.mesh.traverse((o) => {
+    if (o.isMesh && o.material) {
+      if (on) {
+        o.material.emissive = o.material.emissive || new THREE.Color(0x000000);
+        o.material.emissive.setHex(0x801010);
+        o.material.emissiveIntensity = 0.4;
+      } else {
+        if (o.material.emissive) o.material.emissive.setHex(0x000000);
+        o.material.emissiveIntensity = 0;
+      }
+      o.material.needsUpdate = true;
+    }
+  });
 }
 
 // Show a speech bubble above a peer for `durationMs`. Replaces an existing
