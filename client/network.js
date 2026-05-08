@@ -202,12 +202,24 @@ class NetworkClient {
     this._sendAccum += dt;
     if (this._sendAccum < 1 / SEND_HZ) return;
     this._sendAccum = 0;
+    // Calculate total damage reduction (armor + perks + painkillers) so
+    // the server can apply the SAME formula and stay in sync with client.
+    // Sin esto, el server pegaba dmg crudo y mataba al player en HP=0
+    // mientras el cliente todavia mostraba HP=50 → AI dejaba de disparar
+    // pensando que el player estaba muerto.
+    const p = this.player;
+    let red = (p.armorReduction || 0) / 100 + (p.dmgReduction || 0);
+    if (p.painkillerUntil && performance.now() / 1000 < p.painkillerUntil) red += 0.20;
+    red = Math.min(0.90, red);
     this._send({
       type: 'pos',
-      x: this.player.pos.x,
-      y: this.player.pos.y - 1.65,
-      z: this.player.pos.z,
-      ry: this.player.yaw(),
+      x: p.pos.x,
+      y: p.pos.y - 1.65,
+      z: p.pos.z,
+      ry: p.yaw(),
+      hp: Math.round(p.hp || 0),
+      red: +red.toFixed(3),       // damage reduction (0-0.9)
+      god: !!p.godMode,
     });
   }
 

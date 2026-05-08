@@ -2196,11 +2196,19 @@ setInterval(() => {
       // Fire when in range.
       if (d < cfg.range && e.attackCd <= 0) {
         e.attackCd = cfg.cd;
-        const dmg = Math.round(cfg.dmg * (e.dmgScale || 1));
-        nearest.hp = Math.max(0, nearest.hp - dmg);
+        const rawDmg = Math.round(cfg.dmg * (e.dmgScale || 1));
         if (nearestKind === 'player') {
-          sendTo(nearest, { type: 'youHit', dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+          // Aplica la misma reduccion de daño que el cliente para que
+          // server.player.hp y client.player.hp queden sincronizados.
+          // Si el player tiene godMode, no aplica daño ni se da por muerto.
+          if (!nearest.godMode) {
+            const red = nearest.dmgReduction || 0;
+            const dmg = Math.max(1, Math.round(rawDmg * (1 - red)));
+            nearest.hp = Math.max(0, nearest.hp - dmg);
+            sendTo(nearest, { type: 'youHit', dmg: rawDmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+          }
         } else {
+          nearest.hp = Math.max(0, nearest.hp - rawDmg);
           broadcast({ type: 'eHit', id: nearest.id, hp: nearest.hp });
           if (nearest.hp <= 0) killEnemy(nearest, e.id);
         }
@@ -2256,11 +2264,16 @@ setInterval(() => {
         e.ry = Math.atan2(dx, dz);
       } else if (e.attackCd <= 0) {
         e.attackCd = cfg.cd;
-        const dmg = Math.round(cfg.dmg * (e.dmgScale || 1));
-        nearest.hp = Math.max(0, nearest.hp - dmg);
+        const rawDmg = Math.round(cfg.dmg * (e.dmgScale || 1));
         if (nearestKind === 'player') {
-          sendTo(nearest, { type: 'youHit', dmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+          if (!nearest.godMode) {
+            const red = nearest.dmgReduction || 0;
+            const dmg = Math.max(1, Math.round(rawDmg * (1 - red)));
+            nearest.hp = Math.max(0, nearest.hp - dmg);
+            sendTo(nearest, { type: 'youHit', dmg: rawDmg, by: e.id, sx: e.x, sy: e.y, sz: e.z, source: e.etype });
+          }
         } else {
+          nearest.hp = Math.max(0, nearest.hp - rawDmg);
           broadcast({ type: 'eHit', id: nearest.id, hp: nearest.hp });
           if (nearest.hp <= 0) killEnemy(nearest, e.id);
         }
@@ -2415,6 +2428,18 @@ wss.on('connection', (ws) => {
       if (Math.abs(msg.x) > WORLD_HALF + 5 || Math.abs(msg.z) > WORLD_HALF + 5) return;
       player.x = msg.x; player.y = msg.y; player.z = msg.z;
       player.ry = Number.isFinite(msg.ry) ? msg.ry : 0;
+      // Sync de armor + god mode desde cliente para que server use la
+      // misma formula de daño y no haya desync (server creyendo player
+      // muerto cuando cliente lo ve vivo).
+      if (Number.isFinite(msg.red)) player.dmgReduction = Math.max(0, Math.min(0.9, msg.red));
+      if (msg.god) player.godMode = true; else player.godMode = false;
+      // Re-sync hp si el cliente todavia esta vivo y el server lo daba
+      // por muerto (caso del desync). Si cliente dice hp>0 y server tiene
+      // hp=0, restauramos. Esto fuerza al server a respetar el HP del
+      // cliente (cliente manda armor-reduced hp).
+      if (Number.isFinite(msg.hp) && msg.hp > 0 && player.hp <= 0) {
+        player.hp = Math.min(100, msg.hp);
+      }
     } else if (msg.type === 'shoot') {
       broadcast({ type: 'fire', from: id, x: msg.x, y: msg.y, z: msg.z, dx: msg.dx, dy: msg.dy, dz: msg.dz });
       // Sigilo: si NO está silenciado, despierta zombies cercanos al
