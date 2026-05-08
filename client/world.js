@@ -29,7 +29,7 @@ const TOWN_CLEARINGS = [
   { cx:  720, cz:  -80, r: 65 },
   { cx:  100, cz:  680, r: 65 },
   { cx: -180, cz: -700, r: 65 },
-  { cx:    0, cz: -200, r: 200 }, // Helix Lab — mega ciudad
+  { cx:    0, cz: -200, r: 260 }, // Helix Lab — mega ciudad (edificios anchos)
 ];
 
 // =====================================================================
@@ -98,8 +98,8 @@ const TOWN_FLAT = [
   { cx:  720, cz:  -80, r: 60, transition: 22 },
   { cx:  100, cz:  680, r: 60, transition: 22 },
   { cx: -180, cz: -700, r: 60, transition: 22 },
-  // Helix Lab mega
-  { cx:    0, cz: -200, r: 180, transition: 50 },
+  // Helix Lab mega — 144 edificios anchos x 17m = ~204m span
+  { cx:    0, cz: -200, r: 240, transition: 60 },
   // Bunkers
   { cx:  300, cz:    0, r: 14, transition: 8 },
   { cx: -480, cz:  480, r: 14, transition: 8 },

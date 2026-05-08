@@ -112,7 +112,9 @@ const TOWN_FLAT = [
   { cx:  100, cz:  680, r: 60, transition: 22 },     // Snowhold
   { cx: -180, cz: -700, r: 60, transition: 22 },     // Burntpoint
   // === HELIX LAB — mega ciudad central ===
-  { cx:    0, cz: -200, r: 180, transition: 50 },    // 150 edificios + boss tower
+  // 144 edificios x 17m cell = 204m span → ±102m. Necesitamos r >= 120
+  // para que los edificios queden flat + margen para el muro.
+  { cx:    0, cz: -200, r: 240, transition: 60 },
   // Bunkers
   { cx:  300, cz:    0, r: 14, transition: 8 },
   { cx: -480, cz:  480, r: 14, transition: 8 },
@@ -286,10 +288,12 @@ function genTownBuildings(centerX, centerZ, count, seed) {
   const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
   const buildings = [];
   const isCity = count >= 80;
-  // CELL — calles entre edificios:
-  //   towns: 11m (edificios de ~7m → 4m de calle)
-  //   cities: 11m con "calles internas" más anchas cada N filas
-  const cell = isCity ? 11 : 11;
+  // CELL — calles entre edificios. Bumpeado porque los edificios son
+  // ahora más anchos (towns 9-12m, cities 12-16m) para tener habitaciones
+  // internas. Antes con cell=11 y bldgs 12-16 los edificios overlap.
+  //   towns: 14m (edificios ~10m → 4m de calle)
+  //   cities: 17m (edificios ~14m → 3m de calle)
+  const cell = isCity ? 17 : 14;
   const cols = Math.ceil(Math.sqrt(count));
   // 1 comisaría + 1 hospital obligatorios por town (no en city).
   const policeIdx = isCity ? -1 : 0;
@@ -338,8 +342,10 @@ function genTownBuildings(centerX, centerZ, count, seed) {
       else if (r > 0.45) floors = 4  + Math.floor(rng() * 3);    // 4-6 pisos (20%)
       else if (r > 0.20) floors = 2  + Math.floor(rng() * 2);    // 2-3 pisos (25%)
       else               floors = 1;                              // 1 piso (20%)
-      w = 8 + rng() * 3;     // 8-11m
-      h = 8 + rng() * 3;
+      // Edificios MUCHO más anchos (12-16m) para meter habitaciones
+      // dentro tipo flat/oficina. Antes 8-11m → vacíos.
+      w = 12 + rng() * 4;
+      h = 12 + rng() * 4;
       if (highLootIndices.has(i)) {
         kind = 'high_loot';
       } else if (rng() < 0.20) {
@@ -354,8 +360,10 @@ function genTownBuildings(centerX, centerZ, count, seed) {
       else if (r > 0.55) floors = 4 + Math.floor(rng() * 3);    // 4-6 (25%)
       else if (r > 0.20) floors = 2 + Math.floor(rng() * 2);    // 2-3 (35%)
       else               floors = 1;                             // 1 piso (20%)
-      w = 6 + rng() * 2;
-      h = 6 + rng() * 2;
+      // Edificios más anchos (9-12m) para que tengan habitaciones
+      // adentro. Antes 6-8m era demasiado chico.
+      w = 9 + rng() * 3;
+      h = 9 + rng() * 3;
     }
     buildings.push({ dx: ox, dz: oz, w, h, ry: 0, floors, kind });
   }
@@ -731,6 +739,31 @@ const LOOT_TABLES = {
     { item: 'rabbit_pelt', chance: 0.6 },
     { item: 'deer_pelt',   chance: 0.4 },
   ],
+  // Zombie drops — basura del bolsillo del que era. Mucho menor que town
+  // crates pero acumula al matar muchos. Dropea solo a veces (no todos
+  // los zombies) para no spammear el mundo de cofres.
+  zombie: [
+    { item: 'cloth',     chance: 0.30 },
+    { item: 'scrap',     chance: 0.25 },
+    { item: 'bullet_p',  chance: 0.20 },
+    { item: 'wood',      chance: 0.15 },
+    { item: 'bandage',   chance: 0.12 },
+    { item: 'meat_raw',  chance: 0.08 },
+    { item: 'berry',     chance: 0.10 },
+    { item: 'nail',      chance: 0.10 },
+    { item: 'stone',     chance: 0.10 },
+  ],
+  // Stronger zombie variants (tank, alpha, brute) drop a bit more.
+  zombie_strong: [
+    { item: 'cloth',     range: [1, 2] },
+    { item: 'scrap',     range: [1, 2] },
+    { item: 'bullet_p',  chance: 0.40 },
+    { item: 'bullet_r',  chance: 0.20 },
+    { item: 'bandage',   chance: 0.30 },
+    { item: 'iron',      chance: 0.20 },
+    { item: 'gunpowder', chance: 0.15 },
+    { item: 'meat_raw',  chance: 0.20 },
+  ],
   // ROAD — crates dejados a la vera de las carreteras amarillas. Loot
   // bajo: balas, basura, raramente una pistola. Sin custodios.
   // El usuario lo describió: "loot aceptable pero nada muy bueno
@@ -1030,8 +1063,10 @@ const STREAM_RADIUS = 150;   // m — spawn town when any player closer
 const DESPAWN_RADIUS = 260;  // m — despawn town when ALL players farther
 const WAKE_RADIUS = 12;      // m — sleeping zombie wakes when player approaches
 
-const MAX_AMBIENT_ZOMBIES = 30; // cap on the random-spawn zombies (not town-bound)
-const AMBIENT_SPAWN_INTERVAL = 4.5;
+// Mapa 4x más grande → 90 zombies ambientales (era 30 en mapa más chico).
+// Sumado a los zombies de los pueblos esto hace que el mapa se sienta vivo.
+const MAX_AMBIENT_ZOMBIES = 90;
+const AMBIENT_SPAWN_INTERVAL = 3.5;     // un poco más rápido
 
 function makeEnemy(opts) {
   const cfg = ETYPES[opts.etype] || ETYPES.zombie;
@@ -1070,6 +1105,24 @@ function dropAnimalLoot(e) {
   broadcast({ type: 'crateSpawn', c: cPub(crates.get(id)) });
 }
 
+// Zombie loot drop — pequeño cofre al lado del cadaver. ~50% chance
+// para zombies normales, 100% para variantes fuertes (tank/brute/alpha).
+function dropZombieLoot(e) {
+  const isZombieType = (
+    e.etype === 'zombie' || e.etype === 'runner' || e.etype === 'tank' ||
+    e.etype === 'spitter' || e.etype === 'screamer' || e.etype === 'exploder' ||
+    e.etype === 'brute' || e.etype === 'alpha' || e.etype === 'bilebomber'
+  );
+  if (!isZombieType) return;
+  const isStrong = e.etype === 'tank' || e.etype === 'brute' || e.etype === 'alpha' || e.etype === 'bilebomber';
+  // Drop chance: 40% para basicos, 100% para fuertes.
+  if (!isStrong && Math.random() > 0.40) return;
+  const id = nextCrateId++;
+  const tableKey = isStrong ? 'zombie_strong' : 'zombie';
+  crates.set(id, { id, x: e.x, z: e.z, y: e.y, tableKey, townId: null, taken: false });
+  broadcast({ type: 'crateSpawn', c: cPub(crates.get(id)) });
+}
+
 function killEnemy(e, byId = null) {
   // Exploder muerto = explosión. Marcamos un flag para no caer en loop
   // infinito (detonateExploder llama a killEnemy de nuevo).
@@ -1083,6 +1136,9 @@ function killEnemy(e, byId = null) {
   if (e.etype === 'deer' || e.etype === 'rabbit') {
     dropAnimalLoot(e);
   }
+  // Zombie loot — basura/balas del bolsillo del zombi. ~40% drop rate
+  // para zombies basicos, 100% para variantes fuertes.
+  dropZombieLoot(e);
   // Boss + elites ya spawnean con la boss tower al aproximarse — no hay
   // threshold-based spawn como antes. Solo trackeamos kills de scientists
   // por si alguna mecánica futura lo necesita.
@@ -1218,9 +1274,10 @@ function streamTowns() {
         //   high_loot: 4-6 cientificos guardia (zona controlada)
         //   ruined:    0-1 cientifico (abandonado)
         //   normal:    2-3 cientificos
-        // Town: 1-3 zombies.
+        // Town: 4-8 zombies (eran 1-3 — usuario quiere las ciudades
+        //   LLENAS de zombies como si vivieran ahí).
         let count;
-        if (!isCity)            count = 1 + Math.floor(Math.random() * 3);
+        if (!isCity)            count = 4 + Math.floor(Math.random() * 5);
         else if (isHighLoot)    count = 4 + Math.floor(Math.random() * 3);
         else if (isRuined)      count = Math.random() < 0.5 ? 0 : 1;
         else                    count = 2 + Math.floor(Math.random() * 2);
@@ -2178,6 +2235,24 @@ setInterval(() => {
           if (nearest.hp <= 0) killEnemy(nearest, e.id);
         }
         broadcast({ type: 'eAttack', id: e.id });
+      }
+    }
+
+    // === HELIX LAB CLAMP ===
+    // Cientificos del lab NUNCA salen del muro perimetral. Si su
+    // movimiento (chase del player o idle wander) los lleva fuera del
+    // radio CITY_HALF, los devolvemos al borde. Es como si estuvieran
+    // protegiendo la ciudad y no quisieran salir nunca.
+    if (e.townId === 'helix-lab' && isAnyScientist(e.etype)) {
+      const HELIX_CX = 0, HELIX_CZ = -200;
+      const HELIX_RADIUS = 110;     // 5m de margen contra el muro a 115
+      const dxh = e.x - HELIX_CX, dzh = e.z - HELIX_CZ;
+      const distH = Math.hypot(dxh, dzh);
+      if (distH > HELIX_RADIUS) {
+        const k = HELIX_RADIUS / distH;
+        e.x = HELIX_CX + dxh * k;
+        e.z = HELIX_CZ + dzh * k;
+        e.y = heightAt(e.x, e.z);
       }
     }
   }

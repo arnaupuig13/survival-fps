@@ -162,6 +162,82 @@ function buildBuilding(b, type) {
     }
   }
 
+  // === INTERIOR ROOMS / FLATS ===
+  // Edificios anchos (w >= 9) tienen paredes internas dividiendo en
+  // habitaciones tipo flat. Un muro horizontal (eje X) en z=0 con un
+  // doorway al centro. Si el building es muy ancho (w >= 13) además
+  // un muro vertical (eje Z) en x=0 = 4 habitaciones tipo apartamento.
+  // Solo en planta baja para evitar lío de stairs (nadie sube por ahora).
+  const interiorColliders = [];
+  if (!isRuined && w >= 9) {
+    const innerDoorW = 2.2;
+    // Muro horizontal en z=0 — segmentos a izquierda y derecha del doorway.
+    const segHor = (w - innerDoorW) / 2;
+    for (const sx of [-1, 1]) {
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(segHor, WALL_HEIGHT - 0.1, WALL_THICK),
+        wallMat,
+      );
+      m.position.set(sx * (innerDoorW / 2 + segHor / 2), WALL_HEIGHT / 2 - 0.05, 0);
+      g.add(m);
+      // Collider (planta baja).
+      interiorColliders.push({
+        lx: sx * (innerDoorW / 2 + segHor / 2),
+        lz: 0,
+        w: segHor,
+        h: WALL_THICK,
+      });
+    }
+    // Si es ancho, muro vertical en x=0 también.
+    if (w >= 13) {
+      const segVer = (h - innerDoorW) / 2;
+      for (const sz of [-1, 1]) {
+        const m = new THREE.Mesh(
+          new THREE.BoxGeometry(WALL_THICK, WALL_HEIGHT - 0.1, segVer),
+          wallMat,
+        );
+        m.position.set(0, WALL_HEIGHT / 2 - 0.05, sz * (innerDoorW / 2 + segVer / 2));
+        g.add(m);
+        interiorColliders.push({
+          lx: 0,
+          lz: sz * (innerDoorW / 2 + segVer / 2),
+          w: WALL_THICK,
+          h: segVer,
+        });
+      }
+    }
+    // === MUEBLES / DECORACION ===
+    // Cama, mesa, sillas — props simples para que se sienta habitado.
+    const furnMat = new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.85 });
+    const fabMat  = new THREE.MeshStandardMaterial({ color: 0x6a5040, roughness: 0.95 });
+    // 1 cama en una esquina.
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.4, 0.9), furnMat);
+    const bedPillow = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.45, 0.8), fabMat);
+    bed.position.set(-halfW + 1.2, 0.2, halfH - 0.8);
+    bedPillow.position.set(-halfW + 1.2, 0.45, halfH - 0.8);
+    g.add(bed, bedPillow);
+    // 1 mesa en otra habitación (z<0, x>0).
+    const table = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.7), furnMat);
+    table.position.set(halfW - 1.5, 0.85, -halfH + 1.8);
+    g.add(table);
+    for (const tx of [-0.5, 0.5]) for (const tz of [-0.3, 0.3]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.85, 0.07), furnMat);
+      leg.position.set(halfW - 1.5 + tx, 0.42, -halfH + 1.8 + tz);
+      g.add(leg);
+    }
+    // 1 silla.
+    const chair = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.5), furnMat);
+    chair.position.set(halfW - 2.7, 0.45, -halfH + 1.8);
+    g.add(chair);
+    const chairBack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.06), furnMat);
+    chairBack.position.set(halfW - 2.7, 0.8, -halfH + 1.55);
+    g.add(chairBack);
+    // 1 estanteria/armario en otra esquina.
+    const shelf = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.8, 0.4), furnMat);
+    shelf.position.set(halfW - 0.8, 0.9, halfH - 1.0);
+    g.add(shelf);
+  }
+
   // Roof — flat para multipisos + city, pitched para town 1 piso.
   // Ruined: NO roof (cielo abierto, escombros caidos).
   if (isRuined) {
@@ -322,6 +398,7 @@ function buildBuilding(b, type) {
     { lx:  halfW - WALL_THICK / 2,  lz: 0,                       w: WALL_THICK,                  h: h },                        // right
     { lx: -halfW + slabW / 2,       lz:  halfH - WALL_THICK / 2, w: slabW,                       h: WALL_THICK },               // front-left slab
     { lx:  halfW - slabW / 2,       lz:  halfH - WALL_THICK / 2, w: slabW,                       h: WALL_THICK },               // front-right slab
+    ...interiorColliders,    // muros internos divisores (rooms/flats)
   ];
   const cos = Math.cos(b.ry || 0), sin = Math.sin(b.ry || 0);
   const colliders = wallLocals.map(s => ({
@@ -381,11 +458,12 @@ function buildSign(town) {
 // Returns { group, colliders } so the world can drop them in scene + obstacles.
 // =====================================================================
 
-// Helix Lab ahora tiene 80 edificios (9x9 grid x 10.5m = ~94m de span).
-// El muro perimetral se expande de ±60 a ±70 para envolver la ciudad densa
-// con margen visual entre las torres y la valla.
-const CITY_HALF = 70; // wall extends ±70 m from town center → 140x140 m walled compound
-const WALL_H = 4.5;
+// Helix Lab ahora tiene 144 edificios MUY anchos (12x12 grid x 17m cell
+// = ~204m de span). El muro perimetral envuelve toda la ciudad y los
+// cientificos quedan TODOS adentro — ya no patrullan afuera porque el
+// servidor los clamps al area dentro de CITY_HALF.
+const CITY_HALF = 115; // wall extends ±115 m from town center → 230x230 m walled compound
+const WALL_H = 5.0;
 const WALL_T = 0.55;
 const GATE_WIDTH = 7;
 
