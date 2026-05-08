@@ -37,6 +37,7 @@ const loaded = { pistol: 12, rifle: 0, smg: 0, shotgun: 0, sniper: 0 };
 let reloading = false;
 let reloadTimer = 0;
 const ray = new THREE.Raycaster();
+ray.camera = camera; // necesario para que raycast no rompa con Sprites en escena
 const _origin = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 
@@ -259,13 +260,23 @@ function tryFire() {
     }
   } else {
     // No enemy hit — second raycast against the whole scene to place a
-    // bullet hole on whatever the player shot.
+    // bullet hole on whatever the player shot. CRITICAL: tenemos que
+    // (a) setear rs.camera = camera porque hay Sprites en la escena
+    // (damage numbers) que requieren camera para raycastear, y (b)
+    // filtrar Sprites/lights/cámara para que no contaminen el resultado
+    // de bullet hole.
     const rs = new THREE.Raycaster(_origin.clone(), _dir.clone(), 0.2, cfg.range);
-    const sceneHits = rs.intersectObjects(worldScene.children, true);
+    rs.camera = camera;
+    const candidates2 = [];
+    for (const ch of worldScene.children) {
+      if (ch === camera) continue;          // gun group + camFill cuelgan acá
+      if (ch.isSprite || ch.isLight) continue;
+      candidates2.push(ch);
+    }
+    const sceneHits = rs.intersectObjects(candidates2, true);
     if (sceneHits.length > 0) {
       const sh = sceneHits[0];
-      // Skip our own gun mesh + camera-attached helpers (they sit very close).
-      if (sh.distance > 0.4 && sh.face) {
+      if (sh.distance > 0.4 && sh.face && !sh.object.isSprite) {
         const normal = sh.face.normal.clone();
         normal.transformDirection(sh.object.matrixWorld);
         spawnBulletHole(sh.point, normal);
