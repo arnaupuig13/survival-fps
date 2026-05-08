@@ -401,17 +401,36 @@ if (grid) {
 }
 
 // Hotbar: click derecho sobre un slot lo limpia (quita el binding).
-for (const hb of document.querySelectorAll('.hbslot')) {
-  hb.addEventListener('contextmenu', (e) => {
-    if (panel && panel.classList.contains('hidden')) return; // solo en inventario abierto
-    e.preventDefault();
-    const idx = parseInt(hb.dataset.slot, 10);
-    if (!Number.isNaN(idx)) {
-      hotbar.clearSlot(idx);
-      logLine(`Slot ${idx + 1} liberado`);
-    }
-  });
-}
+// Event delegation en document para sobrevivir a re-renders + funciona
+// incluso con pointer-events:auto solo durante inv-open.
+document.addEventListener('contextmenu', (e) => {
+  if (!panel || panel.classList.contains('hidden')) return;
+  const hb = e.target.closest && e.target.closest('.hbslot');
+  if (!hb) return;
+  e.preventDefault();
+  const idx = parseInt(hb.dataset.slot, 10);
+  if (!Number.isNaN(idx)) {
+    hotbar.clearSlot(idx);
+    logLine(`Slot ${idx + 1} liberado`);
+    sfx.playPickup?.();
+  }
+});
+
+// También permite click izquierdo simple sobre un slot del hotbar
+// (cuando el inv está abierto) para limpiarlo via Shift+Click.
+document.addEventListener('click', (e) => {
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!e.shiftKey) return;
+  const hb = e.target.closest && e.target.closest('.hbslot');
+  if (!hb) return;
+  e.preventDefault();
+  const idx = parseInt(hb.dataset.slot, 10);
+  if (!Number.isNaN(idx)) {
+    hotbar.clearSlot(idx);
+    logLine(`Slot ${idx + 1} liberado`);
+    sfx.playPickup?.();
+  }
+});
 
 // Allow dragging armor off the paperdoll to drop it.
 [helmetSlot, vestSlot].forEach((s) => {

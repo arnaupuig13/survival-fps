@@ -14,10 +14,16 @@
 import * as inv from './inventory.js';
 
 const SLOT_COUNT = 6;
-const STORAGE_KEY = 'survival-fps-v1-hotbar';
+// Bump el versioning del storage para forzar reset cuando cambiamos los
+// defaults. Si tenías el v1 con [bullet_p, null, bandage, grenade, ...],
+// el v2 arranca todo en null como pidió el usuario.
+const STORAGE_KEY = 'survival-fps-v2-hotbar';
 
 // Default vacío — el jugador asigna lo que quiera arrastrando del inv.
 const DEFAULT_SLOTS = [null, null, null, null, null, null];
+
+// Limpieza del storage viejo (v1) si todavía estaba.
+try { localStorage.removeItem('survival-fps-v1-hotbar'); } catch {}
 
 const state = {
   slots: loadOrDefault(),
