@@ -40,7 +40,7 @@ import {
   setAimMode,
 } from './weapons.js';
 import { updateEffects, spawnBloodDecal, spawnGoreBurst } from './effects.js';
-import { enemies } from './entities.js';
+import { enemies, markDespawn, tickCorpses } from './entities.js';
 import * as vehicle from './vehicle.js';
 import * as progression from './progression.js';
 import * as quests from './quests.js';
@@ -58,6 +58,7 @@ import * as attachments from './attachments.js';
 import * as smoke from './smoke.js';
 import * as storm from './storm.js';
 import * as flashbang from './flashbang.js';
+import * as convoyPlane from './convoy-plane.js';
 
 // Day/night state — interpolated locally between server `time` updates.
 let serverHour = 8;
@@ -381,10 +382,11 @@ network.onStorm = (msg) => {
 network.onFlashbang = (msg) => {
   flashbang.onServerFlash(msg);
 };
-network.onConvoy = (_msg) => {
-  // El banner ya lo da el server. Acá podríamos renderizar un avión
-  // visual cruzando — por ahora solo confirma con sound.
+network.onConvoy = (msg) => {
   sfx.playBossSting?.();
+  if (msg && msg.dirX != null) {
+    convoyPlane.spawn(msg.x, msg.z, msg.dirX, msg.dirZ);
+  }
 };
 network.onEnemyDead = (id, msg) => {
   const e = enemies.get(id);
@@ -1075,6 +1077,8 @@ function frame(now) {
   smoke.update(dt);
   storm.tickHud();
   flashbang.tick();
+  convoyPlane.update(dt);
+  tickCorpses(dt);
   setHP(player.hp);
   setSurvival(player.hunger, player.thirst, player.warmth);
   setCompass(player.yaw());

@@ -2,7 +2,7 @@
 // layouts and boss banner. Auto-detects ws:// vs wss:// from page protocol.
 
 import {
-  spawnEnemy, removeEnemy, wakeEnemy, triggerEnemyAttack,
+  spawnEnemy, removeEnemy, wakeEnemy, triggerEnemyAttack, markDespawn,
   spawnPeer, removePeer, peers, enemies, setPeerName, showPeerBubble, setPeerHP,
 } from './entities.js';
 import { setTownLayouts } from './towns.js';
@@ -89,6 +89,8 @@ class NetworkClient {
         if (d < 35) import('./sounds.js').then(s => s.playWolfSnarl(d));
       }
     } else if (msg.type === 'eDead' || msg.type === 'zDead') {
+      // despawn:true → wipe instant. muerte real → corpse 60s.
+      if (msg.despawn) markDespawn(msg.id);
       removeEnemy(msg.id);
       if (msg.isBoss) this.onBanner?.('★ EL DOCTOR HA CAIDO');
       this.onEnemyDead?.(msg.id, msg);

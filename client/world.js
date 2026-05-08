@@ -73,6 +73,9 @@ const TOWN_FLAT = [
   { cx: -320, cz: -260, r: 38, transition: 18 },
   { cx:  280, cz: -320, r: 38, transition: 18 },
   { cx:    0, cz: -200, r: 95, transition: 25 },
+  { cx:  150, cz:    0, r: 14, transition: 8 },
+  { cx: -240, cz:  240, r: 14, transition: 8 },
+  { cx:  100, cz: -260, r: 14, transition: 8 },
 ];
 
 export function heightAt(x, z) {

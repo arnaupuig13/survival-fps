@@ -100,6 +100,10 @@ const TOWN_FLAT = [
   { cx: -320, cz: -260, r: 38, transition: 18 },
   { cx:  280, cz: -320, r: 38, transition: 18 },
   { cx:    0, cz: -200, r: 95, transition: 25 }, // Helix Lab
+  // Bunkers — pequeñas plataformas planas para que el edificio se asiente.
+  { cx:  150, cz:    0, r: 14, transition: 8 },
+  { cx: -240, cz:  240, r: 14, transition: 8 },
+  { cx:  100, cz: -260, r: 14, transition: 8 },
 ];
 
 export function heightAt(x, z) {
@@ -246,17 +250,24 @@ const POIS = [
   { id: 'cabin-f',   kind: 'cabin',      cx: -260, cz:  100, ry: 1.5 },
   { id: 'cabin-g',   kind: 'cabin',      cx:  340, cz:   40, ry: -1.0 },
   { id: 'cabin-h',   kind: 'cabin',      cx: -100, cz:  340, ry: 0.3 },
+  // BUNKERS — fortalezas con boss-tier loot, custodiadas por 4 científicos
+  // awake. Lugares premium para grupos coordinados.
+  { id: 'bunker-a',  kind: 'bunker',     cx:  150, cz:    0, ry: 0 },
+  { id: 'bunker-b',  kind: 'bunker',     cx: -240, cz:  240, ry: Math.PI / 4 },
+  { id: 'bunker-c',  kind: 'bunker',     cx:  100, cz: -260, ry: Math.PI / 2 },
 ];
 
 const POI_GUARDS = {
-  helicopter: ['scientist', 'sci_shotgun', 'scientist'],     // 3 guards
-  gas:        ['zombie', 'runner', 'zombie'],                // 3 guards
-  cabin:      ['zombie', 'zombie'],                          // 2 guards
+  helicopter: ['scientist', 'sci_shotgun', 'scientist'],
+  gas:        ['zombie', 'runner', 'zombie'],
+  cabin:      ['zombie', 'zombie'],
+  bunker:     ['scientist', 'sci_shotgun', 'sci_sniper', 'scientist'],  // 4 guards
 };
 const POI_CRATES = {
-  helicopter: { count: 3, tier: 'military' },     // tier nuevo militar
+  helicopter: { count: 3, tier: 'military' },
   gas:        { count: 2, tier: 'town' },
   cabin:      { count: 2, tier: 'town' },
+  bunker:     { count: 3, tier: 'boss' },   // ¡loot legendary!
 };
 const poiState = new Map();
 for (const p of POIS) poiState.set(p.id, { spawned: false, enemyIds: new Set() });

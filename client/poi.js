@@ -178,9 +178,77 @@ function buildCabin(p) {
 }
 
 // =====================================================================
+// BUNKER — fortaleza militar de hormigón con paredes altas, techo bajo
+// y puerta amplia. Crates boss-tier adentro custodiados por 4 scientists.
+// =====================================================================
+function buildBunker(p) {
+  const g = new THREE.Group();
+  const w = 8.0, h = 8.0;     // 8x8m footprint
+  const wallH = 3.6;
+  const wallThick = 0.4;
+  // Material concreto gris-verdoso oscuro.
+  const concreteMat = new THREE.MeshStandardMaterial({ color: 0x4a4e44, roughness: 0.92, metalness: 0.05 });
+  const accentMat   = new THREE.MeshStandardMaterial({ color: 0x2a2c28, roughness: 0.6, metalness: 0.3 });
+  const lightMat    = new THREE.MeshStandardMaterial({ color: 0xff5040, emissive: 0xff3030, emissiveIntensity: 1.4 });
+  // Paredes — back, left, right + dos slabs frontales con doorway.
+  const back = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, wallThick), concreteMat);
+  back.position.set(0, wallH / 2, -h / 2); g.add(back);
+  for (const sx of [-1, 1]) {
+    const side = new THREE.Mesh(new THREE.BoxGeometry(wallThick, wallH, h), concreteMat);
+    side.position.set(sx * (w / 2), wallH / 2, 0); g.add(side);
+  }
+  // Front con doorway de 2.0m.
+  const doorW = 2.0;
+  const slabW = (w - doorW) / 2;
+  for (const sx of [-1, 1]) {
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(slabW, wallH, wallThick), concreteMat);
+    slab.position.set(sx * (w / 2 - slabW / 2), wallH / 2, h / 2);
+    g.add(slab);
+  }
+  // Dintel sobre la puerta.
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(doorW + 0.2, 0.5, wallThick + 0.1), accentMat);
+  lintel.position.set(0, wallH - 0.25, h / 2); g.add(lintel);
+  // Techo plano grueso.
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.4, h + 0.6), accentMat);
+  roof.position.set(0, wallH + 0.2, 0); g.add(roof);
+  // Lámpara roja parpadeante sobre el dintel (afuera).
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), lightMat);
+  lamp.position.set(0, wallH + 0.5, h / 2 + 0.3); g.add(lamp);
+  // Luz interior para que se vea oscuro pero visible adentro.
+  const interiorLight = new THREE.PointLight(0xff4030, 1.6, 14, 2);
+  interiorLight.position.set(0, wallH - 0.6, 0); g.add(interiorLight);
+  // Stencil "BUNKER" arriba de la puerta usando un panel emisivo amarillo.
+  const stencil = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.18, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0xfff080, emissive: 0xc0a020, emissiveIntensity: 0.8 }));
+  stencil.position.set(0, wallH * 0.7, h / 2 + 0.22); g.add(stencil);
+  // Crates pre-renderizados via loot.js — el server los spawnea con
+  // posiciones cerca de p.cx, p.cz. Acá no agregamos nada extra.
+  // Colliders de las paredes.
+  const colliders = [];
+  const cos = Math.cos(p.ry || 0), sin = Math.sin(p.ry || 0);
+  function addBoxCollider(lx, lz, hw, hh) {
+    colliders.push({
+      type: 'box',
+      cx: p.cx + cos * lx - sin * lz,
+      cz: p.cz + sin * lx + cos * lz,
+      hw, hh, ry: p.ry || 0,
+    });
+  }
+  addBoxCollider(0, -h / 2, w / 2, wallThick);                                  // back
+  addBoxCollider(-w / 2, 0, wallThick, h / 2);                                   // left
+  addBoxCollider(w / 2, 0, wallThick, h / 2);                                    // right
+  addBoxCollider(-(w / 2 - slabW / 2), h / 2, slabW / 2, wallThick);            // front-left slab
+  addBoxCollider(  w / 2 - slabW / 2,  h / 2, slabW / 2, wallThick);            // front-right slab
+  // Pulse animation handle para que la lampara parpadee.
+  g.userData.lamp = lamp;
+  return { group: g, colliders };
+}
+
+// =====================================================================
 // Public — main.js calls setPoiLayouts after welcome.
 // =====================================================================
 const _poiSmokes = [];
+const _bunkerLamps = [];
 let _smokePhase = 0;
 export function setPoiLayouts(pois) {
   for (const p of pois) {
@@ -188,11 +256,13 @@ export function setPoiLayouts(pois) {
     if (p.kind === 'helicopter') built = buildHelicopter(p);
     else if (p.kind === 'gas') built = buildGasStation(p);
     else if (p.kind === 'cabin') built = buildCabin(p);
+    else if (p.kind === 'bunker') built = buildBunker(p);
     if (!built) continue;
     built.group.position.set(p.cx, heightAt(p.cx, p.cz), p.cz);
     built.group.rotation.y = p.ry || 0;
     scene.add(built.group);
     if (built.group.userData.smoke) _poiSmokes.push(built.group.userData.smoke);
+    if (built.group.userData.lamp) _bunkerLamps.push(built.group.userData.lamp);
     for (const c of built.colliders) obstacles.push(c);
   }
 }
@@ -203,5 +273,11 @@ export function updatePoi(dt) {
   for (const s of _poiSmokes) {
     s.scale.y = 1.0 + Math.sin(_smokePhase) * 0.05;
     s.rotation.y += dt * 0.4;
+  }
+  // Lámparas de búnker parpadean rojo (alerta).
+  for (const lamp of _bunkerLamps) {
+    if (lamp.material) {
+      lamp.material.emissiveIntensity = 0.6 + Math.abs(Math.sin(_smokePhase * 2)) * 1.4;
+    }
   }
 }

@@ -501,11 +501,60 @@ export function spawnEnemy(info) {
   });
 }
 
+// Cadáveres — cuando un enemigo muere se queda como corpse 60s antes de
+// desaparecer. Visual: el mesh se inclina horizontal + Y al suelo + se
+// excluye del raycast de armas (filter en weapons.js via .corpse flag).
+const corpses = [];   // { mesh, until }
+const CORPSE_LIFETIME = 60.0;
+
 export function removeEnemy(id) {
   const e = enemies.get(id); if (!e) return;
-  scene.remove(e.mesh);
-  e.mesh.traverse(c => { if (c.geometry) c.geometry.dispose?.(); });
+  // Si fue despawn (no muerte real), eliminar limpio. Si es muerte
+  // real (msg.despawn era false), corpsificamos.
   enemies.delete(id);
+  if (e._despawn) {
+    scene.remove(e.mesh);
+    e.mesh.traverse(c => { if (c.geometry) c.geometry.dispose?.(); });
+    return;
+  }
+  // Corpse: tumbar el mesh.
+  e.mesh.rotation.x = -Math.PI / 2 + (Math.random() - 0.5) * 0.4;
+  e.mesh.rotation.z = (Math.random() - 0.5) * 0.6;
+  e.mesh.position.y -= 0.4;
+  e.mesh.userData.isCorpse = true;
+  corpses.push({ mesh: e.mesh, until: performance.now() + CORPSE_LIFETIME * 1000 });
+}
+
+// Llamado desde main.js cuando llega eDead con despawn:true. Marcamos
+// el enemigo como despawn antes de que removeEnemy lo procese.
+export function markDespawn(id) {
+  const e = enemies.get(id);
+  if (e) e._despawn = true;
+}
+
+// Tick — fade-out + remove corpses expirados.
+export function tickCorpses(dt) {
+  const now = performance.now();
+  for (let i = corpses.length - 1; i >= 0; i--) {
+    const c = corpses[i];
+    const remain = c.until - now;
+    if (remain <= 0) {
+      scene.remove(c.mesh);
+      c.mesh.traverse((o) => { if (o.geometry) o.geometry.dispose?.(); });
+      corpses.splice(i, 1);
+      continue;
+    }
+    // Fade en últimos 5s.
+    if (remain < 5000) {
+      const a = remain / 5000;
+      c.mesh.traverse((o) => {
+        if (o.material && o.material.transparent !== false) {
+          o.material.transparent = true;
+          o.material.opacity = a;
+        }
+      });
+    }
+  }
 }
 
 export function wakeEnemy(id) {
