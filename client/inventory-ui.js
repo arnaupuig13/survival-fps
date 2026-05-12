@@ -502,6 +502,7 @@ function renderWeaponAttachments(state) {
   };
   const attachLabels = {
     scope: 'MIRILLA', silencer: 'SILENCIADOR', ext_mag: 'CARGADOR EXT.', grip: 'GRIP', laser_sight: 'LASER',
+    flashlight_attach: 'LINTERNA TACT.',
   };
   for (const w of attachments.WEAPONS) {
     if (!inv.has(pickupKey[w], 1)) continue;

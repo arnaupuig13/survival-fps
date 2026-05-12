@@ -854,8 +854,8 @@ addEventListener('keydown', (e) => {
     // Cycle ammo type del arma activa.
     ammoTypes.cycleAmmo(getActiveWeapon());
   } else if (e.code === 'KeyO' && !e.repeat) {
-    // Linterna toggle.
-    flashlight.toggle();
+    // Linterna toggle — pasa el arma activa para checkear attach.
+    flashlight.toggle(getActiveWeapon());
   } else if (e.code === 'KeyZ' && !e.repeat) {
     // Bedroll: coloca tu punto de respawn en el suelo frente al jugador.
     if (!inv.has('bedroll_item', 1)) {
@@ -1290,7 +1290,7 @@ function handleHotbarSlot(slotIdx) {
     if (bedroll.placeAt(fx, fz)) network.setSpawn(fx, fz);
     return;
   }
-  if (itemKey === 'flashlight') { flashlight.toggle(); return; }
+  if (itemKey === 'flashlight') { flashlight.toggle(getActiveWeapon()); return; }
   if (itemKey === 'dog_collar') {
     if (dog.isSummoned()) { logLine('Ya tenés un perro'); return; }
     if (inv.consume('dog_collar', 1)) dog.tryUseCollar();
@@ -1331,7 +1331,7 @@ function frame(now) {
   status.tick(dt);             // sangrado / infección
   traps.update(dt);            // cepos chequean enemigos cercanos
   trader.update(dt, player.pos);
-  flashlight.tick();
+  flashlight.tick(getActiveWeapon());
   dog.update(dt);
   heliTrader.update(dt);
   smoke.update(dt);

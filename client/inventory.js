@@ -86,11 +86,12 @@ export const ITEMS = {
   nuke_body:       { label: 'CUERPO NUKE',    max: 1, rarity: 'legendary', weight: 0, noDrop: true },
 
   // ============== ATTACHMENTS (oneTime) ==============
-  scope:           { label: 'MIRILLA',        max: 1, oneTime: true, rarity: 'rare',     weight: 0 },
-  silencer:        { label: 'SILENCIADOR',    max: 1, oneTime: true, rarity: 'epic',     weight: 0 },
-  ext_mag:         { label: 'CARGADOR EXT.',  max: 1, oneTime: true, rarity: 'rare',     weight: 0 },
-  grip:            { label: 'GRIP',           max: 1, oneTime: true, rarity: 'uncommon', weight: 0 },
-  laser_sight:     { label: 'LASER',          max: 1, oneTime: true, rarity: 'rare',     weight: 0 },
+  scope:             { label: 'MIRILLA',        max: 1, oneTime: true, rarity: 'rare',     weight: 0 },
+  silencer:          { label: 'SILENCIADOR',    max: 1, oneTime: true, rarity: 'epic',     weight: 0 },
+  ext_mag:           { label: 'CARGADOR EXT.',  max: 1, oneTime: true, rarity: 'rare',     weight: 0 },
+  grip:              { label: 'GRIP',           max: 1, oneTime: true, rarity: 'uncommon', weight: 0 },
+  laser_sight:       { label: 'LASER',          max: 1, oneTime: true, rarity: 'rare',     weight: 0 },
+  flashlight_attach: { label: 'LINTERNA TACT.', max: 1, oneTime: true, rarity: 'uncommon', weight: 0 },
 
   // ============== ARMOR — 4 TIERS x 7 SLOTS = 28 PIEZAS ==============
   // Cada pieza reduce daño un % según tier. Total max si todo tier 4:
@@ -271,6 +272,7 @@ const state = {
   ext_mag: 0,
   grip: 0,
   laser_sight: 0,
+  flashlight_attach: 0,    // pre-equipada en pistola al iniciar (no en inv)
   vest_armor: 0,
   helmet_armor: 0,
   // Armor 4-tier x 7 slots

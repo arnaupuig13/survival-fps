@@ -18,20 +18,25 @@ import * as inv from './inventory.js';
 const STORAGE_KEY = 'survival-fps-v2-weapon-attachments';
 const SLOT_COUNT = 4;
 export const WEAPONS = ['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'crossbow'];
-export const ATTACH_TYPES = ['scope', 'silencer', 'ext_mag', 'grip', 'laser_sight'];
+export const ATTACH_TYPES = ['scope', 'silencer', 'ext_mag', 'grip', 'laser_sight', 'flashlight_attach'];
 
 // Compatibilidad: a qué armas se puede adjuntar cada type.
 const COMPAT = {
-  scope:       ['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'crossbow'],
-  silencer:    ['pistol', 'smg', 'rifle', 'crossbow'],
-  ext_mag:     ['pistol', 'rifle', 'smg', 'shotgun', 'sniper'],
-  grip:        ['pistol', 'rifle', 'smg', 'shotgun'],
-  laser_sight: ['pistol', 'rifle', 'smg', 'shotgun'],
+  scope:             ['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'crossbow'],
+  silencer:          ['pistol', 'smg', 'rifle', 'crossbow'],
+  ext_mag:           ['pistol', 'rifle', 'smg', 'shotgun', 'sniper'],
+  grip:              ['pistol', 'rifle', 'smg', 'shotgun'],
+  laser_sight:       ['pistol', 'rifle', 'smg', 'shotgun'],
+  flashlight_attach: ['pistol', 'rifle', 'smg', 'shotgun', 'sniper'],
 };
 
 function emptyState() {
   const out = {};
   for (const w of WEAPONS) out[w] = [null, null, null, null];
+  // DEFAULT: la pistola viene con linterna tactica pre-equipada al iniciar.
+  // Sale gratis para que el player tenga algo de iluminacion de noche
+  // desde el principio.
+  out.pistol[0] = 'flashlight_attach';
   return out;
 }
 
@@ -41,7 +46,8 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return emptyState();
     const data = JSON.parse(raw);
-    const out = emptyState();
+    const out = {};
+    for (const w of WEAPONS) out[w] = [null, null, null, null];
     for (const w of WEAPONS) {
       if (Array.isArray(data[w])) {
         for (let i = 0; i < SLOT_COUNT; i++) {
@@ -50,6 +56,16 @@ function load() {
           }
         }
       }
+    }
+    // MIGRATION: si el jugador no tenia ninguna linterna en ningun slot
+    // (estado legacy o pistola sin la linterna pre-equipada), darle la
+    // linterna gratis en pistol slot 0 si esta libre.
+    let hasFlashlight = false;
+    for (const w of WEAPONS) {
+      if (out[w].includes('flashlight_attach')) { hasFlashlight = true; break; }
+    }
+    if (!hasFlashlight && !out.pistol[0]) {
+      out.pistol[0] = 'flashlight_attach';
     }
     return out;
   } catch { return emptyState(); }

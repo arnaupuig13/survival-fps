@@ -169,6 +169,8 @@ const ICONS = {
   ext_mag:      svg(`<rect x="14" y="8" width="10" height="22" rx="1" fill="#3a3a3e" stroke="#1a1a1c"/><rect x="14" y="8" width="10" height="3" fill="#5a5a5e"/><line x1="16" y1="14" x2="22" y2="14" stroke="#1a1a1c" stroke-width="0.4"/><line x1="16" y1="18" x2="22" y2="18" stroke="#1a1a1c" stroke-width="0.4"/><line x1="16" y1="22" x2="22" y2="22" stroke="#1a1a1c" stroke-width="0.4"/>`),
   grip:         svg(`<path d="M 16 12 L 24 12 L 26 32 L 14 32 Z" fill="#3a2018" stroke="#1a1a1c" stroke-width="0.5"/><line x1="17" y1="18" x2="23" y2="18" stroke="#1a0e00" stroke-width="0.5"/><line x1="17" y1="24" x2="23" y2="24" stroke="#1a0e00" stroke-width="0.5"/>`),
   laser_sight:  svg(`<rect x="10" y="18" width="16" height="5" rx="1" fill="#3a3a3e"/><circle cx="28" cy="20.5" r="2" fill="#d04040"/><line x1="30" y1="20.5" x2="38" y2="20.5" stroke="#d04040" stroke-width="0.8"/>`),
+  // Linterna tactica — cuerpo cilindrico + lente brillante + cono de luz al frente
+  flashlight_attach: svg(`<rect x="6" y="18" width="18" height="6" rx="1" fill="#1a1a1c" stroke="#3a3a3e"/><rect x="6" y="22" width="18" height="1" fill="#3a3a3e"/><circle cx="24" cy="21" r="3.5" fill="#fff8c0" stroke="#888"/><circle cx="24" cy="21" r="2" fill="#ffe070"/><path d="M 27 19 L 38 16 L 38 26 L 27 23 Z" fill="#fff8c0" opacity="0.4"/><line x1="27" y1="21" x2="38" y2="21" stroke="#fff8c0" stroke-width="0.5" opacity="0.5"/>`),
 
   // =====================================================================
   // MEDS

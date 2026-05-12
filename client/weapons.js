@@ -64,7 +64,7 @@ const _dir = new THREE.Vector3();
 // Cada arma vive en su propio Group dentro de gunGroup. Solo se muestra
 // el del arma activa.
 // =====================================================================
-import { makeWeaponMesh } from './weapon-models.js';
+import { makeWeaponMesh, makeFlashlightAttachment } from './weapon-models.js';
 
 const gunGroup = new THREE.Group();
 // Pre-build all weapon meshes (cached, hidden until selected).
@@ -75,7 +75,16 @@ for (const wt of WEAPON_TYPES_LIST) {
   m.visible = false;
   weaponMeshes[wt] = m;
   gunGroup.add(m);
+  // Pre-build flashlight attachment mesh per weapon (hidden by default).
+  // Posicionado al lado del cañon (rail).
+  const fl = makeFlashlightAttachment();
+  fl.position.set(0.020, -0.020, -0.15);   // mounted on rail near muzzle
+  fl.visible = false;
+  fl.userData.isFlashlightAttach = true;
+  m.add(fl);
 }
+// Cuando los attachments cambian (equip/desequip), refresh visual.
+attachments.onChange?.(() => updateGunVisual());
 // gunBody alias — apunta al mesh del arma activa. Para retro-compat con
 // codigo que hace gunBody.position.y etc.
 let gunBody = weaponMeshes.pistol;
@@ -243,6 +252,12 @@ function updateGunVisual() {
   // Mostrar SOLO el mesh del arma activa, esconder el resto.
   for (const [type, m] of Object.entries(weaponMeshes)) {
     m.visible = (type === active);
+    // Toggle visual del flashlight attachment segun attachments state.
+    for (const child of m.children) {
+      if (child.userData?.isFlashlightAttach) {
+        child.visible = attachments.has(type, 'flashlight_attach');
+      }
+    }
   }
   if (active && weaponMeshes[active]) {
     gunBody = weaponMeshes[active];

@@ -430,6 +430,29 @@ function makeNuke() {
 }
 
 // =====================================================================
+// FLASHLIGHT ATTACHMENT — mesh chico montable en el rail de cualquier arma.
+// Se agrega al weapon group cuando attachments.has(weapon, 'flashlight_attach').
+// =====================================================================
+export function makeFlashlightAttachment() {
+  const g = new THREE.Group();
+  g.name = 'flashlight_attach_mesh';
+  // Cuerpo cilindrico negro.
+  g.add(cyl(0.012, 0.012, 0.045, 8, MATS.metalDark, 0, 0, 0, Math.PI / 2));
+  // Cabezal con lente brillante.
+  g.add(cyl(0.014, 0.014, 0.010, 10, MATS.metalDark, 0, 0, -0.027, Math.PI / 2));
+  const lens = new THREE.Mesh(
+    new THREE.CircleGeometry(0.010, 12),
+    new THREE.MeshBasicMaterial({ color: 0xfff8c0 }),
+  );
+  lens.position.set(0, 0, -0.034);
+  lens.rotation.y = Math.PI;
+  g.add(lens);
+  // Switch botoncito atras.
+  g.add(box(0.006, 0.008, 0.005, MATS.rubber, 0, 0.008, 0.022));
+  return g;
+}
+
+// =====================================================================
 // API publica
 // =====================================================================
 export function makeWeaponMesh(type) {
