@@ -17,6 +17,10 @@ import { logLine } from './hud.js';
 import * as sfx from './sounds.js';
 import * as hotbar from './hotbar.js';
 import * as attachments from './attachments.js';
+import { iconHTML, getIcon } from './item-icons.js';
+// Expose getIcon globally para que hud.paintHotbarSlot pueda usarlo sin
+// import circular.
+if (typeof window !== 'undefined') window.__getIcon = getIcon;
 
 // =====================================================================
 // DOM refs (resolved lazily so this module can be imported before the
@@ -270,7 +274,7 @@ function renderSidePanels(state) {
     const row = document.createElement('div');
     row.className = 'invSideRow rare-' + (meta.rarity || 'common');
     row.dataset.itemKey = key;
-    row.innerHTML = `<span class="ilName">${meta.label}</span><span class="ilCount">${count}</span>`;
+    row.innerHTML = `<span><span class="iconWrap">${getIcon(key)}</span><span class="ilName">${meta.label}</span></span><span class="ilCount">${count}</span>`;
     row.title = `${meta.label} ×${count}\nLMB click: 1\nLMB arrastrar: TODO\nMMB arrastrar: la MITAD`;
     target.appendChild(row);
   }
@@ -291,7 +295,7 @@ function render(state) {
       const slot = document.createElement('div');
       slot.className = 'invSlot';
       slot.dataset.slotIdx = String(i);
-      slot.innerHTML = '<div class="iLabel"></div><div class="iCount"></div>';
+      slot.innerHTML = '<div class="iconWrap"></div><div class="iLabel"></div><div class="iCount"></div>';
       grid.appendChild(slot);
     }
   }
@@ -301,8 +305,10 @@ function render(state) {
     if (!slot) break;
     slot.classList.remove('has', 'rare-common', 'rare-uncommon', 'rare-rare', 'rare-epic', 'rare-legendary', 'selected');
     const item = items[i];
+    const iconEl = slot.querySelector('.iconWrap');
     if (!item) {
       slot.dataset.itemKey = '';
+      if (iconEl) iconEl.innerHTML = '';
       slot.querySelector('.iLabel').textContent = '';
       slot.querySelector('.iCount').textContent = '';
       slot.title = '';
@@ -311,6 +317,7 @@ function render(state) {
     slot.dataset.itemKey = item.key;
     slot.classList.add('has', 'rare-' + (item.meta.rarity || 'common'));
     if (item.key === selectedKey) slot.classList.add('selected');
+    if (iconEl) iconEl.innerHTML = getIcon(item.key);
     slot.querySelector('.iLabel').textContent = item.meta.label;
     slot.querySelector('.iCount').textContent = item.count > 1 ? item.count : '';
     slot.title = `${item.meta.label} ×${item.count}\n${DESCRIPTIONS[item.key] || ''}`;
@@ -548,9 +555,12 @@ function renderCraftRecipeList(state) {
     const reqs = Object.entries(r.requires || {})
       .map(([k, v]) => `${v}× ${(inv.ITEMS[k]?.label || k).slice(0, 8)}`)
       .join(' · ');
+    // Producto primario para el icono.
+    const prodKey = Object.keys(r.produces || {})[0];
     row.innerHTML = `
       <div>
-        <div class="crName">${canCraft ? '✓ ' : ''}${r.label}</div>
+        <span class="iconWrap">${prodKey ? getIcon(prodKey) : ''}</span>
+        <span class="crName">${canCraft ? '✓ ' : ''}${r.label}</span>
         <div class="crMini">${reqs || '—'}${r.needsFire ? ' · fuego' : ''}</div>
       </div>
     `;
@@ -596,7 +606,7 @@ function renderCraftDetail(state) {
     const label = inv.ITEMS[k]?.label || k;
     ingHtml += `
       <div class="crIngredient ${ok ? 'have' : 'lack'}">
-        <span class="ciName">${label}</span>
+        <span class="ciName"><span class="iconWrap" style="display:inline-block;width:20px;height:20px;vertical-align:middle;margin-right:6px">${getIcon(k)}</span>${label}</span>
         <span class="ciAmount">${have} / ${v}</span>
         <span class="ciCheck">${ok ? '✓' : '✗'}</span>
       </div>
@@ -614,10 +624,10 @@ function renderCraftDetail(state) {
   }
   detailEl.innerHTML = `
     <div class="craftDetail">
-      <h3>${prodLabel}${prodCount > 1 ? ' × ' + prodCount : ''}</h3>
+      <h3>${prodKey ? `<span class="iconWrap">${getIcon(prodKey)}</span>` : ''}${prodLabel}${prodCount > 1 ? ' × ' + prodCount : ''}</h3>
       <div class="crDesc">${desc}</div>
       <div class="crLabel">PRODUCE</div>
-      <div class="crProduct">${prodLabel}${prodCount > 1 ? ' × ' + prodCount : ''}</div>
+      <div class="crProduct">${prodKey ? `<span class="iconWrap">${getIcon(prodKey)}</span>` : ''}${prodLabel}${prodCount > 1 ? ' × ' + prodCount : ''}</div>
       <div class="crLabel">INGREDIENTES</div>
       ${ingHtml}
       ${fireReq}
@@ -1244,7 +1254,7 @@ function renderAdminTab() {
     const meta = inv.ITEMS[key];
     const slot = document.createElement('div');
     slot.className = 'invSlot has rare-' + (meta.rarity || 'common');
-    slot.innerHTML = `<div class="iLabel">${meta.label}</div><div class="iCount">+1</div>`;
+    slot.innerHTML = `<div class="iconWrap">${getIcon(key)}</div><div class="iLabel">${meta.label}</div><div class="iCount">+1</div>`;
     slot.title = `${meta.label} — clic para añadir 1 al inventario`;
     slot.addEventListener('click', () => {
       inv.add(key, 1);

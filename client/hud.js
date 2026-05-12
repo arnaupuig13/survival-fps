@@ -120,13 +120,23 @@ export function paintHotbarSlot(idx, itemKey, count, itemMeta) {
   for (const slot of slots) {
     const labelEl = slot.querySelector('.hblabel');
     const countEl = slot.querySelector('.hbcount');
+    // Asegurar que existe iconWrap.
+    let iconEl = slot.querySelector('.iconWrap');
+    if (!iconEl) {
+      iconEl = document.createElement('div');
+      iconEl.className = 'iconWrap';
+      slot.appendChild(iconEl);
+    }
     slot.classList.remove('empty', 'disabled');
     if (!itemKey) {
       slot.classList.add('empty');
       if (labelEl) labelEl.textContent = '';
       if (countEl) countEl.textContent = '';
+      iconEl.innerHTML = '';
       continue;
     }
+    // Set icon (lazy import to avoid circular).
+    if (window.__getIcon) iconEl.innerHTML = window.__getIcon(itemKey);
     const label = HOTBAR_LABEL_OVERRIDE[itemKey] || itemMeta?.label || itemKey;
     if (labelEl) labelEl.textContent = label.slice(0, 9);
     if (countEl) {
