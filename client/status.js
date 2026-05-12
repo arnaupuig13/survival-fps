@@ -72,7 +72,9 @@ export function tick(dt) {
   if (state.infected) {
     state.infectTimer -= dt;
     player.hp = Math.max(0, player.hp - 0.4 * dt);
-    player.hunger = Math.max(0, (player.hunger ?? 100) - 0.6 * dt);
+    // Hunger drain por infeccion bajado a la mitad (consistente con
+    // hunger normal que dura el doble).
+    player.hunger = Math.max(0, (player.hunger ?? 100) - 0.3 * dt);
     setHP(player.hp);
     if (state.infectTimer <= 0) {
       state.infected = false;

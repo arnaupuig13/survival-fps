@@ -15,9 +15,11 @@ const JUMP_VEL = 6.0;
 const GRAVITY = 22;
 const PLAYER_RADIUS = 0.4;
 const STAMINA_MAX = 100;
-const STAMINA_DRAIN = 18;
-const STAMINA_REGEN = 14;
-const STAMINA_REGEN_DELAY = 0.8;
+// Stamina dura 4x mas que antes (drain 18 -> 4.5).
+// Regen sigue rapido para que vuelva pronto al maximo.
+const STAMINA_DRAIN = 4.5;
+const STAMINA_REGEN = 18;
+const STAMINA_REGEN_DELAY = 0.6;
 
 export const keys = Object.create(null);
 addEventListener('keydown', (e) => { keys[e.code] = true; });
@@ -81,17 +83,16 @@ export const player = {
     if (this.hp <= 0 || this.invulnerable) return;
     if (performance.now() / 1000 < this.invulnGraceUntil) return;
     if (this.godMode) return;
-    // Armor reduction — sum of all 4-tier 7-slot armor pieces equipped
-    // (passively counted from inventory). Read by main.js each frame
-    // and synced to this.armorReduction. Cap 80%.
-    // Perks add bonus on top: thick_skin +10%.
+    // Armor reduction — sum of all 4-tier 7-slot armor pieces equipped.
+    // Perks + painkillers + vehicle armor add bonus on top.
     let totalReduction = (this.armorReduction || 0) / 100;
     totalReduction += (this.dmgReduction || 0);
-    // Painkillers active: +20% extra reduction.
     if (this.painkillerUntil && performance.now() / 1000 < this.painkillerUntil) {
       totalReduction += 0.20;
     }
-    totalReduction = Math.min(0.90, totalReduction);
+    // Vehicle armor (mientras conduce un APC/truck).
+    totalReduction += (this._vehicleArmor || 0);
+    totalReduction = Math.min(0.95, totalReduction);
     const after = Math.max(1, Math.round(dmg * (1 - totalReduction)));
     this.hp = Math.max(0, this.hp - after);
     this.lastHitAt = performance.now() / 1000;
@@ -164,8 +165,9 @@ export const player = {
       // forest: neutral.
     }
     if (isRaining) thirstMul *= 0.5;   // lluvia general baja sed
-    this.hunger = Math.max(0, this.hunger - 0.5 * hungerMul * dt);
-    this.thirst = Math.max(0, this.thirst - 0.7 * thirstMul * dt);
+    // Hunger + thirst duran el doble que antes (0.5/0.7 -> 0.25/0.35).
+    this.hunger = Math.max(0, this.hunger - 0.25 * hungerMul * dt);
+    this.thirst = Math.max(0, this.thirst - 0.35 * thirstMul * dt);
     // Warmth — combina: bioma + nearFire + noche + lluvia.
     if (this.warmthImmune) {
       this.warmth = 100;
