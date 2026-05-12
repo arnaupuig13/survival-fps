@@ -59,36 +59,26 @@ ray.camera = camera; // necesario para que raycast no rompa con Sprites en escen
 const _origin = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 
-// Visible weapon stub in front of camera — a simple gun-shaped box for now.
-// gunGroup tiene posiciones HIP por defecto. Cuando entra en ADS, el
-// gunGroup se traslada a la posición AIM (centrada en la pantalla, alineada
-// con la mira) para "apuntar a través de las miras".
-const gunGroup = new THREE.Group();
-const gunBody = new THREE.Mesh(
-  new THREE.BoxGeometry(0.08, 0.12, 0.36),
-  new THREE.MeshStandardMaterial({ color: 0x6a6a72, roughness: 0.55, metalness: 0.4, emissive: 0x111114 }),
-);
-gunBody.position.set(0.18, -0.18, -0.45);
-gunGroup.add(gunBody);
-// Barrel — slightly slimmer cylinder protruding forward.
-const barrel = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.022, 0.022, 0.22, 8),
-  new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.4, metalness: 0.85 }),
-);
-barrel.rotation.x = Math.PI / 2;
-barrel.position.set(0.18, -0.18, -0.7);
-gunGroup.add(barrel);
+// =====================================================================
+// VISIBLE WEAPON MESHES — uno por tipo de arma con detalle 3D.
+// Cada arma vive en su propio Group dentro de gunGroup. Solo se muestra
+// el del arma activa.
+// =====================================================================
+import { makeWeaponMesh } from './weapon-models.js';
 
-// Mira frontal (front sight) — pequeño post vertical al final del cañón.
-const sightMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4 });
-const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.04, 0.012), sightMat);
-frontSight.position.set(0.18, -0.13, -0.79);
-gunGroup.add(frontSight);
-// Mira trasera (rear sight) — dos postes con gap en V/U sobre la culata.
-const rearL = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.034, 0.024), sightMat);
-rearL.position.set(0.165, -0.13, -0.32); gunGroup.add(rearL);
-const rearR = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.034, 0.024), sightMat);
-rearR.position.set(0.195, -0.13, -0.32); gunGroup.add(rearR);
+const gunGroup = new THREE.Group();
+// Pre-build all weapon meshes (cached, hidden until selected).
+const weaponMeshes = {};
+const WEAPON_TYPES_LIST = ['pistol', 'rifle', 'ak', 'semi', 'smg', 'shotgun', 'sniper', 'crossbow', 'gl', 'gatling', 'nuke'];
+for (const wt of WEAPON_TYPES_LIST) {
+  const m = makeWeaponMesh(wt);
+  m.visible = false;
+  weaponMeshes[wt] = m;
+  gunGroup.add(m);
+}
+// gunBody alias — apunta al mesh del arma activa. Para retro-compat con
+// codigo que hace gunBody.position.y etc.
+let gunBody = weaponMeshes.pistol;
 
 // Reflex sight — diseño realista CUADRADO. Se equipa por arma vía
 // attachments.equip(). Cuando ADS, el dot queda en el centro de la
@@ -250,11 +240,12 @@ addEventListener('mousedown', (e) => { if (e.button === 0) { mouseDown = true; t
 addEventListener('mouseup',   (e) => { if (e.button === 0)   mouseDown = false; });
 
 function updateGunVisual() {
-  // Different size per weapon — visual cue only.
-  if (active === 'rifle') {
-    gunBody.scale.set(1, 1, 1.6);
-  } else {
-    gunBody.scale.set(1, 1, 1);
+  // Mostrar SOLO el mesh del arma activa, esconder el resto.
+  for (const [type, m] of Object.entries(weaponMeshes)) {
+    m.visible = (type === active);
+  }
+  if (active && weaponMeshes[active]) {
+    gunBody = weaponMeshes[active];
   }
 }
 
@@ -462,22 +453,17 @@ export function updateWeapons(dt) {
   // Ocultar el arma de fuego cuando NO hay arma equipada, hay tool melee
   // o estás en modo granada.
   gunGroup.visible = (!!active && !getActiveTool()) || player.grenadeMode;
-  // Granada visible solo en modo granada. Las miras + reflex se ocultan.
+  // Granada visible solo en modo granada. El arma activa se oculta.
   grenadeMesh.visible = !!player.grenadeMode;
   if (player.grenadeMode) {
-    // Ocultar el resto del arma para que solo se vea la granada.
-    gunBody.visible = false;
-    barrel.visible = false;
-    frontSight.visible = false;
-    rearL.visible = false;
-    rearR.visible = false;
+    // Ocultar el mesh del arma activa para que solo se vea la granada.
+    for (const m of Object.values(weaponMeshes)) m.visible = false;
     reflexGroup.visible = false;
-  } else {
-    gunBody.visible = true;
-    barrel.visible = true;
-    frontSight.visible = true;
-    rearL.visible = true;
-    rearR.visible = true;
+  } else if (active && weaponMeshes[active]) {
+    // Mostrar solo el mesh del arma activa.
+    for (const [type, m] of Object.entries(weaponMeshes)) {
+      m.visible = (type === active);
+    }
   }
   // Lerp ADS: muever el grupo a posición AIM (centrada) cuando _aimTarget=1.
   _aimT += (_aimTarget - _aimT) * (1 - Math.exp(-12 * dt));
