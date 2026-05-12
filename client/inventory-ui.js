@@ -208,12 +208,27 @@ function buildGrid() {
   grid.innerHTML = '';
 }
 
+// Items que viven en las SIDE PANELS (no en el grid central).
+//   LEFT panel: ammo + attachments
+//   RIGHT panel: materials
+const SIDE_LEFT_KEYS = new Set();    // ammo + attachments → llenado abajo
+const SIDE_RIGHT_KEYS = new Set();   // materials → llenado abajo
+(function fillSideKeys() {
+  for (const [k, cat] of Object.entries(CATEGORIES_MAP)) {
+    if (cat === 'ammo') SIDE_LEFT_KEYS.add(k);
+    if (cat === 'materials') SIDE_RIGHT_KEYS.add(k);
+  }
+})();
+
 // Filter inventory state into a list of grid items applying category + search.
+// Excluye los items que van a las side panels (ammo + materials) — esos se
+// renderizan aparte.
 function getGridItems(state) {
   const items = [];
   const q = (searchQuery || '').toLowerCase().trim();
   for (const key of DISPLAY_ORDER) {
     if (EQUIP_KEYS.has(key)) continue;
+    if (SIDE_LEFT_KEYS.has(key) || SIDE_RIGHT_KEYS.has(key)) continue;
     const meta = inv.ITEMS[key];
     if (!meta) continue;
     const count = state[key] | 0;
@@ -228,6 +243,37 @@ function getGridItems(state) {
     items.push({ key, count, meta });
   }
   return items;
+}
+
+// === SIDE PANEL RENDER ===
+// Ammo + attachments en columna izquierda, materials en derecha. Listas
+// verticales compactas con contador. Sin limite de stack.
+function renderSidePanels(state) {
+  const ammoEl = document.getElementById('ammoList');
+  const attachEl = document.getElementById('attachList');
+  const matEl = document.getElementById('matList');
+  if (!ammoEl || !attachEl || !matEl) return;
+  ammoEl.innerHTML = '';
+  attachEl.innerHTML = '';
+  matEl.innerHTML = '';
+  const attachKeys = new Set(['scope', 'silencer', 'ext_mag', 'grip', 'laser_sight']);
+  for (const key of DISPLAY_ORDER) {
+    const count = state[key] | 0;
+    if (count <= 0) continue;
+    const meta = inv.ITEMS[key];
+    if (!meta) continue;
+    let target;
+    if (attachKeys.has(key)) target = attachEl;
+    else if (SIDE_LEFT_KEYS.has(key)) target = ammoEl;
+    else if (SIDE_RIGHT_KEYS.has(key)) target = matEl;
+    if (!target) continue;
+    const row = document.createElement('div');
+    row.className = 'invSideRow rare-' + (meta.rarity || 'common');
+    row.dataset.itemKey = key;
+    row.innerHTML = `<span class="ilName">${meta.label}</span><span class="ilCount">${count}</span>`;
+    row.title = `${meta.label} ×${count}\nLMB click: 1\nLMB arrastrar: TODO\nMMB arrastrar: la MITAD`;
+    target.appendChild(row);
+  }
 }
 
 // =====================================================================
@@ -300,6 +346,13 @@ function render(state) {
   renderItemInfo(state, selectedKey);
   // Refresh sub-inventario de attachments por arma.
   renderWeaponAttachments(state);
+  // Render side panels (ammo + materiales).
+  renderSidePanels(state);
+  // Render crafting tab si esta abierta.
+  renderCraftRecipeList(state);
+  renderCraftDetail(state);
+  // Render perks tab.
+  renderPerksTab();
 }
 
 function renderItemInfo(state, key) {
@@ -361,8 +414,9 @@ function buildStatsHTML(key, meta) {
   return rows.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('');
 }
 
-// Render bloque de armas con sus 4 slots de attachments cada una.
-// Solo se muestran las armas que el player tiene (pickup en inv).
+// Render bloque de armas con submenu de attachments compatibles arriba +
+// 4 slots de attachments aplicados abajo. Solo se muestran las armas que
+// el player tiene (pickup en inv).
 function renderWeaponAttachments(state) {
   if (!weaponAttachListEl) return;
   weaponAttachListEl.innerHTML = '';
@@ -375,40 +429,273 @@ function renderWeaponAttachments(state) {
     shotgun: 'shotgun_pickup', sniper: 'sniper_pickup', crossbow: 'crossbow_pickup',
   };
   const attachLabels = {
-    scope: 'MIR', silencer: 'SIL', ext_mag: 'MAG', grip: 'GRP', laser_sight: 'LSR',
+    scope: 'MIRILLA', silencer: 'SILENCIADOR', ext_mag: 'CARGADOR EXT.', grip: 'GRIP', laser_sight: 'LASER',
   };
   for (const w of attachments.WEAPONS) {
-    if (!inv.has(pickupKey[w], 1)) continue;     // solo armas que tenés
-    const row = document.createElement('div');
-    row.className = 'weaponRow';
-    const name = document.createElement('div');
-    name.className = 'weaponName';
-    name.textContent = weaponLabels[w];
-    row.appendChild(name);
+    if (!inv.has(pickupKey[w], 1)) continue;
+    const block = document.createElement('div');
+    block.className = 'weaponBlock';
+    // Title.
+    const title = document.createElement('div');
+    title.className = 'wTitle';
+    title.textContent = '⚔ ' + weaponLabels[w];
+    block.appendChild(title);
+    // SUBMENU: accesorios disponibles compatibles que tenés.
+    const availLabel = document.createElement('div');
+    availLabel.className = 'wSlotsLabel';
+    availLabel.textContent = 'ACCESORIOS DISPONIBLES (click para aplicar)';
+    block.appendChild(availLabel);
+    const avail = document.createElement('div');
+    avail.className = 'wAvailable';
+    let anyAvail = false;
+    for (const aType of attachments.ATTACH_TYPES) {
+      if (!attachments.isCompatible(w, aType)) continue;
+      if (!inv.has(aType, 1)) continue;
+      if (attachments.has(w, aType)) continue;  // ya esta en este arma
+      anyAvail = true;
+      const btn = document.createElement('button');
+      btn.className = 'wAvailBtn';
+      btn.textContent = '+ ' + attachLabels[aType];
+      btn.title = `Aplicar ${attachLabels[aType]} al arma`;
+      btn.addEventListener('click', () => {
+        // Buscar primer slot vacio y adjuntar.
+        const slots = attachments.getSlots(w);
+        for (let i = 0; i < slots.length; i++) {
+          if (!slots[i]) { attachments.attach(w, i, aType); break; }
+        }
+      });
+      avail.appendChild(btn);
+    }
+    if (!anyAvail) {
+      const none = document.createElement('div');
+      none.className = 'wAvailNone';
+      none.textContent = 'No tenés accesorios compatibles disponibles. Conseguilos en el laboratorio o crafteá uno.';
+      avail.appendChild(none);
+    }
+    block.appendChild(avail);
+    // SLOTS APLICADOS (4 fijos, click → quita).
+    const slotsLabel = document.createElement('div');
+    slotsLabel.className = 'wSlotsLabel';
+    slotsLabel.textContent = 'APLICADOS (click para quitar)';
+    block.appendChild(slotsLabel);
     const slotsEl = document.createElement('div');
-    slotsEl.className = 'weaponSlots';
+    slotsEl.className = 'wSlots';
     const slots = attachments.getSlots(w);
     for (let i = 0; i < slots.length; i++) {
       const slot = document.createElement('div');
-      slot.className = 'attachSlot';
-      slot.dataset.weapon = w;
-      slot.dataset.slotIdx = String(i);
+      slot.className = 'wSlot';
       const item = slots[i];
       if (item) {
-        slot.classList.add('has');
-        slot.dataset.itemKey = item;        // para drag-out al inv
-        slot.title = `${(inv.ITEMS[item]?.label || item)} — clic para quitar`;
-        const label = document.createElement('div');
-        label.className = 'aLabel';
-        label.textContent = attachLabels[item] || item.slice(0, 3).toUpperCase();
-        slot.appendChild(label);
+        slot.classList.add('filled');
+        slot.textContent = attachLabels[item] || item;
+        slot.title = `${attachLabels[item]} — click para quitar`;
+        const idx = i;
+        slot.addEventListener('click', () => attachments.detach(w, idx));
       } else {
-        slot.title = `Arrastrá un accesorio compatible al slot ${i + 1}`;
+        slot.textContent = '— vacío —';
       }
       slotsEl.appendChild(slot);
     }
-    row.appendChild(slotsEl);
-    weaponAttachListEl.appendChild(row);
+    block.appendChild(slotsEl);
+    weaponAttachListEl.appendChild(block);
+  }
+  if (weaponAttachListEl.children.length === 0) {
+    weaponAttachListEl.innerHTML = '<div style="color:#888;font-size:12px;padding:20px;text-align:center;">No tenés armas todavía. Conseguilas matando cientificos o crafteá una.</div>';
+  }
+}
+
+// =====================================================================
+// CRAFTEO TAB — lista + detalle + boton CREAR
+// =====================================================================
+let craftActiveCat = 'all';
+let craftSearchQuery = '';
+let craftSelectedId = null;
+
+// Mapea cada receta a una categoria para el filtro.
+function craftRecipeCategory(r) {
+  const producesKey = Object.keys(r.produces || {})[0];
+  if (!producesKey) return 'utility';
+  const cat = CATEGORIES_MAP[producesKey];
+  // Algunos crafts especiales caen en placeable (campfire/wall/bedroll/bear_trap).
+  if (['campfire', 'furnace', 'wall_piece', 'bedroll_item', 'bear_trap', 'spike_trap', 'stash_box'].includes(producesKey)) return 'placeables';
+  return cat || 'utility';
+}
+
+function recipeCanCraft(state, r) {
+  if (!r) return false;
+  for (const [k, v] of Object.entries(r.requires || {})) {
+    if ((state[k] | 0) < v) return false;
+  }
+  // Si requiere fuego, asumimos true para mostrar (el craft real lo valida).
+  return true;
+}
+
+function renderCraftRecipeList(state) {
+  const listEl = document.getElementById('craftRecipeList');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  const q = (craftSearchQuery || '').toLowerCase().trim();
+  let count = 0;
+  for (const r of inv.RECIPES) {
+    const cat = craftRecipeCategory(r);
+    if (craftActiveCat !== 'all' && cat !== craftActiveCat) continue;
+    if (q && !r.label.toLowerCase().includes(q) && !r.id.toLowerCase().includes(q)) continue;
+    const row = document.createElement('div');
+    const canCraft = recipeCanCraft(state, r);
+    row.className = 'craftRecipe' + (canCraft ? ' can' : '') + (r.id === craftSelectedId ? ' selected' : '');
+    row.dataset.recipeId = r.id;
+    // Mini-string ingredientes.
+    const reqs = Object.entries(r.requires || {})
+      .map(([k, v]) => `${v}× ${(inv.ITEMS[k]?.label || k).slice(0, 8)}`)
+      .join(' · ');
+    row.innerHTML = `
+      <div>
+        <div class="crName">${canCraft ? '✓ ' : ''}${r.label}</div>
+        <div class="crMini">${reqs || '—'}${r.needsFire ? ' · fuego' : ''}</div>
+      </div>
+    `;
+    row.addEventListener('click', () => {
+      craftSelectedId = r.id;
+      renderCraftRecipeList(state);
+      renderCraftDetail(state);
+    });
+    listEl.appendChild(row);
+    count++;
+  }
+  if (count === 0) {
+    listEl.innerHTML = '<div style="color:#666;padding:20px;text-align:center;font-size:11px;">Sin recetas que coincidan.</div>';
+  }
+}
+
+function renderCraftDetail(state) {
+  const detailEl = document.getElementById('craftDetail');
+  if (!detailEl) return;
+  if (!craftSelectedId) {
+    detailEl.innerHTML = '<div class="craftEmpty">Selecciona una receta a la izquierda para ver el detalle.</div>';
+    return;
+  }
+  const r = inv.RECIPES.find(x => x.id === craftSelectedId);
+  if (!r) {
+    detailEl.innerHTML = '<div class="craftEmpty">Receta no encontrada.</div>';
+    return;
+  }
+  // Nombre del producto principal.
+  const prodKey = Object.keys(r.produces || {})[0];
+  const prodMeta = prodKey ? inv.ITEMS[prodKey] : null;
+  const prodLabel = prodMeta ? prodMeta.label : r.label;
+  const prodCount = prodKey ? r.produces[prodKey] : 1;
+  // Descripcion (usa DESCRIPTIONS si existe).
+  const desc = prodKey ? (DESCRIPTIONS[prodKey] || `Crafteable: ${r.label}`) : r.label;
+  // Ingredientes.
+  let ingHtml = '';
+  let canCraft = true;
+  for (const [k, v] of Object.entries(r.requires || {})) {
+    const have = state[k] | 0;
+    const ok = have >= v;
+    if (!ok) canCraft = false;
+    const label = inv.ITEMS[k]?.label || k;
+    ingHtml += `
+      <div class="crIngredient ${ok ? 'have' : 'lack'}">
+        <span class="ciName">${label}</span>
+        <span class="ciAmount">${have} / ${v}</span>
+        <span class="ciCheck">${ok ? '✓' : '✗'}</span>
+      </div>
+    `;
+  }
+  // Si requiere fuego, agregar como requisito.
+  let fireReq = '';
+  if (r.needsFire) {
+    fireReq = `<div class="crIngredient ${player.nearFire ? 'have' : 'lack'}">
+      <span class="ciName">★ Cerca de fuego (hoguera)</span>
+      <span class="ciAmount">${player.nearFire ? 'SI' : 'NO'}</span>
+      <span class="ciCheck">${player.nearFire ? '✓' : '✗'}</span>
+    </div>`;
+    if (!player.nearFire) canCraft = false;
+  }
+  detailEl.innerHTML = `
+    <div class="craftDetail">
+      <h3>${prodLabel}${prodCount > 1 ? ' × ' + prodCount : ''}</h3>
+      <div class="crDesc">${desc}</div>
+      <div class="crLabel">PRODUCE</div>
+      <div class="crProduct">${prodLabel}${prodCount > 1 ? ' × ' + prodCount : ''}</div>
+      <div class="crLabel">INGREDIENTES</div>
+      ${ingHtml}
+      ${fireReq}
+      <button class="craftCreateBtn ${canCraft ? '' : 'disabled'}" id="craftCreateBtn">
+        ${canCraft ? '✓ CREAR' : '✗ FALTAN INGREDIENTES'}
+      </button>
+    </div>
+  `;
+  const btn = document.getElementById('craftCreateBtn');
+  if (btn && canCraft) {
+    btn.addEventListener('click', () => {
+      if (_craftHandler) _craftHandler(r.id);
+    });
+  }
+}
+
+// =====================================================================
+// PERKS TAB — elegir perks pendientes + ver activos + tier de armas
+// =====================================================================
+async function renderPerksTab() {
+  const chooseBlock = document.getElementById('perkChooseBlock');
+  const cardsEl = document.getElementById('perkChooseCards');
+  const pendingTextEl = document.getElementById('perkPendingText');
+  const perksEl = document.getElementById('learnPerks');
+  const tiersEl = document.getElementById('learnTiers');
+  if (!perksEl || !tiersEl) return;
+  const perks = await import('./perks.js');
+  // Render seccion de elegir perk.
+  const pending = perks.getPendingCount();
+  if (chooseBlock) {
+    chooseBlock.classList.toggle('hidden', pending <= 0);
+    if (pendingTextEl) pendingTextEl.textContent = pending > 0 ? `(${pending} disponible${pending > 1 ? 's' : ''})` : '';
+    if (cardsEl && pending > 0) {
+      cardsEl.innerHTML = '';
+      const opts = perks.pickThreeOptions();
+      for (const p of opts) {
+        const card = document.createElement('div');
+        card.className = 'perkChooseCard';
+        card.innerHTML = `
+          <div class="pcName">${p.name}</div>
+          <div class="pcDesc">${p.desc}</div>
+          <div class="pcBtn">[ ELEGIR ]</div>
+        `;
+        card.addEventListener('click', () => {
+          perks.choosePerk(p.id);
+          // Re-render para mostrar nuevo state.
+          renderPerksTab();
+          refresh();
+        });
+        cardsEl.appendChild(card);
+      }
+    }
+  }
+  // Perks activos.
+  perksEl.innerHTML = '';
+  for (const p of perks.PERK_POOL) {
+    const isOn = perks.getState().taken.has(p.id);
+    const row = document.createElement('div');
+    row.className = 'lRow ' + (isOn ? 'on' : 'off');
+    row.innerHTML = `<span>${p.name}${isOn ? ' ✓' : ''}</span><span>${p.desc}</span>`;
+    perksEl.appendChild(row);
+  }
+  // Tier de armas.
+  const wt = await import('./weapon-tiers.js');
+  tiersEl.innerHTML = '';
+  const labels = { pistol: 'PISTOLA', rifle: 'RIFLE', smg: 'SMG', shotgun: 'ESCOPETA', sniper: 'SNIPER', crossbow: 'BALLESTA' };
+  const owned = { pistol: 'pistol_pickup', rifle: 'rifle_pickup', smg: 'smg_pickup', shotgun: 'shotgun_pickup', sniper: 'sniper_pickup', crossbow: 'crossbow_pickup' };
+  for (const w of Object.keys(labels)) {
+    if (!inv.has(owned[w], 1)) continue;
+    const tier = wt.getTier(w);
+    const meta = wt.getTierMeta(w);
+    const row = document.createElement('div');
+    row.className = 'lRow lTier-' + tier;
+    row.innerHTML = `<span>${labels[w]}</span><span>${meta.label} · +${Math.round((meta.dmgMul - 1) * 100)}% dmg</span>`;
+    tiersEl.appendChild(row);
+  }
+  if (tiersEl.children.length === 0) {
+    tiersEl.innerHTML = '<div class="lRow off">Sin armas (excepto pistola)</div>';
   }
 }
 
@@ -899,7 +1186,12 @@ function showTab(tabName) {
     pane.classList.toggle('hidden', pane.dataset.tab !== tabName);
   }
   // Renders específicos por tab.
-  if (tabName === 'learn') renderLearnTab();
+  if (tabName === 'craft') {
+    const state = inv.getState();
+    renderCraftRecipeList(state);
+    renderCraftDetail(state);
+  }
+  if (tabName === 'perks') renderPerksTab();
   if (tabName === 'admin') renderAdminTab();
 }
 // Click en botones de tab.
@@ -1012,16 +1304,149 @@ function wireFilters() {
       searchQuery = search.value || '';
       refresh();
     });
-    // Limpiar busqueda al cerrar/abrir el inventario.
     search.addEventListener('keydown', (e) => {
       if (e.code === 'Escape') {
         search.value = '';
         searchQuery = '';
         refresh();
       }
-      // Prevent inventory hotkeys while typing.
       e.stopPropagation();
     });
   }
+  // === CRAFTING CATEGORIES + SEARCH ===
+  const cRow = document.getElementById('craftCatRow');
+  if (cRow) {
+    for (const btn of cRow.querySelectorAll('.invCatBtn')) {
+      btn.addEventListener('click', () => {
+        cRow.querySelectorAll('.invCatBtn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        craftActiveCat = btn.dataset.ccat || 'all';
+        renderCraftRecipeList(inv.getState());
+      });
+    }
+  }
+  const cSearch = document.getElementById('craftSearch');
+  if (cSearch) {
+    cSearch.addEventListener('input', () => {
+      craftSearchQuery = cSearch.value || '';
+      renderCraftRecipeList(inv.getState());
+    });
+    cSearch.addEventListener('keydown', (e) => e.stopPropagation());
+  }
 }
 wireFilters();
+
+// =====================================================================
+// DRAG MECHANICS — side panels (ammo + materials) tienen 3 acciones:
+//   LMB click sin mover  → agarra 1 unidad (drag-out al piso = 1 cae)
+//   LMB click + drag     → agarra el stack COMPLETO (drag-out = todo cae)
+//   MMB click + drag     → agarra la MITAD del stack (drag-out = mitad cae)
+// Si soltás afuera del modal (en el "mundo"), el item cae al piso del player.
+// =====================================================================
+const DRAG_PX_THRESHOLD = 5;
+let sideDrag = null;   // { itemKey, mode, startX, startY, ghostEl, dragged }
+
+function startSideDrag(e, key, isMiddleClick) {
+  const count = inv.get(key);
+  if (count <= 0) return;
+  sideDrag = {
+    itemKey: key,
+    mode: isMiddleClick ? 'half' : 'all',   // se ajusta a 'one' si NO se mueve
+    startX: e.clientX,
+    startY: e.clientY,
+    dragged: false,
+  };
+  document.addEventListener('mousemove', onSideMove, true);
+  document.addEventListener('mouseup', onSideUp, true);
+  e.preventDefault();
+}
+
+function onSideMove(e) {
+  if (!sideDrag) return;
+  const dx = Math.abs(e.clientX - sideDrag.startX);
+  const dy = Math.abs(e.clientY - sideDrag.startY);
+  if (!sideDrag.dragged && (dx > DRAG_PX_THRESHOLD || dy > DRAG_PX_THRESHOLD)) {
+    sideDrag.dragged = true;
+    // Crear ghost visual.
+    const ghost = document.createElement('div');
+    ghost.id = 'sideGhost';
+    ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;background:rgba(60,50,20,0.95);border:1px solid #f0c060;color:#f0c060;padding:6px 10px;font:600 12px system-ui;letter-spacing:1px;';
+    const meta = inv.ITEMS[sideDrag.itemKey];
+    const count = inv.get(sideDrag.itemKey);
+    const carryCount = sideDrag.mode === 'half' ? Math.ceil(count / 2) : count;
+    ghost.innerHTML = `${meta?.label || sideDrag.itemKey} × <b>${carryCount}</b>`;
+    document.body.appendChild(ghost);
+    sideDrag.ghostEl = ghost;
+  }
+  if (sideDrag.ghostEl) {
+    sideDrag.ghostEl.style.left = (e.clientX + 10) + 'px';
+    sideDrag.ghostEl.style.top = (e.clientY + 10) + 'px';
+  }
+}
+
+function onSideUp(e) {
+  if (!sideDrag) return;
+  document.removeEventListener('mousemove', onSideMove, true);
+  document.removeEventListener('mouseup', onSideUp, true);
+  const { itemKey, mode, dragged, ghostEl } = sideDrag;
+  if (ghostEl) ghostEl.remove();
+  sideDrag = null;
+  const count = inv.get(itemKey);
+  if (count <= 0) return;
+  // Decidir cantidad a tirar segun modo.
+  let drop = 0;
+  if (!dragged) {
+    // Click izquierdo sin mover: agarra 1 unidad (la tira al piso).
+    drop = 1;
+  } else {
+    // Drag — para que cuente como "tirar al piso", la liberacion debe
+    // estar FUERA de la caja del modal (.rustPanel).
+    const target = e.target;
+    if (target && target.closest('.rustPanel')) return;
+    drop = mode === 'half' ? Math.ceil(count / 2) : count;
+  }
+  if (drop > 0) {
+    inv.remove(itemKey, drop);
+    // Spawn crate local al pie del player.
+    spawnLocalDrop(itemKey, drop);
+    refresh();
+  }
+}
+
+// Spawn un crate "localLoot" frente al player que al abrirlo te devuelve
+// el item. Sin sync al server — es solo visual + recogible.
+function spawnLocalDrop(itemKey, count) {
+  // Posicion: 1.5m frente al player.
+  const yaw = player.yaw?.() ?? 0;
+  const fx = player.pos.x + Math.sin(yaw) * -1.5;
+  const fz = player.pos.z + Math.cos(yaw) * -1.5;
+  const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  spawnCrate({
+    id, x: fx, z: fz,
+    y: 0,
+    tableKey: 'town',
+    localLoot: { [itemKey]: count },   // main.js lee esto al abrir
+  });
+  logLine(`Tiraste ${count}× ${inv.ITEMS[itemKey]?.label || itemKey}`);
+}
+
+// Wire side panels: mousedown abre el drag, click sin mover lo hace "drop 1".
+function wireSidePanelDrag() {
+  const ammo = document.getElementById('ammoList');
+  const attach = document.getElementById('attachList');
+  const mat = document.getElementById('matList');
+  for (const container of [ammo, attach, mat]) {
+    if (!container) continue;
+    container.addEventListener('mousedown', (e) => {
+      const row = e.target.closest('.invSideRow');
+      if (!row) return;
+      const key = row.dataset.itemKey;
+      if (!key) return;
+      const isMMB = e.button === 1;
+      const isLMB = e.button === 0;
+      if (!isMMB && !isLMB) return;
+      startSideDrag(e, key, isMMB);
+    });
+  }
+}
+wireSidePanelDrag();

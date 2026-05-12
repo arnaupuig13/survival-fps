@@ -340,8 +340,15 @@ export function getEquippedBySlot() {
 
 export function add(item, n) {
   if (!ITEMS[item]) return;
-  const max = ITEMS[item].max;
-  state[item] = Math.min(max, (state[item] | 0) + n);
+  const meta = ITEMS[item];
+  // v1.4: sin limites para items stackeables (ammo, materiales, comida, etc).
+  // SOLO oneTime items (armas, armor, attachments) tienen cap de 1 — no
+  // tiene sentido tener 3 pistolas. Para el resto, sumar libremente.
+  if (meta.oneTime) {
+    state[item] = Math.min(meta.max || 1, (state[item] | 0) + n);
+  } else {
+    state[item] = (state[item] | 0) + n;
+  }
   notify();
 }
 export function remove(item, n) {

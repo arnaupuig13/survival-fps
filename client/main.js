@@ -1006,29 +1006,15 @@ addEventListener('keydown', (e) => {
       showBanner('mortal', 1200);
     }
   } else if (e.code === 'KeyK' && !e.repeat) {
-    // Abrir / cerrar panel de perks. Solo si hay perks pendientes O ya
-    // está abierto (para poder cerrarlo).
-    if (isPerksOpen()) {
-      closePerksPanel();
-      if (player.hp > 0) {
-        setTimeout(() => { _voluntaryUnlock = false; renderer.domElement.requestPointerLock?.(); }, 60);
-      }
-    } else if (perks.getPendingCount() > 0) {
-      const opts = perks.pickThreeOptions();
-      _voluntaryUnlock = true;
-      document.exitPointerLock?.();
-      openPerksPanel(opts, (id) => {
-        perks.choosePerk(id);
-        // Si quedan más perks pendientes, re-render con nuevas opciones.
-        if (perks.getPendingCount() > 0) {
-          openPerksPanel(perks.pickThreeOptions(), (id2) => perks.choosePerk(id2));
-        } else {
-          closePerksPanel();
-          if (player.hp > 0) setTimeout(() => { _voluntaryUnlock = false; renderer.domElement.requestPointerLock?.(); }, 60);
-        }
-      });
+    // K abre el inventario en la pestaña PERKS. Si ya estaba abierto, lo cierra.
+    // Si hay perks pendientes, muestra el panel de eleccion arriba.
+    if (isInventoryOpen()) {
+      toggleInventory();
     } else {
-      logLine('No hay perks disponibles. Subí de nivel.');
+      toggleInventory();
+      import('./inventory-ui.js').then(invUi => {
+        setTimeout(() => invUi.setActiveTab?.('perks'), 30);
+      });
     }
   } else if (e.code === 'F4' && !e.repeat) {
     // Dev: visualize obstacle colliders as wireframes (yellow box, blue circle).
