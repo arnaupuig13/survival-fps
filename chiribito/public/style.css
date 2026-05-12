@@ -958,6 +958,40 @@ body.slow-mo .seat.winner .nameplate {
 .achievement-popup .ach-title { color: var(--gold); font-weight: 800; letter-spacing: 1px; font-size: 13px; }
 .achievement-popup .ach-desc { color: var(--text); font-size: 11px; margin-top: 2px; }
 
+/* Live stats overlay (esquina sup-derecha) */
+.live-stats {
+  position: fixed;
+  right: 18px; top: 80px;
+  background: rgba(0,0,0,.78);
+  border: 1px solid rgba(212,175,55,.4);
+  border-radius: 8px;
+  padding: 8px 14px;
+  z-index: 80;
+  min-width: 180px;
+  font-size: 12px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.live-stats .ls-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 3px 0; border-bottom: 1px dashed rgba(255,255,255,.06);
+}
+.live-stats .ls-row:last-child { border-bottom: none; }
+.live-stats .ls-lbl { color: var(--muted); letter-spacing: 0.5px; }
+.live-stats .ls-val { color: var(--gold); font-weight: 800; font-family: 'Georgia', serif; }
+.live-stats .ls-val.m-red    { color: #e74c3c; }
+.live-stats .ls-val.m-yellow { color: #e8c560; }
+.live-stats .ls-val.m-green  { color: #3da76a; }
+.live-stats .ls-val.m-blue   { color: #6db4ff; }
+
+@media (max-width: 720px) {
+  .live-stats { right: 4px; top: 60px; min-width: 130px; padding: 5px 8px; font-size: 10px; }
+}
+
+/* Si side-pots tambien estan visibles, los corremos para que no se pisen */
+.side-pots { top: 240px !important; }
+@media (max-width: 720px) { .side-pots { top: 200px !important; } }
+
 /* Tournament leaderboard */
 .tourney-leaderboard {
   position: fixed; left: 18px; top: 80px;
@@ -1151,6 +1185,35 @@ body.slow-mo .seat.winner .nameplate {
   transform: rotateX(14deg) scale(1.04) !important;
 }
 
+/* Rim light: anillo de luz roja-dorada pulsante alrededor del felt en all-in */
+.felt-rim {
+  position: absolute;
+  inset: -28px;
+  border-radius: 50% / 28%;
+  pointer-events: none;
+  z-index: 6;
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+.felt-rim.active {
+  opacity: 1;
+  animation: rimPulse 1.2s ease-in-out 2;
+}
+@keyframes rimPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 4px rgba(255, 80, 80, 0.6),
+      0 0 30px 10px rgba(255, 80, 80, 0.5),
+      0 0 60px 20px rgba(255, 180, 80, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(255, 50, 50, 0.95),
+      0 0 50px 18px rgba(255, 80, 80, 0.85),
+      0 0 100px 35px rgba(255, 200, 100, 0.6);
+  }
+}
+
 /* Dealer button rolling animation */
 @keyframes dealerRoll {
   from { transform: translate(0, 0) rotate(0deg); }
@@ -1169,6 +1232,38 @@ body.slow-mo .seat.winner .nameplate {
 /* Cinema mode: angulo 3D mas marcado */
 body.cinema-mode .felt {
   transform: rotateX(11deg) !important;
+}
+
+/* Dealer hand: mano del dealer apareciendo brevemente sobre el felt antes del reparto */
+.dealer-hand {
+  position: absolute;
+  top: 8%; left: 50%;
+  transform: translateX(-50%) translateY(-100px) scale(0.5);
+  font-size: 80px;
+  z-index: 7;
+  pointer-events: none;
+  opacity: 0;
+  filter: drop-shadow(0 6px 12px rgba(0,0,0,.6));
+  transition: opacity .25s ease, transform .35s cubic-bezier(.18,.7,.32,1.4);
+}
+.dealer-hand.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1) rotate(-8deg);
+}
+
+/* Triumph flip: tus hole cards hacen un flip dramatico al ganar por fold-out */
+@keyframes triumphFlip {
+  0%   { transform: rotateY(0) scale(1) translateY(0); }
+  20%  { transform: rotateY(90deg) scale(1.15) translateY(-20px); }
+  40%  { transform: rotateY(180deg) scale(1.25) translateY(-40px); }
+  60%  { transform: rotateY(270deg) scale(1.2) translateY(-30px); }
+  80%  { transform: rotateY(360deg) scale(1.15) translateY(-15px); }
+  100% { transform: rotateY(360deg) scale(1) translateY(0); }
+}
+.me-cards .card.triumph-flip {
+  animation: triumphFlip 1.4s cubic-bezier(.18,.7,.32,1) forwards;
+  box-shadow: 0 0 30px rgba(212,175,55,.8), 0 14px 28px rgba(0,0,0,.6) !important;
+  z-index: 20;
 }
 
 /* Multi-camera angles (tecla 1/2/3) */

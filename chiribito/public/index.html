@@ -130,6 +130,10 @@
           <div class="deck-card"></div>
           <div class="deck-card"></div>
         </div>
+        <!-- Rim light que pulsea en all-in -->
+        <div id="feltRim" class="felt-rim"></div>
+        <!-- Mano del dealer apareciendo entre manos -->
+        <div id="dealerHand" class="dealer-hand hidden">🤚</div>
         <div class="felt-center">
           <div id="community" class="community"></div>
           <div class="pot-center">
@@ -220,6 +224,13 @@
   <div id="tourneyLeaderboard" class="tourney-leaderboard hidden">
     <div class="tl-title">🏆 Ranking</div>
     <ol id="tourneyRanking"></ol>
+  </div>
+
+  <!-- Stats overlay en vivo (hands/hour, M-ratio en torneo) -->
+  <div id="liveStats" class="live-stats hidden">
+    <div class="ls-row"><span class="ls-lbl">Manos/hora</span><span class="ls-val" id="lsHph">0</span></div>
+    <div class="ls-row"><span class="ls-lbl">M-ratio</span><span class="ls-val" id="lsM">-</span></div>
+    <div class="ls-row"><span class="ls-lbl">Sesion</span><span class="ls-val" id="lsTime">00:00</span></div>
   </div>
 
   <!-- Tooltip flotante -->

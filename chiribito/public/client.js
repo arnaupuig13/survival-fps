@@ -142,6 +142,12 @@ const ui = {
   crowdBtn: $('#crowdBtn'),
   spotlight: $('#spotlight'),
   deck: $('#deck'),
+  feltRim: $('#feltRim'),
+  dealerHand: $('#dealerHand'),
+  liveStats: $('#liveStats'),
+  lsHph: $('#lsHph'),
+  lsM: $('#lsM'),
+  lsTime: $('#lsTime'),
   lobbySearch: $('#lobbySearch'),
   joinCodeInput: $('#joinCodeInput'),
   joinCodeBtn: $('#joinCodeBtn'),
@@ -164,6 +170,10 @@ let prevPotShown = 0;          // ultimo bote pintado (para count-up)
 let prevStacksByPid = new Map(); // pid -> ultimo stack pintado
 let prevDealerSeat = null;
 let prevPhase = null;
+// Stats en vivo
+let sessionStartedAt = Date.now();
+const handTimestamps = []; // timestamps de inicio de cada mano (para hands/hour)
+let lastSeenHandId = null;
 
 // ----- nombre persistente -----
 const savedName = localStorage.getItem('chiribito.name');
@@ -460,6 +470,8 @@ function renderTable(state) {
   renderTourneyLeaderboard(state);
   // Spotlight sobre el jugador en turno
   updateSpotlight(state);
+  // Stats en vivo
+  updateLiveStats(state);
 
   // winner banner
   if (state.lastWinSummary && state.phase === 'showdown') {
@@ -522,9 +534,27 @@ function renderTable(state) {
   if (state.phase === 'showdown' && prevPhase !== 'showdown') {
     const realShowdown = state.players.some(p => p.handCards && p.handCards.length === 5);
     if (realShowdown) startSlowMo(2200);
+    // Final hand flip: si TU eras el ultimo y el resto se fue (gana por fold-out),
+    // dale un flip dramatico a tus hole cards (mostrar victoria).
+    const aliveOthers = state.players.filter(p => p.id !== me.id && !p.folded && !p.sittingOut).length;
+    const meWon = state.winners && state.winners.includes(me.id);
+    if (meWon && aliveOthers === 0 && !realShowdown) {
+      triumphFlip();
+    }
   }
   prevPhase = state.phase;
   lastToAct = state.toAct;
+}
+
+// Triumph flip: tus hole cards hacen un flip dramatico vertical, escalan y brillan.
+function triumphFlip() {
+  const cards = document.querySelectorAll('#meCards .card');
+  cards.forEach((c, i) => {
+    setTimeout(() => {
+      c.classList.add('triumph-flip');
+      setTimeout(() => c.classList.remove('triumph-flip'), 1400);
+    }, i * 120);
+  });
 }
 
 function processEffects(state) {
@@ -592,6 +622,8 @@ function triggerSoundFor(ev) {
       Sound.deal();
       // Dealer prompt: "Cartas en el aire"
       dealerPrompt('deal');
+      // Mano del dealer aparece brevemente justo antes del reparto
+      showDealerHand(900);
       // Mano nueva: animacion de reparto
       setTimeout(() => dealAnimation(), 50);
       break;
@@ -637,6 +669,8 @@ function triggerVisualFor(ev, state) {
     screenShake(intensity, dur);
     // Camera swoop dramatica
     allinSwoop(800);
+    // Rim light pulsante
+    flashRim(2400);
   }
   else if (ev.type === 'fold') showActionBanner(`${ev.player.toUpperCase()} FOLD`, 'red', 1000);
   else if (ev.type === 'check') showActionBanner(`${ev.player.toUpperCase()} CHECK`, 'green', 900);
@@ -755,6 +789,58 @@ function allinSwoop(durMs = 600) {
   if (!felt) return;
   felt.classList.add('allin-swoop');
   setTimeout(() => felt.classList.remove('allin-swoop'), durMs);
+}
+
+// Rim light pulsante en all-in (anillo rojo-dorado alrededor del felt)
+function flashRim(durMs = 2400) {
+  if (!ui.feltRim) return;
+  ui.feltRim.classList.remove('active');
+  void ui.feltRim.offsetWidth;
+  ui.feltRim.classList.add('active');
+  setTimeout(() => ui.feltRim.classList.remove('active'), durMs);
+}
+
+// Mano del dealer apareciendo entre manos
+function showDealerHand(durMs = 1400) {
+  if (!ui.dealerHand) return;
+  ui.dealerHand.classList.remove('hidden');
+  ui.dealerHand.classList.remove('show');
+  void ui.dealerHand.offsetWidth;
+  ui.dealerHand.classList.add('show');
+  setTimeout(() => {
+    ui.dealerHand.classList.remove('show');
+    ui.dealerHand.classList.add('hidden');
+  }, durMs);
+}
+
+// Whoosh sintetizado al cambiar de camara
+function whooshSound() {
+  if (!window.AudioContext && !window.webkitAudioContext) return;
+  try {
+    const c = new (window.AudioContext || window.webkitAudioContext)();
+    if (c.state === 'suspended') c.resume();
+    const t0 = c.currentTime;
+    // Ruido filtrado con sweep de filtro lowpass
+    const bufferSize = c.sampleRate * 0.4;
+    const buf = c.createBuffer(1, bufferSize, c.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const filter = c.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.Q.value = 6;
+    filter.frequency.setValueAtTime(200, t0);
+    filter.frequency.exponentialRampToValueAtTime(3000, t0 + 0.18);
+    filter.frequency.exponentialRampToValueAtTime(120, t0 + 0.4);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(0.18, t0 + 0.05);
+    g.gain.linearRampToValueAtTime(0.0001, t0 + 0.4);
+    src.connect(filter).connect(g).connect(c.destination);
+    src.start();
+    src.stop(t0 + 0.42);
+  } catch {}
 }
 
 // Slide+roll del dealer button del seat anterior al nuevo
@@ -1290,8 +1376,11 @@ document.addEventListener('keydown', e => {
 function setCameraAngle(angle) {
   const felt = document.querySelector('.felt');
   if (!felt) return;
+  // No whoosh si no cambio
+  const cur = ['low','normal','overhead'].find(a => document.body.classList.contains('cam-' + a));
   document.body.classList.remove('cam-low', 'cam-normal', 'cam-overhead');
   document.body.classList.add('cam-' + angle);
+  if (cur !== angle) whooshSound();
   showToast({
     low: 'Camara: vista baja',
     normal: 'Camara: estandar',
@@ -1489,6 +1578,57 @@ function renderTourneyLeaderboard(state) {
     </li>`;
   }).join('');
   ui.tourneyLeaderboard.classList.remove('hidden');
+}
+
+// ----- Live stats: hands/hour + M-ratio + session time -----
+function updateLiveStats(state) {
+  if (!ui.liveStats) return;
+  // Mostrar siempre que estes en una mesa con mano comenzada al menos una vez
+  if (!state || !state.handId) {
+    ui.liveStats.classList.add('hidden');
+    return;
+  }
+  // Registrar nueva mano si cambio handId
+  if (state.handId !== lastSeenHandId && state.phase !== 'waiting' && state.phase !== 'showdown') {
+    handTimestamps.push(Date.now());
+    // mantener solo ultimos 60 min
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    while (handTimestamps.length && handTimestamps[0] < cutoff) handTimestamps.shift();
+    lastSeenHandId = state.handId;
+  }
+  // hands/hour: si tenemos N manos en T ms, extrapolamos a 1 hora
+  let hph = 0;
+  if (handTimestamps.length >= 2) {
+    const span = Date.now() - handTimestamps[0];
+    hph = Math.round((handTimestamps.length / span) * 3600 * 1000);
+  } else if (handTimestamps.length === 1) {
+    // Estimacion ruda: si solo hay 1 mano, asumir 60 por hora
+    hph = 60;
+  }
+  ui.lsHph.textContent = hph;
+
+  // M-ratio = stack / (ante * jugadores activos). Solo aplica si estas en torneo.
+  const meP = state.players.find(p => p.id === me.id);
+  if (state.tournament && meP) {
+    const ante = state.ante || 5;
+    const activePlayers = state.players.filter(p => p.stack > 0 && !p.sittingOut).length || 1;
+    const cost = ante * activePlayers;
+    const m = cost > 0 ? Math.round(meP.stack / cost * 10) / 10 : 0;
+    ui.lsM.textContent = m.toFixed(1);
+    ui.lsM.className = 'ls-val ' +
+      (m < 5 ? 'm-red' : m < 10 ? 'm-yellow' : m < 20 ? 'm-green' : 'm-blue');
+  } else {
+    ui.lsM.textContent = '-';
+    ui.lsM.className = 'ls-val';
+  }
+
+  // Tiempo de sesion
+  const elapsed = Date.now() - sessionStartedAt;
+  const mins = Math.floor(elapsed / 60000);
+  const secs = Math.floor((elapsed % 60000) / 1000);
+  ui.lsTime.textContent = mins.toString().padStart(2, '0') + ':' + secs.toString().padStart(2, '0');
+
+  ui.liveStats.classList.remove('hidden');
 }
 
 // ----- Showdown card highlights -----
