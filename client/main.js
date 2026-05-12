@@ -411,13 +411,21 @@ network.connect(player);
 network.onVoiceSignal = (fromId, payload) => voice.onSignal(fromId, payload);
 network.onPeerJoinHook = (peerId) => voice.onPeerAdded(peerId);
 network.onPeerLeaveHook = (peerId) => voice.onPeerRemoved(peerId);
-network.onWelcome = (selfId) => {
+network.onWelcome = (selfId, spawn) => {
   // Cuando llega welcome, inicializamos voice + anunciamos a peers existentes.
   voice.init(network, selfId).then(() => {
     voice.setNetwork(network, selfId);
     // Iniciar conexión con peers ya conectados.
     for (const [pid] of peers) voice.onPeerAdded(pid);
   });
+  // Posiciona el player en el spawn point random del server (borde mapa).
+  if (spawn && Number.isFinite(spawn.x) && Number.isFinite(spawn.z)) {
+    const groundY = heightAt(spawn.x, spawn.z);
+    player.pos.set(spawn.x, groundY + (player.eyeHeightCurrent || 1.65), spawn.z);
+    player.spawnX = spawn.x;
+    player.spawnZ = spawn.z;
+    logLine(`★ Spawneaste en el borde del mapa (${spawn.x.toFixed(0)}, ${spawn.z.toFixed(0)})`);
+  }
 };
 
 // Spawn ambient props (autos abandonados + cadáveres civiles + dust).
@@ -909,6 +917,9 @@ addEventListener('keydown', (e) => {
     }
     nearbyBuildingForClimb = null;
     hideInteract();
+  } else if (e.code === 'KeyM' && !e.repeat) {
+    // Toggle mapa con M.
+    toggleMap();
   } else if (e.code === 'KeyH') {
     if (inv.useBandage(player)) {
       logLine('+30 HP (vendaje usado)');
@@ -1620,7 +1631,8 @@ function frame(now) {
   // Pulse the Helix Lab's red emergency lights + POI smoke pillars.
   updateCityLights(dt);
   updatePoi(dt);
-  // build.updateBuild + updateMap pausados — ver nota arriba.
+  // Repaint mapa si esta abierto.
+  if (isMapOpen()) updateMap();
 
   // Sniper warning — show a red dot in HUD if any sci_sniper has us in
   // line of sight from > 35 m and is roughly facing us.

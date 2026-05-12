@@ -2445,15 +2445,32 @@ setInterval(() => {
 // =====================================================================
 const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
+// Spawn aleatorio en uno de los 4 bordes del mapa. Esto fuerza al
+// jugador a viajar para conocer el mundo, en vez de aparecer siempre
+// en el centro pegado a Helix Lab.
+function randomEdgeSpawn() {
+  const margin = 40;                    // m del borde
+  const range = WORLD_HALF - margin;
+  const side = Math.floor(Math.random() * 4);   // 0=N, 1=E, 2=S, 3=W
+  let sx, sz;
+  if (side === 0)      { sx = (Math.random() * 2 - 1) * range; sz =  WORLD_HALF - margin; }
+  else if (side === 1) { sx =  WORLD_HALF - margin;            sz = (Math.random() * 2 - 1) * range; }
+  else if (side === 2) { sx = (Math.random() * 2 - 1) * range; sz = -WORLD_HALF + margin; }
+  else                 { sx = -WORLD_HALF + margin;            sz = (Math.random() * 2 - 1) * range; }
+  return { x: sx, z: sz, side };
+}
+
 wss.on('connection', (ws) => {
   const id = nextPlayerId++;
-  const player = { id, ws, x: 0, y: heightAt(0, 0), z: 0, ry: 0, hp: 100, name: `P${id}` };
+  const spawn = randomEdgeSpawn();
+  const player = { id, ws, x: spawn.x, y: heightAt(spawn.x, spawn.z), z: spawn.z, ry: 0, hp: 100, name: `P${id}`, _spawnSide: spawn.side };
   players.set(id, player);
-  console.log(`[+] player ${id} connected. total=${players.size}`);
+  console.log(`[+] player ${id} connected at edge ${spawn.side} (${spawn.x.toFixed(0)},${spawn.z.toFixed(0)}). total=${players.size}`);
 
   ws.send(JSON.stringify({
     type: 'welcome',
     you: id,
+    spawn: { x: spawn.x, z: spawn.z },     // cliente usa esto para posicionar
     seed: WORLD_SEED,
     worldHalf: WORLD_HALF,
     hour: +gameHour.toFixed(2),
@@ -2533,13 +2550,17 @@ wss.on('connection', (ws) => {
     } else if (msg.type === 'respawn') {
       player.hp = 100;
       // Bedroll: cliente puede mandar (x, z) custom. Validamos rango y
-      // que no esté dentro de mundo prohibido.
-      let sx = 0, sz = 0;
+      // que no esté dentro de mundo prohibido. Si no hay bedroll ni
+      // spawnX, respawneamos en un borde aleatorio (no centro).
+      let sx, sz;
       if (Number.isFinite(msg.x) && Number.isFinite(msg.z) &&
           Math.abs(msg.x) < WORLD_HALF - 5 && Math.abs(msg.z) < WORLD_HALF - 5) {
         sx = msg.x; sz = msg.z;
       } else if (Number.isFinite(player.spawnX) && Number.isFinite(player.spawnZ)) {
         sx = player.spawnX; sz = player.spawnZ;
+      } else {
+        const sp = randomEdgeSpawn();
+        sx = sp.x; sz = sp.z;
       }
       player.x = sx; player.z = sz;
       player.y = heightAt(sx, sz);

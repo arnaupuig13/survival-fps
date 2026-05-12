@@ -68,7 +68,7 @@ class NetworkClient {
 
     if (msg.type === 'welcome') {
       this.selfId = msg.you;
-      this.onWelcome?.(msg.you);
+      this.onWelcome?.(msg.you, msg.spawn);
       if (msg.roads) buildRoads(msg.roads);
       if (msg.towns) setTownLayouts(msg.towns);
       if (msg.helixDestroyed) markCityDestroyed?.('helix-lab');
