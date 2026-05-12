@@ -25,7 +25,10 @@ const AXE_RANGE = 2.4;
 const AXE_DMG_ENEMY = 4;
 const PICKAXE_RANGE = 2.4;
 const PICKAXE_DMG_ENEMY = 4;
+const FISTS_RANGE = 1.8;
+const FISTS_DMG = 3;            // mucho menos que arma, pero algo es algo
 const SWING_COOLDOWN = 0.6;
+const FISTS_COOLDOWN = 0.45;    // mas rapido que herramientas
 
 // =====================================================================
 // Mesh factories — all parented to the camera.
@@ -93,10 +96,36 @@ function makePickaxe() {
   return g;
 }
 
+function makeFists() {
+  // Dos puños sin guantes — base flesh + nudillos.
+  const g = new THREE.Group();
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xd0a070, roughness: 0.8 });
+  const knuckleMat = new THREE.MeshStandardMaterial({ color: 0x8a5840, roughness: 0.85 });
+  for (const sx of [-1, 1]) {
+    // Antebrazo (parcial).
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.18), skinMat);
+    arm.position.set(0.18 * sx, -0.22, -0.30);
+    g.add(arm);
+    // Puño cerrado.
+    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.10), skinMat);
+    fist.position.set(0.18 * sx, -0.22, -0.42);
+    g.add(fist);
+    // Nudillos (linea).
+    const kn = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.015, 0.015), knuckleMat);
+    kn.position.set(0.18 * sx, -0.18, -0.46);
+    g.add(kn);
+  }
+  g.visible = false;
+  // Marca para que la animation pueda animarlos por separado al swing.
+  g.userData.isFists = true;
+  return g;
+}
+
 const knifeMesh = makeKnife();
 const axeMesh = makeAxe();
 const pickaxeMesh = makePickaxe();
-camera.add(knifeMesh, axeMesh, pickaxeMesh);
+const fistsMesh = makeFists();
+camera.add(knifeMesh, axeMesh, pickaxeMesh, fistsMesh);
 
 // =====================================================================
 // State machine — one active tool at a time.
@@ -110,9 +139,10 @@ const _origin = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 
 function meshFor(tool) {
-  if (tool === 'knife') return knifeMesh;
-  if (tool === 'axe') return axeMesh;
+  if (tool === 'knife')   return knifeMesh;
+  if (tool === 'axe')     return axeMesh;
   if (tool === 'pickaxe') return pickaxeMesh;
+  if (tool === 'fists')   return fistsMesh;
   return null;
 }
 
@@ -121,10 +151,11 @@ export function setActiveTool(tool) {
   knifeMesh.visible = active === 'knife';
   axeMesh.visible = active === 'axe';
   pickaxeMesh.visible = active === 'pickaxe';
+  fistsMesh.visible = active === 'fists';
   // Reset swing.
   swingT = -1;
   cooldown = 0;
-  for (const m of [knifeMesh, axeMesh, pickaxeMesh]) {
+  for (const m of [knifeMesh, axeMesh, pickaxeMesh, fistsMesh]) {
     m.rotation.x = 0;
     m.position.z = 0;
   }
@@ -146,7 +177,7 @@ addEventListener('mousedown', (e) => {
 
 function trySwing() {
   if (cooldown > 0) return;
-  cooldown = SWING_COOLDOWN;
+  cooldown = active === 'fists' ? FISTS_COOLDOWN : SWING_COOLDOWN;
   swingT = 0;
   sfx.playEmpty?.();
 
@@ -154,7 +185,9 @@ function trySwing() {
   camera.getWorldDirection(_dir);
   ray.set(_origin, _dir);
 
-  const range = active === 'knife' ? KNIFE_RANGE : AXE_RANGE;
+  const range = active === 'knife' ? KNIFE_RANGE
+              : active === 'fists' ? FISTS_RANGE
+              : AXE_RANGE;
   ray.far = range;
 
   // 1) Try enemy hit.
@@ -171,6 +204,7 @@ function trySwing() {
       const hitId = eMap.get(obj);
       const dmg = active === 'knife' ? KNIFE_DMG
                 : active === 'axe' ? AXE_DMG_ENEMY
+                : active === 'fists' ? FISTS_DMG
                 : PICKAXE_DMG_ENEMY;
       network.shoot(_origin, _dir, hitId, dmg);
       spawnDamageNumber(enemyHits[0].point.x, enemyHits[0].point.y - 0.5, enemyHits[0].point.z, dmg, false);
@@ -179,8 +213,8 @@ function trySwing() {
     }
   }
 
-  // 2) Knife stops here — it doesn't harvest trees or stones.
-  if (active === 'knife') return;
+  // 2) Knife/fists stop here — no harvest.
+  if (active === 'knife' || active === 'fists') return;
 
   // 3) Axe / Pickaxe — harvest if scene hit matches the right material.
   const wRay = new THREE.Raycaster(_origin.clone(), _dir.clone(), 0.2, range);
@@ -213,15 +247,42 @@ function trySwing() {
 // =====================================================================
 // Per-frame swing animation.
 // =====================================================================
+let punchAlt = 0;   // alterna manos del punch (0 = derecha, 1 = izquierda)
 export function updateTools(dt) {
   if (cooldown > 0) cooldown -= dt;
   const m = meshFor(active);
   if (!m) return;
   if (swingT >= 0) {
     swingT += dt;
-    const t = swingT / SWING_COOLDOWN;
-    if (t > 1) { swingT = -1; m.rotation.x = 0; m.position.z = 0; }
-    else {
+    const cd = active === 'fists' ? FISTS_COOLDOWN : SWING_COOLDOWN;
+    const t = swingT / cd;
+    if (t > 1) {
+      swingT = -1;
+      m.rotation.x = 0;
+      m.position.z = 0;
+      m.position.x = 0;
+      punchAlt = 1 - punchAlt;
+      // Reset fists per-arm offsets.
+      if (active === 'fists') {
+        for (const child of m.children) {
+          child.userData._punching = false;
+        }
+      }
+    } else if (active === 'fists') {
+      // Punch animation: el brazo activo se extiende hacia adelante.
+      // Solo afecta a 3 meshes (arm, fist, knuckle) del lado activo.
+      const sign = punchAlt === 0 ? 1 : -1;   // 0 = derecha, 1 = izquierda
+      const punchDepth = Math.sin(t * Math.PI) * 0.18;
+      for (const child of m.children) {
+        // Right side (sx=1 → x positivo) vs Left side (sx=-1).
+        const onRight = child.position.x > 0;
+        const isActiveSide = (sign > 0 && onRight) || (sign < 0 && !onRight);
+        if (isActiveSide) {
+          if (!child.userData._baseZ) child.userData._baseZ = child.position.z;
+          child.position.z = child.userData._baseZ - punchDepth;
+        }
+      }
+    } else {
       m.rotation.x = -Math.sin(t * Math.PI) * 1.4;
       m.position.z = -Math.sin(t * Math.PI) * 0.18;
     }

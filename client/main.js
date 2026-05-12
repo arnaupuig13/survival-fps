@@ -53,7 +53,7 @@ import { nearestInRange, removeCrate } from './loot.js';
 import { renderMinimap } from './minimap.js';
 import {
   lastShotWithinKillWindow, getActive as getActiveWeapon,
-  selectWeaponBySlot, selectWeapon, isReloading, activeWeaponMeta, consumeRecoil,
+  selectWeaponBySlot, selectWeapon, deselectWeapon, isReloading, activeWeaponMeta, consumeRecoil,
   setAimMode,
 } from './weapons.js';
 import { updateEffects, spawnBloodDecal, spawnGoreBurst } from './effects.js';
@@ -697,6 +697,10 @@ function startGame() {
   menuEl.style.display = 'none';
   renderer.domElement.requestPointerLock?.();
   logLine(`Bienvenido ${profile.name || 'P1'}. Total bajas: ${profile.totalKills | 0}.`);
+  // Default: manos libres (puñetazos). Si el player tiene un arma en el
+  // hotbar, puede presionar 1-6 para equiparla.
+  deselectWeapon();
+  tools.setActiveTool('fists');
   // Tutorial deshabilitado por ahora — tenía bugs. Reactivar cuando se
   // arregle el flow de los pasos.
   // setTimeout(() => tutorial.start(), 1500);
@@ -1135,7 +1139,11 @@ function closeSettings() {
 function handleHotbarSlot(slotIdx) {
   const itemKey = hotbar.getSlot(slotIdx);
   if (!itemKey) {
-    logLine(`Slot ${slotIdx + 1} vacío — arrastrá un item del inventario`);
+    // Slot vacío → modo unarmed: desequipa arma actual, activa los puños.
+    deselectWeapon();
+    tools.setActiveTool('fists');
+    setHotbarActive(slotIdx);
+    logLine(`★ Manos libres — click izquierdo para pegar puñetazos`);
     return;
   }
   // Mapeo item → acción.
