@@ -1,0 +1,15 @@
+{
+  "name": "chiribito",
+  "version": "1.0.0",
+  "description": "Chiribito: poker espanol multijugador (variante Madrid anos 50). Color gana al Full, 28 cartas, 6 rondas, uso obligatorio de las 2 cartas.",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

@@ -8,3 +8,14 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+
+  - type: web
+    name: chiribito
+    runtime: node
+    plan: free
+    rootDir: chiribito
+    buildCommand: npm install --omit=dev
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production

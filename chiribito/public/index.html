@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chiribito - Poker Madrid</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">♠♥♦♣</span>
+      <h1>CHIRIBITO</h1>
+      <span class="tag" data-i18n="app.tag">Poker espanol · 28 cartas · el Color le gana al Full</span>
+    </div>
+    <div class="me">
+      <label>Nombre <input id="meName" maxlength="20" placeholder="Tu nombre" /></label>
+      <button id="meSet">OK</button>
+      <label class="deck-pick" data-tip="Cambia el estilo visual de las cartas">
+        Baraja
+        <select id="deckStyle">
+          <option value="francesa">Francesa</option>
+          <option value="espanola">Espanola</option>
+        </select>
+      </label>
+      <label class="deck-pick" data-tip="Cambia el tema de colores">
+        Tema
+        <select id="themePick">
+          <option value="emerald">Esmeralda</option>
+          <option value="cherry">Cereza</option>
+          <option value="midnight">Medianoche</option>
+        </select>
+      </label>
+      <label class="deck-pick" data-tip="Idioma / Language / Idioma">
+        🌐
+        <select id="langPick">
+          <option value="es">Espanol</option>
+          <option value="en">English</option>
+          <option value="pt">Portugues</option>
+        </select>
+      </label>
+      <button id="privacyBtn" data-tip="Ocultar tus cartas (hover para ver)">👁</button>
+      <button id="cinemaBtn" data-tip="Modo cine (full felt, ESC para salir)">🎬</button>
+      <button id="voiceBtn" data-tip="Locucion: anuncia 'Call', 'Raise', 'All-in', etc.">🎙</button>
+      <button id="crowdBtn" data-tip="Murmuro ambiente de casino (voces lejanas)">👥</button>
+      <button id="muteBtn" data-tip="Silenciar/activar audio">🔊</button>
+      <span class="who">Tu eres <b id="meWho">-</b></span>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Lobby -->
+    <section id="lobby" class="panel">
+      <h2 data-i18n="lobby.title">Lobby</h2>
+      <div class="lobby-actions">
+        <button id="newTableBtn" class="primary" data-i18n="lobby.create">Crear mesa</button>
+        <input id="lobbySearch" data-i18n-placeholder="lobby.search" placeholder="🔎 Buscar mesa..." />
+        <div class="join-by-code">
+          <input id="joinCodeInput" data-i18n-placeholder="lobby.code-placeholder" placeholder="CODIGO" maxlength="6" />
+          <button id="joinCodeBtn" data-tip="Unirse a mesa privada con codigo" data-i18n="lobby.join-code">Entrar con codigo</button>
+        </div>
+      </div>
+
+      <div id="newTableForm" class="form hidden">
+        <label>Nombre <input id="ntName" placeholder="Mesa de Juan" /></label>
+        <label>Jugadores max <input id="ntMax" type="number" min="2" max="9" value="6" /></label>
+        <label>Ante <input id="ntAnte" type="number" min="1" value="5" /></label>
+        <label>Stack inicial <input id="ntStack" type="number" min="50" value="1000" /></label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="ntPrivate" /> Privada (con codigo)
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="ntTournament" /> Torneo (ante escala c/3min)
+        </label>
+        <button id="ntCreate" class="primary" data-i18n="form.create">Crear</button>
+        <button id="ntCancel" data-i18n="form.cancel">Cancelar</button>
+      </div>
+
+      <table class="tables">
+        <thead><tr><th>Mesa</th><th>Jugadores</th><th>Ante</th><th>Stack</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="tablesBody"></tbody>
+      </table>
+
+      <div class="rules-box">
+        <h3>Reglas rapidas</h3>
+        <ul>
+          <li>Baraja de <b>28 cartas</b> (7 rangos x 4 palos). Disponible en estilo <b>espanol</b> (7,8,9,Sota,Caballo,Rey,As · Espadas/Copas/Oros/Bastos) o <b>frances</b> (8,9,10,J,Q,K,A · ♠♥♦♣).</li>
+          <li>2 cartas tapadas. <b>Es obligatorio usar las 2</b> en la mano final.</li>
+          <li>5 cartas comunitarias reveladas una a una. <b>6 rondas de apuestas</b>.</li>
+          <li>Ranking: Escalera color &gt; Poker &gt; <b>Color</b> &gt; <b>Full</b> &gt; Escalera &gt; Trio &gt; Doble pareja &gt; Pareja &gt; Carta alta.</li>
+          <li>Sin ciegas. Cada jugador paga un ante para abrir el bote.</li>
+          <li>Atajos: <kbd>1</kbd> camara baja · <kbd>2</kbd> estandar · <kbd>3</kbd> cenital · <kbd>ESC</kbd> salir cine</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Mesa -->
+    <section id="table" class="panel hidden">
+      <div class="table-top">
+        <button id="leaveBtn" data-i18n="table.leave">Salir</button>
+        <h2 id="tableName">Mesa</h2>
+        <div class="phase"><span data-i18n="table.phase">Fase:</span> <b id="tablePhase">-</b></div>
+        <div class="pot"><span data-i18n="table.pot">Bote:</span> <b id="tablePot">0</b></div>
+        <div id="tournamentBox" class="tournament-box hidden" data-tip="Nivel de torneo y tiempo restante"></div>
+        <span id="spectatorTag" class="spectator-tag hidden">👁 espectador</span>
+        <button id="inviteBtn" class="hidden" data-tip="Compartir codigo de invitacion">🔗 Invitar</button>
+        <button id="addBotBtn" data-tip="Anadir bot oponente">+ Bot</button>
+        <button id="removeBotBtn" data-tip="Quitar un bot">- Bot</button>
+        <button id="historyBtn" data-tip="Ver historial de manos">📜 Historial</button>
+        <button id="statsBtn" data-tip="Estadisticas de la sesion">📊 Stats</button>
+        <button id="startBtn" class="primary">Iniciar mano</button>
+      </div>
+
+      <div id="tableFelt" class="felt">
+        <!-- Capa de motas que flotan sobre el felt para ambiente -->
+        <div class="felt-motes">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <!-- Logo grabado en el centro del felt -->
+        <div class="felt-emboss">CHIRIBITO</div>
+        <!-- Highlight radial que gira lento -->
+        <div class="felt-shimmer"></div>
+        <!-- Spotlight que sigue al jugador en turno -->
+        <div id="spotlight" class="spotlight hidden"></div>
+        <!-- Mazo visible (al borde superior derecho) -->
+        <div id="deck" class="deck">
+          <div class="deck-card"></div>
+          <div class="deck-card"></div>
+          <div class="deck-card"></div>
+          <div class="deck-card"></div>
+        </div>
+        <div class="felt-center">
+          <div id="community" class="community"></div>
+          <div class="pot-center">
+            <div class="chip-stack" id="potChips" aria-hidden="true"></div>
+            <div class="pot-label">BOTE</div>
+            <div class="pot-amount" id="potAmount">0</div>
+          </div>
+        </div>
+        <div id="seats" class="seats"></div>
+        <div id="winnerBanner" class="winner-banner hidden"></div>
+      </div>
+
+      <div class="action-bar">
+        <div class="me-cards-wrap">
+          <div id="perlaBadge" class="perla-badge hidden">★ LA PERLA ★</div>
+          <div class="me-cards" id="meCards"></div>
+        </div>
+        <div id="actionTimerBar" class="action-timer hidden"><div class="action-timer-fill"></div></div>
+        <div class="me-info">
+          <div>Stack: <b id="meStack">0</b></div>
+          <div>Apuesta: <b id="meBet">0</b></div>
+          <div>Para igualar: <b id="meToCall">0</b></div>
+          <div>Tu mejor: <b id="meHand">-</b></div>
+        </div>
+        <div class="actions">
+          <div class="quick-bets">
+            <button class="qb" data-frac="0.5">1/2 bote</button>
+            <button class="qb" data-frac="0.75">3/4 bote</button>
+            <button class="qb" data-frac="1">Bote</button>
+            <button class="qb" data-frac="2">2x</button>
+          </div>
+          <div class="pre-actions">
+            <label data-tip="Hace check/fold automatico cuando llegue tu turno">
+              <input type="checkbox" id="paCheckFold" /> Check/fold auto
+            </label>
+            <label data-tip="Hace call automatico cualquier apuesta cuando llegue tu turno">
+              <input type="checkbox" id="paCallAny" /> Call cualquiera
+            </label>
+          </div>
+          <div class="action-buttons">
+            <button id="actFold" class="danger" data-i18n="action.fold">Fold</button>
+            <button id="actCheck" data-i18n="action.check">Check</button>
+            <button id="actCall" class="primary" data-i18n="action.call">Call</button>
+            <input id="actAmount" type="number" min="1" data-i18n-placeholder="action.amount" placeholder="cant." />
+            <button id="actBet" data-i18n="action.bet">Bet</button>
+            <button id="actRaise" data-i18n="action.raise">Raise</button>
+            <button id="actAllIn" class="warn" data-i18n="action.allin">All-in</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom">
+        <div class="log-box">
+          <h3>Mano</h3>
+          <ul id="log"></ul>
+        </div>
+        <div class="chat-box">
+          <h3>Chat</h3>
+          <ul id="chat"></ul>
+          <form id="chatForm"><input id="chatInput" placeholder="Escribe..." maxlength="200" /></form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- History modal -->
+  <div id="historyModal" class="modal hidden">
+    <div class="modal-card">
+      <header><h3>Historial de manos</h3><button class="modal-close" data-close>×</button></header>
+      <div class="modal-body" id="historyBody"></div>
+    </div>
+  </div>
+
+  <!-- Stats modal -->
+  <div id="statsModal" class="modal hidden">
+    <div class="modal-card">
+      <header><h3>Estadisticas de la sesion</h3><button class="modal-close" data-close>×</button></header>
+      <div class="modal-body" id="statsBody"></div>
+    </div>
+  </div>
+
+  <!-- Side-pots overlay -->
+  <div id="sidePotsBox" class="side-pots hidden"></div>
+
+  <!-- Tournament leaderboard overlay -->
+  <div id="tourneyLeaderboard" class="tourney-leaderboard hidden">
+    <div class="tl-title">🏆 Ranking</div>
+    <ol id="tourneyRanking"></ol>
+  </div>
+
+  <!-- Tooltip flotante -->
+  <div id="tipBox" class="tip-box hidden"></div>
+
+  <script type="module" src="/client.js"></script>
+</body>
+</html>
