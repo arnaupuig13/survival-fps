@@ -364,10 +364,30 @@ function darkenHex(hex, factor) {
 const GENERIC_ICON = svg(`<rect x="10" y="10" width="20" height="20" fill="#3a3a3e" stroke="#888" stroke-dasharray="2 1"/><text x="20" y="24" text-anchor="middle" font-size="10" fill="#888" font-family="monospace">?</text>`);
 
 // =====================================================================
+// ALIAS — keys del inventario terminan en _pickup pero los iconos están
+// definidos sin sufijo. Mapeo para que `pistol_pickup` use el icono de
+// `pistol`, etc.
+// =====================================================================
+const ICON_ALIAS = {
+  pistol_pickup:   'pistol',
+  rifle_pickup:    'rifle',
+  ak_pickup:       'ak',
+  semi_pickup:     'semi',
+  smg_pickup:      'smg',
+  shotgun_pickup:  'shotgun',
+  sniper_pickup:   'sniper',
+  crossbow_pickup: 'crossbow',
+  gl_pickup:       'gl',
+  gatling_pickup:  'gatling',
+  nuke_pickup:     'nuke',
+};
+
+// =====================================================================
 // PUBLIC API — get icon HTML para un item key.
 // =====================================================================
 export function getIcon(itemKey) {
-  return ICONS[itemKey] || GENERIC_ICON;
+  const aliased = ICON_ALIAS[itemKey] || itemKey;
+  return ICONS[aliased] || GENERIC_ICON;
 }
 
 // Inline el icono dentro de un contenedor (helper).
