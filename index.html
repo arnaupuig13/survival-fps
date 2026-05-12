@@ -388,7 +388,18 @@
     .iiActions button:hover { background: rgba(40,30,10,0.5); border-color: #f0c060; color: #f0c060; }
     .rustInvBlock { flex: 1; }
     .rustSectionLabel { color: #aaa; font-size: 11px; letter-spacing: 3px; margin-bottom: 8px; }
-    .rustInvGrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; padding: 6px; background: rgba(0,0,0,0.4); border: 1px solid #333; }
+    .invToolbarRow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .invSearchBox { flex: 1; background: rgba(0,0,0,0.5); border: 1px solid #444; color: #ddd; padding: 6px 10px; font: 13px system-ui; outline: none; letter-spacing: 1px; }
+    .invSearchBox:focus { border-color: #f0c060; }
+    .invCountBadge { color: #888; font: 11px monospace; letter-spacing: 1px; }
+    .invCatRow { display: flex; gap: 3px; margin-bottom: 6px; flex-wrap: wrap; }
+    .invCatBtn { background: rgba(30,30,32,0.7); border: 1px solid #2a2a2c; color: #aaa; padding: 4px 9px; font: 600 10px system-ui; letter-spacing: 1px; cursor: pointer; transition: all 0.1s; }
+    .invCatBtn:hover { border-color: #555; color: #ddd; }
+    .invCatBtn.active { background: rgba(60,60,30,0.8); border-color: #f0c060; color: #f0c060; }
+    .rustInvGrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 6px; background: rgba(0,0,0,0.4); border: 1px solid #333; max-height: 380px; overflow-y: auto; }
+    .rustInvGrid::-webkit-scrollbar { width: 8px; }
+    .rustInvGrid::-webkit-scrollbar-thumb { background: #555; }
+    .rustInvGrid::-webkit-scrollbar-track { background: #111; }
     .invSlot { aspect-ratio: 1; background: rgba(20,22,26,0.7); border: 1px solid #2a2a2c; position: relative; cursor: pointer; transition: border 0.08s, background 0.08s; user-select: none; }
     .invSlot:hover { border-color: #555; }
     .invSlot.has { border-left: 3px solid #888; }
@@ -660,7 +671,23 @@
               <div class="iiEmpty">Selecciona un item para ver detalles</div>
             </div>
             <div class="rustInvBlock">
-              <div class="rustSectionLabel">INVENTARIO</div>
+              <div class="invToolbarRow">
+                <input id="invSearch" type="text" placeholder="🔍 Buscar item..." class="invSearchBox" />
+                <span class="invCountBadge" id="invCountBadge">0 items</span>
+              </div>
+              <div class="invCatRow" id="invCatRow">
+                <button class="invCatBtn active" data-cat="all">TODO</button>
+                <button class="invCatBtn" data-cat="weapons">⚔ ARMAS</button>
+                <button class="invCatBtn" data-cat="ammo">⊙ AMMO</button>
+                <button class="invCatBtn" data-cat="meds">✚ MEDS</button>
+                <button class="invCatBtn" data-cat="food">🍖 COMIDA</button>
+                <button class="invCatBtn" data-cat="armor">🛡 ARMOR</button>
+                <button class="invCatBtn" data-cat="materials">▣ MATERIALES</button>
+                <button class="invCatBtn" data-cat="throwables">⊕ GRANADAS</button>
+                <button class="invCatBtn" data-cat="tools">⚒ HERRAMIENTAS</button>
+                <button class="invCatBtn" data-cat="bodies">⌬ BODIES</button>
+                <button class="invCatBtn" data-cat="utility">★ UTILIDAD</button>
+              </div>
               <div id="rustInvGrid" class="rustInvGrid"></div>
             </div>
             <div class="rustHotbarBlock">

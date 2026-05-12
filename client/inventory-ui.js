@@ -129,6 +129,59 @@ const DESCRIPTIONS = {
   bedroll_item:   'Cama. Punto de respawn personal (próximamente).',
 };
 
+// Categoria de cada item — usada por los filtros de la inventory tab.
+// Si un item no esta en CATEGORIES_MAP, va a la categoria 'all' solo.
+const CATEGORIES_MAP = {
+  // weapons
+  pistol_pickup:'weapons', rifle_pickup:'weapons', ak_pickup:'weapons', semi_pickup:'weapons',
+  smg_pickup:'weapons', shotgun_pickup:'weapons', sniper_pickup:'weapons', crossbow_pickup:'weapons',
+  gl_pickup:'weapons', gatling_pickup:'weapons', nuke_pickup:'weapons', knife:'weapons',
+  // tools
+  axe:'tools', pickaxe:'tools', hammer:'tools',
+  // bodies (rare drops)
+  rifle_body:'bodies', shotgun_body:'bodies', smg_body:'bodies', sniper_body:'bodies',
+  ak_body:'bodies', semi_body:'bodies', gl_body:'bodies', gatling_body:'bodies', nuke_body:'bodies',
+  // ammo
+  bullet_p:'ammo', bullet_r:'ammo', bullet_762:'ammo', bullet_marksman:'ammo', bullet_smg:'ammo',
+  shell:'ammo', sniper_round:'ammo', gl_round:'ammo', nuke_round:'ammo',
+  bullet_p_ap:'ammo', bullet_r_ap:'ammo', bullet_r_inc:'ammo', bolt:'ammo',
+  scope:'ammo', silencer:'ammo', ext_mag:'ammo', grip:'ammo', laser_sight:'ammo',
+  // meds
+  bandage:'meds', medkit:'meds', antibiotics:'meds', painkillers:'meds', morphine:'meds', adrenaline:'meds',
+  // throwables
+  grenade:'throwables', smoke_grenade:'throwables', flashbang:'throwables', molotov:'throwables',
+  c4:'throwables', mine:'throwables',
+  // food
+  meat_cooked:'food', meat_raw:'food', fish_cooked:'food', fish_raw:'food',
+  jerky:'food', bread:'food', soup:'food', stew:'food', canned_food:'food', energy_bar:'food',
+  mushroom:'food', herbs:'food', berry:'food', honey:'food',
+  water_bottle:'food', dirty_water:'food', purified_water:'food', coffee:'food', milk:'food', tea:'food',
+  // materials
+  wood:'materials', stone:'materials', cloth:'materials', iron:'materials', coal:'materials',
+  sulfur:'materials', copper:'materials', rabbit_pelt:'materials', deer_pelt:'materials',
+  leather:'materials', nail:'materials', gunpowder:'materials', circuit:'materials',
+  battery:'materials', rope:'materials', scrap:'materials',
+  // armor (all 4 tiers)
+  vest_armor:'armor', helmet_armor:'armor',
+  cloth_helmet:'armor', cloth_shirt:'armor', cloth_pants:'armor', cloth_shoes:'armor',
+  cloth_body:'armor', cloth_legs:'armor', cloth_gloves:'armor',
+  leather_helmet:'armor', leather_shirt:'armor', leather_pants:'armor', leather_shoes:'armor',
+  leather_body:'armor', leather_legs:'armor', leather_gloves:'armor',
+  iron_helmet:'armor', iron_shirt:'armor', iron_pants:'armor', iron_shoes:'armor',
+  iron_body:'armor', iron_legs:'armor', iron_gloves:'armor',
+  mil_helmet:'armor', mil_shirt:'armor', mil_pants:'armor', mil_shoes:'armor',
+  mil_body:'armor', mil_legs:'armor', mil_gloves:'armor',
+  // utility
+  flashlight:'utility', compass:'utility', binoculars:'utility', fishing_rod:'utility',
+  lockpick:'utility', radio:'utility', gas_mask:'utility', parachute:'utility',
+  rope_climb:'utility', nvg:'utility', dog_collar:'utility', seeds:'utility',
+  campfire:'utility', furnace:'utility', wall_piece:'utility', bedroll_item:'utility',
+  bear_trap:'utility', spike_trap:'utility', stash_box:'utility',
+};
+
+let activeCategory = 'all';
+let searchQuery = '';
+
 // Items that can be "used" from the inventory ctx menu.
 const USABLE = new Set([
   'bandage', 'medkit', 'antibiotics', 'painkillers', 'morphine', 'adrenaline',
@@ -146,30 +199,32 @@ const USABLE = new Set([
 let dragState = null;          // { itemKey, count }
 let selectedKey = null;
 let _craftHandler = null;
-const SLOT_COUNT = 24;         // 4 × 6 grid
+// v1.3: grid dinamico — N slots = items owned filtrados por categoria+search.
+// Antes era 24 slots fijos pero con 100+ items la mayoria no se veian.
 
-// Build static grid skeleton once.
+// Build grid empty (slots se crean dinamicamente en render).
 function buildGrid() {
   if (!grid) return;
   grid.innerHTML = '';
-  for (let i = 0; i < SLOT_COUNT; i++) {
-    const slot = document.createElement('div');
-    slot.className = 'invSlot';
-    slot.dataset.slotIdx = String(i);
-    slot.innerHTML = '<div class="iLabel"></div><div class="iCount"></div>';
-    grid.appendChild(slot);
-  }
 }
 
-// Filter inventory state into a list of grid items (in display order).
+// Filter inventory state into a list of grid items applying category + search.
 function getGridItems(state) {
   const items = [];
+  const q = (searchQuery || '').toLowerCase().trim();
   for (const key of DISPLAY_ORDER) {
     if (EQUIP_KEYS.has(key)) continue;
     const meta = inv.ITEMS[key];
     if (!meta) continue;
     const count = state[key] | 0;
     if (count <= 0) continue;
+    // Category filter.
+    if (activeCategory !== 'all') {
+      const cat = CATEGORIES_MAP[key];
+      if (cat !== activeCategory) continue;
+    }
+    // Search filter.
+    if (q && !meta.label.toLowerCase().includes(q) && !key.toLowerCase().includes(q)) continue;
     items.push({ key, count, meta });
   }
   return items;
@@ -180,9 +235,22 @@ function getGridItems(state) {
 // =====================================================================
 function render(state) {
   if (!grid) return;
-  const slots = grid.querySelectorAll('.invSlot');
   const items = getGridItems(state);
-  for (let i = 0; i < SLOT_COUNT; i++) {
+  // Min 24 slots para mantener el look. Mas slots si hay mas items.
+  const slotCount = Math.max(24, Math.ceil(items.length / 8) * 8);
+  // Re-build grid si cambio el slot count (cuando el filtro cambia).
+  if (grid.children.length !== slotCount) {
+    grid.innerHTML = '';
+    for (let i = 0; i < slotCount; i++) {
+      const slot = document.createElement('div');
+      slot.className = 'invSlot';
+      slot.dataset.slotIdx = String(i);
+      slot.innerHTML = '<div class="iLabel"></div><div class="iCount"></div>';
+      grid.appendChild(slot);
+    }
+  }
+  const slots = grid.querySelectorAll('.invSlot');
+  for (let i = 0; i < slotCount; i++) {
     const slot = slots[i];
     if (!slot) break;
     slot.classList.remove('has', 'rare-common', 'rare-uncommon', 'rare-rare', 'rare-epic', 'rare-legendary', 'selected');
@@ -201,6 +269,9 @@ function render(state) {
     slot.querySelector('.iCount').textContent = item.count > 1 ? item.count : '';
     slot.title = `${item.meta.label} ×${item.count}\n${DESCRIPTIONS[item.key] || ''}`;
   }
+  // Update count badge.
+  const badge = document.getElementById('invCountBadge');
+  if (badge) badge.textContent = `${items.length} item${items.length === 1 ? '' : 's'}`;
 
   // Equipment paperdoll slots
   if (helmetSlot) {
@@ -920,3 +991,37 @@ inv.onChange(() => {
 // Init.
 buildGrid();
 buildPaperdollHotbar();
+
+// === CATEGORY + SEARCH FILTERS ===
+// Hookea los botones de categoria y el input de busqueda.
+function wireFilters() {
+  const catRow = document.getElementById('invCatRow');
+  if (catRow) {
+    for (const btn of catRow.querySelectorAll('.invCatBtn')) {
+      btn.addEventListener('click', () => {
+        catRow.querySelectorAll('.invCatBtn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeCategory = btn.dataset.cat || 'all';
+        refresh();
+      });
+    }
+  }
+  const search = document.getElementById('invSearch');
+  if (search) {
+    search.addEventListener('input', () => {
+      searchQuery = search.value || '';
+      refresh();
+    });
+    // Limpiar busqueda al cerrar/abrir el inventario.
+    search.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape') {
+        search.value = '';
+        searchQuery = '';
+        refresh();
+      }
+      // Prevent inventory hotkeys while typing.
+      e.stopPropagation();
+    });
+  }
+}
+wireFilters();
