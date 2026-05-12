@@ -52,19 +52,10 @@ const resRad       = $('resRad');
 const paperdollName= $('paperdollName');
 const paperdollHotbar = $('paperdollHotbar');
 
-// Equipment items live on the paperdoll, not in the grid. Incluye los
-// 28 pieces armor 4-tier 7-slot + legacy vest/helmet.
-const EQUIP_KEYS = new Set([
-  'vest_armor', 'helmet_armor',
-  // T1 cloth
-  'cloth_helmet', 'cloth_shirt', 'cloth_pants', 'cloth_shoes', 'cloth_body', 'cloth_legs', 'cloth_gloves',
-  // T2 leather
-  'leather_helmet', 'leather_shirt', 'leather_pants', 'leather_shoes', 'leather_body', 'leather_legs', 'leather_gloves',
-  // T3 iron
-  'iron_helmet', 'iron_shirt', 'iron_pants', 'iron_shoes', 'iron_body', 'iron_legs', 'iron_gloves',
-  // T4 mil
-  'mil_helmet', 'mil_shirt', 'mil_pants', 'mil_shoes', 'mil_body', 'mil_legs', 'mil_gloves',
-]);
+// EQUIP_KEYS — items que viven en el paperdoll, no en el grid central.
+// v1.4: armor pieces SI se ven en el grid (filtro ARMOR) para poder
+// equiparlas. Antes estaban escondidas y el usuario no las veia.
+const EQUIP_KEYS = new Set();
 
 // Display order — Rust packs items in a logical order (weapons → ammo → meds → food → resources).
 // v1.2: incluye TODOS los items nuevos (armas, bodies, ammo, food, materials).
@@ -355,11 +346,85 @@ function render(state) {
   renderWeaponAttachments(state);
   // Render side panels (ammo + materiales).
   renderSidePanels(state);
+  // Render armor paperdoll + owned list.
+  renderArmorSection(state);
   // Render crafting tab si esta abierta.
   renderCraftRecipeList(state);
   renderCraftDetail(state);
   // Render perks tab.
   renderPerksTab();
+}
+
+// =====================================================================
+// ARMOR SECTION — paperdoll de 7 slots + lista de armor owned por slot
+// =====================================================================
+const ARMOR_SLOT_LABELS = {
+  helmet: '👤 CASCO',
+  shirt:  '👕 CAMISA',
+  pants:  '👖 PANTALÓN',
+  shoes:  '👞 BOTAS',
+  body:   '🛡 CHALECO',
+  legs:   '🦿 PERNERAS',
+  gloves: '🧤 GUANTES',
+};
+function renderArmorSection(state) {
+  const equipped = inv.getEquipped();
+  // 1) Pintar los 7 slots del paperdoll.
+  for (const slot of ['helmet', 'shirt', 'pants', 'shoes', 'body', 'legs', 'gloves']) {
+    const el = document.querySelector(`.armorSlot[data-armor-slot="${slot}"]`);
+    if (!el) continue;
+    const k = equipped[slot];
+    el.innerHTML = '';
+    el.classList.toggle('filled', !!k);
+    if (k) {
+      const meta = inv.ITEMS[k];
+      el.innerHTML = `<div class="iconWrap">${getIcon(k)}</div>`;
+      el.title = `${meta.label} (equipado) — click para quitar`;
+      // Replace handler to ensure only one.
+      el.onclick = () => { inv.unequipArmor(slot); refresh(); };
+    } else {
+      el.innerHTML = `<div class="slotEmpty">${ARMOR_SLOT_LABELS[slot].split(' ')[1] || slot}</div>`;
+      el.title = `Slot ${slot} — vacío`;
+      el.onclick = null;
+    }
+  }
+  // 2) Lista de armor owned agrupada por slot.
+  const listEl = document.getElementById('armorByCategoryList');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  for (const slot of ['helmet', 'shirt', 'pants', 'shoes', 'body', 'legs', 'gloves']) {
+    const block = document.createElement('div');
+    block.className = 'armorCatBlock';
+    block.innerHTML = `<div class="acTitle">${ARMOR_SLOT_LABELS[slot]}</div>`;
+    const items = document.createElement('div');
+    items.className = 'acItems';
+    // Encontrar todos los armor pieces para este slot que el player tenga.
+    let anyOwned = false;
+    for (const key of Object.keys(inv.ITEMS)) {
+      const meta = inv.ITEMS[key];
+      if (!meta.armor || meta.armor.slot !== slot) continue;
+      const count = state[key] | 0;
+      if (count <= 0) continue;
+      anyOwned = true;
+      const btn = document.createElement('button');
+      btn.className = 'armorOwnedBtn';
+      btn.innerHTML = `<span class="iconWrap">${getIcon(key)}</span><span>${meta.label} (+${meta.armor.reduce}%)</span>`;
+      btn.title = `Equipar ${meta.label} (reduce daño +${meta.armor.reduce}%)`;
+      btn.addEventListener('click', () => {
+        inv.equipArmor(key);
+        refresh();
+      });
+      items.appendChild(btn);
+    }
+    if (!anyOwned) {
+      const none = document.createElement('div');
+      none.className = 'armorOwnedNone';
+      none.textContent = 'No tenés piezas para este slot. Crafteá una o búscala en cofres.';
+      items.appendChild(none);
+    }
+    block.appendChild(items);
+    listEl.appendChild(block);
+  }
 }
 
 function renderItemInfo(state, key) {

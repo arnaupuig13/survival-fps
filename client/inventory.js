@@ -310,32 +310,86 @@ export function getCurrentWeight() { return 0; }
 export function getCapacity() { return BASE_WEIGHT_CAPACITY; }
 
 // ============================================================
-// Armor: suma de damage reduction de TODAS las piezas equipadas.
-// Cap a 80% para que el jugador no sea inmortal full-mil.
+// ARMOR EQUIP SYSTEM
+// 7 slots (helmet/shirt/pants/shoes/body/legs/gloves). Cada slot
+// guarda la KEY del armor equipado (o null). Persistido en localStorage.
+// SOLO el armor equipado cuenta hacia getArmorReduction.
 // ============================================================
+const ARMOR_SLOTS = ['helmet', 'shirt', 'pants', 'shoes', 'body', 'legs', 'gloves'];
+const ARMOR_STORAGE_KEY = 'survival-fps-v1-armor-equipped';
+
+function loadEquipped() {
+  try {
+    const raw = localStorage.getItem(ARMOR_STORAGE_KEY);
+    if (!raw) return {};
+    const data = JSON.parse(raw);
+    const out = {};
+    for (const slot of ARMOR_SLOTS) {
+      if (typeof data[slot] === 'string' && ITEMS[data[slot]]?.armor?.slot === slot) {
+        out[slot] = data[slot];
+      } else {
+        out[slot] = null;
+      }
+    }
+    return out;
+  } catch { return {}; }
+}
+function saveEquipped() {
+  try { localStorage.setItem(ARMOR_STORAGE_KEY, JSON.stringify(state._equipped)); } catch {}
+}
+
+state._equipped = loadEquipped();
+for (const s of ARMOR_SLOTS) if (!(s in state._equipped)) state._equipped[s] = null;
+
+export function getEquipped() { return { ...state._equipped }; }
+export function getEquippedBySlot() { return { ...state._equipped }; }
+
+// Equipar una pieza de armor. El item se quita del inventario (no esta
+// disponible para tirarlo o usarlo). Si ya habia algo en ese slot, se
+// devuelve al inventario primero.
+export function equipArmor(itemKey) {
+  const meta = ITEMS[itemKey];
+  if (!meta?.armor) return false;
+  if ((state[itemKey] | 0) <= 0) return false;
+  const slot = meta.armor.slot;
+  // Si ya hay algo equipado en ese slot, devolverlo al inventario.
+  const prev = state._equipped[slot];
+  if (prev) {
+    state[prev] = (state[prev] | 0) + 1;
+  }
+  // Quitar el nuevo del inv y ponerlo en el slot.
+  state[itemKey] = (state[itemKey] | 0) - 1;
+  state._equipped[slot] = itemKey;
+  saveEquipped();
+  notify();
+  return true;
+}
+
+export function unequipArmor(slot) {
+  if (!ARMOR_SLOTS.includes(slot)) return false;
+  const k = state._equipped[slot];
+  if (!k) return false;
+  state[k] = (state[k] | 0) + 1;
+  state._equipped[slot] = null;
+  saveEquipped();
+  notify();
+  return true;
+}
+
+export function isArmorSlot(slot) { return ARMOR_SLOTS.includes(slot); }
+export { ARMOR_SLOTS };
+
+// Total damage reduction: suma solo de los 7 slots equipados (no toda
+// la armor que tengas en el inv). Cap 80%.
 export function getArmorReduction() {
   let total = 0;
-  for (const k of Object.keys(state)) {
-    if (!state[k]) continue;
+  for (const slot of ARMOR_SLOTS) {
+    const k = state._equipped[slot];
+    if (!k) continue;
     const meta = ITEMS[k];
     if (meta?.armor) total += meta.armor.reduce;
   }
   return Math.min(80, total);
-}
-// Per-slot best piece (paperdoll display).
-export function getEquippedBySlot() {
-  const slots = { helmet: null, shirt: null, pants: null, shoes: null, body: null, legs: null, gloves: null };
-  for (const k of Object.keys(state)) {
-    if (!state[k]) continue;
-    const meta = ITEMS[k];
-    if (!meta?.armor) continue;
-    const cur = slots[meta.armor.slot];
-    // Si hay multiple piezas en el mismo slot, mostrar la de mejor reducción.
-    if (!cur || ITEMS[cur].armor.reduce < meta.armor.reduce) {
-      slots[meta.armor.slot] = k;
-    }
-  }
-  return slots;
 }
 
 export function add(item, n) {
@@ -348,6 +402,16 @@ export function add(item, n) {
     state[item] = Math.min(meta.max || 1, (state[item] | 0) + n);
   } else {
     state[item] = (state[item] | 0) + n;
+  }
+  // AUTO-EQUIP: si es armor y el slot esta vacio, equipar automaticamente.
+  // Mejora UX para que al craftear/recoger ya se este usando.
+  if (meta.armor && state[item] > 0) {
+    const slot = meta.armor.slot;
+    if (!state._equipped[slot]) {
+      state[item] -= 1;
+      state._equipped[slot] = item;
+      saveEquipped();
+    }
   }
   notify();
 }
