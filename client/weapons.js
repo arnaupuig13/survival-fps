@@ -204,7 +204,13 @@ export function getActive() { return active; }
 export function getLoaded() { return active ? (loaded[active] | 0) : 0; }
 export function isReloading() { return reloading; }
 // Llamado al deseleccionar (drop del item del hotbar). Oculta el arma.
-export function deselectWeapon() { active = null; }
+export function deselectWeapon() {
+  active = null;
+  // Hide all weapon meshes immediatamente (no esperar al proximo frame).
+  for (const m of Object.values(weaponMeshes)) m.visible = false;
+  reflexGroup.visible = false;
+  gunGroup.visible = false;
+}
 
 function startReload() {
   if (reloading) return;
@@ -479,6 +485,12 @@ export function updateWeapons(dt) {
     for (const [type, m] of Object.entries(weaponMeshes)) {
       m.visible = (type === active);
     }
+  } else {
+    // No hay arma activa Y no hay granada → ocultar TODAS las armas.
+    // Defensive: aunque gunGroup.visible=false ya las oculta, esto
+    // garantiza que al re-activar el grupo nada quede colgado.
+    for (const m of Object.values(weaponMeshes)) m.visible = false;
+    reflexGroup.visible = false;
   }
   // Lerp ADS: muever el grupo a posición AIM (centrada) cuando _aimTarget=1.
   _aimT += (_aimTarget - _aimT) * (1 - Math.exp(-12 * dt));
