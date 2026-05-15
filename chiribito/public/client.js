@@ -144,6 +144,8 @@ const ui = {
   deck: $('#deck'),
   feltRim: $('#feltRim'),
   dealerHand: $('#dealerHand'),
+  menuBtn: $('#menuBtn'),
+  meOpts: $('#meOpts'),
   liveStats: $('#liveStats'),
   lsHph: $('#lsHph'),
   lsM: $('#lsM'),
@@ -1363,6 +1365,19 @@ function exitCinema() {
 ui.cinemaBtn.addEventListener('click', () => {
   if (document.body.classList.contains('cinema-mode')) exitCinema();
   else enterCinema();
+});
+
+// Menu hamburguesa para mobile: toggle del panel .me-opts
+ui.menuBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  ui.meOpts?.classList.toggle('open');
+});
+// Cerrar el menu al click afuera o al elegir una opcion
+document.addEventListener('click', (e) => {
+  if (!ui.meOpts?.classList.contains('open')) return;
+  // si el click es dentro del menu o sobre el boton, no cerrar
+  if (ui.menuBtn?.contains(e.target) || ui.meOpts?.contains(e.target)) return;
+  ui.meOpts?.classList.remove('open');
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.body.classList.contains('cinema-mode')) exitCinema();

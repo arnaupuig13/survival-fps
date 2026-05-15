@@ -14,37 +14,42 @@
       <span class="tag" data-i18n="app.tag">Poker espanol · 28 cartas · el Color le gana al Full</span>
     </div>
     <div class="me">
-      <label>Nombre <input id="meName" maxlength="20" placeholder="Tu nombre" /></label>
+      <label class="me-name-wrap">Nombre <input id="meName" maxlength="20" placeholder="Tu nombre" /></label>
       <button id="meSet">OK</button>
-      <label class="deck-pick" data-tip="Cambia el estilo visual de las cartas">
-        Baraja
-        <select id="deckStyle">
-          <option value="francesa">Francesa</option>
-          <option value="espanola">Espanola</option>
-        </select>
-      </label>
-      <label class="deck-pick" data-tip="Cambia el tema de colores">
-        Tema
-        <select id="themePick">
-          <option value="emerald">Esmeralda</option>
-          <option value="cherry">Cereza</option>
-          <option value="midnight">Medianoche</option>
-        </select>
-      </label>
-      <label class="deck-pick" data-tip="Idioma / Language / Idioma">
-        🌐
-        <select id="langPick">
-          <option value="es">Espanol</option>
-          <option value="en">English</option>
-          <option value="pt">Portugues</option>
-        </select>
-      </label>
-      <button id="privacyBtn" data-tip="Ocultar tus cartas (hover para ver)">👁</button>
-      <button id="cinemaBtn" data-tip="Modo cine (full felt, ESC para salir)">🎬</button>
-      <button id="voiceBtn" data-tip="Locucion: anuncia 'Call', 'Raise', 'All-in', etc.">🎙</button>
-      <button id="crowdBtn" data-tip="Murmuro ambiente de casino (voces lejanas)">👥</button>
-      <button id="muteBtn" data-tip="Silenciar/activar audio">🔊</button>
       <span class="who">Tu eres <b id="meWho">-</b></span>
+      <button id="menuBtn" class="menu-btn" data-tip="Opciones" aria-label="Opciones">⋯</button>
+      <div class="me-opts" id="meOpts">
+        <label class="deck-pick" data-tip="Cambia el estilo visual de las cartas">
+          Baraja
+          <select id="deckStyle">
+            <option value="francesa">Francesa</option>
+            <option value="espanola">Espanola</option>
+          </select>
+        </label>
+        <label class="deck-pick" data-tip="Cambia el tema de colores">
+          Tema
+          <select id="themePick">
+            <option value="emerald">Esmeralda</option>
+            <option value="cherry">Cereza</option>
+            <option value="midnight">Medianoche</option>
+          </select>
+        </label>
+        <label class="deck-pick" data-tip="Idioma / Language / Idioma">
+          🌐
+          <select id="langPick">
+            <option value="es">Espanol</option>
+            <option value="en">English</option>
+            <option value="pt">Portugues</option>
+          </select>
+        </label>
+        <div class="me-toggles">
+          <button id="privacyBtn" data-tip="Ocultar tus cartas (hover para ver)">👁</button>
+          <button id="cinemaBtn" data-tip="Modo cine (full felt, ESC para salir)">🎬</button>
+          <button id="voiceBtn" data-tip="Locucion: anuncia 'Call', 'Raise', 'All-in', etc.">🎙</button>
+          <button id="crowdBtn" data-tip="Murmuro ambiente de casino (voces lejanas)">👥</button>
+          <button id="muteBtn" data-tip="Silenciar/activar audio">🔊</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -185,16 +190,16 @@
         </div>
       </div>
 
-      <div class="bottom">
-        <div class="log-box">
-          <h3>Mano</h3>
+      <div class="bottom" id="bottomPanels">
+        <details class="log-box" open>
+          <summary><h3 data-i18n="log.title">Mano</h3></summary>
           <ul id="log"></ul>
-        </div>
-        <div class="chat-box">
-          <h3>Chat</h3>
+        </details>
+        <details class="chat-box">
+          <summary><h3 data-i18n="chat.title">Chat</h3></summary>
           <ul id="chat"></ul>
-          <form id="chatForm"><input id="chatInput" placeholder="Escribe..." maxlength="200" /></form>
-        </div>
+          <form id="chatForm"><input id="chatInput" placeholder="Escribe..." maxlength="200" data-i18n-placeholder="chat.placeholder" /></form>
+        </details>
       </div>
     </section>
   </main>
