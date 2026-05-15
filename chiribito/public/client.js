@@ -1195,6 +1195,11 @@ function renderPotChips(amount) {
       c.style.left = (startX + col * colW) + 'px';
       // Z-depth: cada ficha mas arriba en la pila se acerca a la camara
       c.style.transform = `translateZ(${i * 3.5}px)`;
+      // La ficha de arriba muestra la denominacion encima
+      if (i === count - 1) {
+        c.classList.add('top-chip');
+        c.dataset.value = d.value;
+      }
       ui.potChips.appendChild(c);
     }
   }

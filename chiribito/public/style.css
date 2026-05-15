@@ -44,26 +44,81 @@ body::before {
   content: '';
   position: fixed; inset: 0;
   background-image:
-    radial-gradient(circle at 25% 70%, rgba(212,175,55,0.04) 0%, transparent 30%),
-    radial-gradient(circle at 75% 30%, rgba(212,175,55,0.04) 0%, transparent 30%);
+    /* Halos generales */
+    radial-gradient(circle at 25% 70%, rgba(212,175,55,0.05) 0%, transparent 30%),
+    radial-gradient(circle at 75% 30%, rgba(212,175,55,0.05) 0%, transparent 30%),
+    /* Bokeh: puntos de luz desenfocados simulando lampararas de casino distantes */
+    radial-gradient(circle 4px at 8% 22%, rgba(255,228,140,0.45), transparent 60%),
+    radial-gradient(circle 3px at 14% 78%, rgba(255,208,120,0.35), transparent 60%),
+    radial-gradient(circle 5px at 28% 18%, rgba(255,228,140,0.30), transparent 60%),
+    radial-gradient(circle 3px at 42% 86%, rgba(212,175,55,0.4), transparent 60%),
+    radial-gradient(circle 6px at 58% 12%, rgba(255,228,140,0.35), transparent 60%),
+    radial-gradient(circle 3px at 72% 82%, rgba(212,175,55,0.4), transparent 60%),
+    radial-gradient(circle 5px at 86% 28%, rgba(255,208,120,0.35), transparent 60%),
+    radial-gradient(circle 4px at 92% 66%, rgba(255,228,140,0.4), transparent 60%),
+    radial-gradient(circle 3px at 8% 50%, rgba(255,180,80,0.3), transparent 60%),
+    radial-gradient(circle 4px at 35% 50%, rgba(255,228,140,0.25), transparent 60%);
+  filter: blur(3px);
   pointer-events: none; z-index: 0;
+  animation: bokehDrift 30s ease-in-out infinite alternate;
+}
+@keyframes bokehDrift {
+  from { transform: translateX(-10px) translateY(-5px); }
+  to   { transform: translateX(10px)  translateY(5px); }
 }
 .hidden { display: none !important; }
 button {
-  background: #233029;
+  background: linear-gradient(180deg, #2c3a32, #1a2620);
   color: var(--text);
   border: 1px solid var(--line);
   padding: 8px 14px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
-  transition: filter .15s;
+  font-weight: 600;
+  position: relative;
+  transition: transform .08s ease, filter .15s, box-shadow .15s;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.12),
+    inset 0 -1px 0 rgba(0,0,0,.4),
+    0 2px 4px rgba(0,0,0,.4);
+  text-shadow: 0 1px 0 rgba(0,0,0,.4);
 }
-button:hover:not(:disabled) { filter: brightness(1.2); }
-button:disabled { opacity: .35; cursor: not-allowed; }
-button.primary { background: var(--gold); color: #1a1a1a; border-color: var(--gold); font-weight: 700; }
-button.danger { background: var(--red); border-color: var(--red); color: #fff; }
-button.warn { background: #b8860b; border-color: #b8860b; color: #1a1a1a; font-weight: 700; }
+button:hover:not(:disabled) {
+  filter: brightness(1.15);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.18),
+    inset 0 -1px 0 rgba(0,0,0,.4),
+    0 3px 7px rgba(0,0,0,.5);
+}
+button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 2px 4px rgba(0,0,0,.5),
+    inset 0 -1px 0 rgba(255,255,255,.1),
+    0 1px 1px rgba(0,0,0,.3);
+}
+button:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }
+button.primary {
+  background: linear-gradient(180deg, #ffe88a, var(--gold) 60%, #a8861b);
+  color: #1a1a1a; border-color: #8a6f1f; font-weight: 800;
+  text-shadow: 0 1px 0 rgba(255,255,255,.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 0 -1px 0 rgba(0,0,0,.25),
+    0 3px 7px rgba(0,0,0,.45),
+    0 0 0 1px rgba(255,228,140,.2);
+}
+button.danger {
+  background: linear-gradient(180deg, #e74c3c, var(--red) 55%, #8a1f14);
+  border-color: #6b1b12; color: #fff;
+  text-shadow: 0 1px 0 rgba(0,0,0,.45);
+}
+button.warn {
+  background: linear-gradient(180deg, #f0c050, #b8860b 60%, #7a5a08);
+  border-color: #7a5a08; color: #1a1a1a; font-weight: 800;
+  text-shadow: 0 1px 0 rgba(255,255,255,.35);
+}
 input, select {
   background: #182520;
   color: var(--text);
@@ -192,12 +247,15 @@ section#table {
   transform: rotateX(7deg);
   transform-style: preserve-3d;
   transition: transform .6s cubic-bezier(.18,.7,.32,1);
-  /* Rail de madera + felt central, multi-capa */
+  /* Rail de madera + felt central + textura de tejido */
   background:
+    /* textura cloth weave (ruido SVG de alta frecuencia) */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.8' numOctaves='2' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.25 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23w)'/%3E%3C/svg%3E"),
     /* sub-textura cuero */
     radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.04), transparent 50%),
     /* felt verde con profundidad */
     radial-gradient(ellipse at center, var(--felt) 0%, var(--felt-2) 65%, #061d10 100%);
+  background-blend-mode: overlay, normal, normal;
   border: 14px solid transparent;
   background-clip: padding-box;
   box-shadow:
@@ -509,24 +567,43 @@ body.cinema-mode #leaveBtn { display: none !important; }
 }
 .pot-label { color: var(--muted); font-size: 11px; letter-spacing: 3px; font-weight: 700; }
 .pot-amount { color: var(--gold); font-size: 22px; font-weight: 800; line-height: 1.1; }
-.chip-stack { position: absolute; left: 50%; top: -28px; transform: translateX(-50%); width: 70px; height: 32px; }
-/* Ficha vista de costado: anillos concentricos para look 3D */
+.chip-stack { position: absolute; left: 50%; top: -32px; transform: translateX(-50%); width: 80px; height: 38px; }
+/* Ficha vista de costado: bandas blancas/coloradas en el canto + denominacion arriba */
 .pot-chip {
   position: absolute;
-  width: 26px; height: 9px;
+  width: 28px; height: 10px;
   border-radius: 50%;
-  border-top: 1px solid rgba(255,255,255,.4);
-  border-bottom: 1px solid rgba(0,0,0,.6);
+  border-top: 1px solid rgba(255,255,255,.5);
+  border-bottom: 1px solid rgba(0,0,0,.7);
   background-image:
-    /* tres bandas verticales en el centro (estilo de fichas reales) */
+    /* tres bandas blancas verticales en el canto */
     repeating-linear-gradient(90deg,
-      transparent 0, transparent 4px,
-      rgba(255,255,255,.2) 4px, rgba(255,255,255,.2) 5px,
-      transparent 5px, transparent 9px,
-      rgba(0,0,0,.4) 9px, rgba(0,0,0,.4) 10px
+      transparent 0, transparent 3px,
+      rgba(255,255,255,.5) 3px, rgba(255,255,255,.5) 4.5px,
+      transparent 4.5px, transparent 7px,
+      rgba(255,255,255,.5) 7px, rgba(255,255,255,.5) 8.5px,
+      transparent 8.5px, transparent 11px,
+      rgba(255,255,255,.5) 11px, rgba(255,255,255,.5) 12.5px,
+      transparent 12.5px, transparent 16px,
+      rgba(255,255,255,.5) 16px, rgba(255,255,255,.5) 17.5px,
+      transparent 17.5px, transparent 20px,
+      rgba(255,255,255,.5) 20px, rgba(255,255,255,.5) 21.5px,
+      transparent 21.5px
     );
   background-blend-mode: overlay;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 1px 2px rgba(0,0,0,.5);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.45), inset 0 -1px 0 rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.6);
+}
+/* Etiqueta de denominacion solo sobre la ficha superior de cada pila */
+.pot-chip.top-chip::after {
+  content: attr(data-value);
+  position: absolute;
+  top: -8px; left: 50%; transform: translateX(-50%);
+  font-size: 8px;
+  font-weight: 900;
+  color: var(--gold);
+  text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 4px rgba(0,0,0,.7);
+  font-family: 'Georgia', serif;
+  white-space: nowrap;
 }
 
 .seats { position: absolute; inset: 0; }
@@ -641,16 +718,34 @@ body.cinema-mode #leaveBtn { display: none !important; }
 */
 .card {
   width: 68px; height: 96px; border-radius: 8px;
-  background: linear-gradient(180deg, #fff8e8, var(--cream));
+  background:
+    /* Textura de papel: ruido SVG superpuesto */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 0.85  0 0 0 0 0.78  0 0 0 0 0.55  0 0 0 0.10 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #fff8e8, var(--cream) 60%, #ebdfb8);
   color: var(--black);
   position: relative;
-  border: 1px solid #c8b378;
-  box-shadow: 0 3px 6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,.6);
+  border: 1px solid #b89a52;
+  box-shadow:
+    0 4px 8px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(255,255,255,.7),
+    inset 0 -1px 0 rgba(0,0,0,.08);
   font-family: 'Georgia', serif;
   font-weight: 700;
   overflow: hidden;
   user-select: none;
 }
+/* Frame interior ornamentado en las cartas */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(184, 154, 82, 0.45);
+  border-radius: 5px;
+  pointer-events: none;
+  z-index: 1;
+  box-shadow: inset 0 0 0 1px rgba(255,248,232,0.6);
+}
+.card.small::before { inset: 2px; border-radius: 3px; }
 .card.small { width: 44px; height: 62px; border-radius: 5px; }
 .card.back {
   background:
@@ -668,9 +763,10 @@ body.cinema-mode #leaveBtn { display: none !important; }
 .card.back::before {
   content: '';
   position: absolute; inset: 6px;
-  border: 1px solid rgba(255,228,140,0.25);
+  border: 1px solid rgba(255,228,140,0.35);
   border-radius: 4px;
   pointer-events: none;
+  box-shadow: none;
 }
 .card.back::after {
   content: '♦';
